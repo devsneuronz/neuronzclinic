@@ -3,7 +3,7 @@
 import Image from "next/image";
 import type { FormEvent, MouseEvent, UIEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
-import { Camera, Check, CheckSquare, Download, FileImage, FileText, Forward, Info, MapPin, Mic, Paperclip, Pause, PenLine, PlayIcon, Reply, Search, Send, Trash2, UserRound, Video, X } from "lucide-react";
+import { ArrowDown, Camera, Check, CheckSquare, Download, FileImage, FileText, Forward, Info, MapPin, Mic, MoreHorizontal, Paperclip, Pause, PenLine, PlayIcon, Reply, Search, Send, Trash2, UserRound, Video, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -300,20 +300,7 @@ type MessageBubbleProps = {
 };
 
 const MessageBubble = memo(
-  function MessageBubble({
-    message,
-    chat,
-    messagesByRemoteId,
-    selected,
-    isSelectionMode,
-    onToggleSelection,
-    onReply,
-    onForward,
-    onDelete,
-    onExpandImage,
-    isHighlighted,
-    onScrollToMessage,
-  }: MessageBubbleProps) {
+  function MessageBubble({ message, chat, messagesByRemoteId, selected, isSelectionMode, onToggleSelection, onReply, onForward, onDelete, onExpandImage, isHighlighted, onScrollToMessage }: MessageBubbleProps) {
     const fromMe = !!message.from_me;
     const mediaUrl = getMediaUrl(message);
     const mediaKind = getMediaKind(message);
@@ -357,7 +344,7 @@ const MessageBubble = memo(
         >
           {message.participant && !fromMe && <p className="mb-1 text-sm font-medium text-(--chat-primary)">{message.participant}</p>}
 
-          {!deleted && (
+          {!deleted && !isSelectionMode && (
             <div className={cn("absolute top-1 flex rounded-full bg-(--chat-card)/90 p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100", fromMe ? "right-full mr-2" : "left-full ml-2")}>
               <Button type="button" variant="ghost" size="icon-sm" className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground" onClick={() => onReply(message)} aria-label="Responder mensagem">
                 <Reply className="h-4 w-4" />
@@ -392,8 +379,8 @@ const MessageBubble = memo(
             {quotedMessage && (
               <div
                 onClick={() => {
-                  if (!quotedOriginal || !onScrollToMessage) return;
-                  onScrollToMessage(quotedOriginal.id);
+                  if (!quotedInfo?.messageId || !onScrollToMessage) return;
+                  onScrollToMessage(quotedInfo.messageId);
                 }}
                 className={cn(
                   "mb-2 overflow-hidden rounded-md border-l-4 px-2.5 py-2 shadow-[inset_0_0_0_1px_rgba(17,27,33,0.035)] cursor-pointer hover:opacity-80 transition-opacity",
@@ -476,7 +463,13 @@ const MessageBubble = memo(
     );
   },
   (prevProps: MessageBubbleProps, nextProps: MessageBubbleProps) => {
-    return prevProps.message === nextProps.message && prevProps.selected === nextProps.selected && prevProps.isSelectionMode === nextProps.isSelectionMode && prevProps.chat === nextProps.chat && prevProps.isHighlighted === nextProps.isHighlighted;
+    return (
+      prevProps.message === nextProps.message &&
+      prevProps.selected === nextProps.selected &&
+      prevProps.isSelectionMode === nextProps.isSelectionMode &&
+      prevProps.chat === nextProps.chat &&
+      prevProps.isHighlighted === nextProps.isHighlighted
+    );
   },
 );
 
@@ -539,6 +532,74 @@ export function ChatWindow({
   const normalizedForwardSearch = forwardSearch.trim();
   const debouncedForwardSearch = useDebouncedValue(normalizedForwardSearch, 250);
   const forwardSearchQuery = normalizedForwardSearch ? debouncedForwardSearch.trim() : "";
+  const [showScrollButton, setShowScrollButton] = useState(false);
+
+  const messagesRef = useRef(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  const handleScrollToMessage = useCallback(
+    async (targetId: string) => {
+      let foundMessage = messagesRef.current.find((m) => m.id === targetId || m.message_id === targetId);
+
+      if (!foundMessage) {
+        if (!onLoadOlderMessages || !hasMoreMessages || isLoadingOlder) return;
+
+        let attempts = 0;
+        const maxAttempts = 15;
+
+        while (!foundMessage && attempts < maxAttempts) {
+          const scrollArea = scrollAreaRef.current;
+          if (scrollArea) {
+            previousScrollHeightRef.current = scrollArea.scrollHeight;
+          }
+
+          const addedCount = await onLoadOlderMessages();
+          if (addedCount === 0) {
+            if (scrollArea) previousScrollHeightRef.current = null;
+            break;
+          }
+          attempts++;
+
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          foundMessage = messagesRef.current.find((m) => m.id === targetId || m.message_id === targetId);
+        }
+      }
+
+      if (foundMessage) {
+        const el = document.getElementById(`message-${foundMessage.id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          setHighlightedMessageId(foundMessage.id);
+          setTimeout(() => setHighlightedMessageId(null), 1500);
+        }
+      }
+    },
+    [onLoadOlderMessages, hasMoreMessages, isLoadingOlder],
+  );
+
+  const handleScrollToLastMessage = useCallback(() => {
+    const messages = messagesRef.current;
+
+    if (messages && messages.length > 0) {
+      // Pegamos a última mensagem do array (a mais recente)
+      const lastMessage = messages[messages.length - 1];
+
+      // Passamos o ID dela para o seu método robusto que já faz o scroll e o highlight!
+      handleScrollToMessage(lastMessage.id);
+    } else {
+      // Caso o array em memória esteja estranho por algum motivo, fazemos o scroll nativo pelo ref do container
+      const scrollArea = scrollAreaRef.current;
+      if (scrollArea) {
+        scrollArea.scrollTo({
+          top: scrollArea.scrollHeight,
+          behavior: "smooth",
+        });
+      }
+    }
+  }, [handleScrollToMessage]);
 
   const groupedMessages = useMemo(() => {
     return messages.reduce<Array<{ date: string; items: MessageRecord[] }>>((groups, message) => {
@@ -687,6 +748,19 @@ export function ChatWindow({
   }, [chat?.id]);
 
   async function handleMessagesScroll(event: UIEvent<HTMLDivElement>) {
+    // === LÓGICA DO BOTÃO FLUTUANTE (Adicionada aqui) ===
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+
+    // Calcula a distância que falta para chegar ao fundo do chat
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+
+    // Se o médico subiu mais de 300px, mostra o botão, senão esconde
+    if (distanceFromBottom > 300) {
+      setShowScrollButton(true);
+    } else {
+      setShowScrollButton(false);
+    }
+
     if (!onLoadOlderMessages || !hasMoreMessages || isLoadingOlder || isLoading) return;
     if (event.currentTarget.scrollTop > 120) return;
 
@@ -1031,7 +1105,7 @@ export function ChatWindow({
 
   return (
     <div className="flex h-full flex-1 overflow-hidden bg-background">
-      <div className="flex flex-1 flex-col border-r border-border">
+      <div className="flex flex-1 flex-col border-r border-border relative">
         <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
           {isSelectionMode ? (
             <>
@@ -1084,7 +1158,7 @@ export function ChatWindow({
 
         <div
           ref={scrollAreaRef}
-          className="flex-1 overflow-y-auto"
+          className="flex-1 overflow-y-auto relative"
           onScroll={handleMessagesScroll}
           style={{
             backgroundColor: "var(--chat-background)",
@@ -1125,7 +1199,7 @@ export function ChatWindow({
                 {groupedMessages.map((group) => (
                   <div key={group.date}>
                     <div className="my-3 flex justify-center">
-                      <span className="rounded bg-(--chat-muted)/80 px-3 py-1 text-xs text-(--chat-muted-foreground) shadow-sm">{group.date}</span>
+                      <span className="rounded bg-(--chat-other)/80 px-3 py-1 text-xs text-(--chat-muted-foreground) shadow-sm">{group.date}</span>
                     </div>
 
                     {group.items.map((message) => (
@@ -1142,12 +1216,7 @@ export function ChatWindow({
                         onForward={beginForward}
                         onDelete={beginDelete}
                         onExpandImage={(url: string, alt: string) => setExpandedImage({ url, alt })}
-                        onScrollToMessage={(id) => {
-                          const el = document.getElementById(`message-${id}`);
-                          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-                          setHighlightedMessageId(id);
-                          setTimeout(() => setHighlightedMessageId(null), 1000);
-                        }}
+                        onScrollToMessage={handleScrollToMessage}
                       />
                     ))}
                   </div>
@@ -1157,6 +1226,12 @@ export function ChatWindow({
             <div ref={bottomRef} />
           </div>
         </div>
+
+        {showScrollButton && (
+          <Button size="icon" variant="outline" onClick={handleScrollToLastMessage} className="absolute left-1/2 bottom-18 rounded-full -translate-x-2/3 transition-all active:scale-95 animate-in fade-in zoom-in-95 backdrop-blur-sm">
+            <ArrowDown className="h-4 w-4 stroke-[2.5]" />
+          </Button>
+        )}
 
         <form onSubmit={handleSubmit} className="border-t border-border bg-card px-4 py-3">
           {attachment && (

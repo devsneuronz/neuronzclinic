@@ -1,7 +1,6 @@
 import { ChatRecord } from "@/lib/supabase-rest";
 import { Input } from "../ui/input";
-import { Button } from "../ui/button";
-import { Calendar, ChevronDown, FileText, Pencil, GripVertical, Check } from "lucide-react";
+import { Calendar, ChevronDown, FileText, GripVertical, Check, Pencil } from "lucide-react";
 import { useRef, useState } from "react";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getChatTags, getReadableTextColor } from "@/lib/chat-tags";
@@ -9,6 +8,8 @@ import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
+import { Textarea } from "../ui/textarea";
+import { Field, FieldDescription, FieldLabel } from "../ui/fields";
 
 interface ProfileViewProps {
   chat?: ChatRecord;
@@ -21,7 +22,6 @@ interface ProfileViewProps {
   onReorderTags?: (tags: ChatTag[]) => void;
   onCommitTagOrder?: (tags: ChatTag[]) => void;
   onChangeName?: (name: string) => Promise<void> | void;
-
 }
 
 function getDisplayName(chat?: ChatRecord) {
@@ -58,7 +58,6 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
   const [bottomTab, setBottomTab] = useState<"consultas" | "avisos">("consultas");
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
-  const [isSavingName, setIsSavingName] = useState(false);
   const [draggedTagId, setDraggedTagId] = useState<string | null>(null);
   const pendingReorderedTagsRef = useRef<ChatTag[] | null>(null);
   const tags = getChatTags(chat);
@@ -104,65 +103,9 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
     }
   }
 
-  async function handleEditNameToggle() {
-    if (!isEditingName) {
-      setEditNameValue(getDisplayName(chat));
-      setIsEditingName(true);
-      return;
-    }
-
-    const nextName = editNameValue.trim();
-    const currentName = chat?.nome_contato?.trim() || "";
-
-    if (nextName === currentName) {
-      setIsEditingName(false);
-      return;
-    }
-
-    setIsSavingName(true);
-
-    try {
-      await onChangeName?.(nextName);
-      setIsEditingName(false);
-    } finally {
-      setIsSavingName(false);
-    }
-  }
-
   return (
     <>
       <div className="flex-1 overflow-y-auto p-4">
-        <div className="mb-4">
-          <div className="flex items-center gap-2">
-            {isEditingName ? (
-              <Input
-                value={editNameValue}
-                disabled={isSavingName}
-                autoFocus
-                onChange={(e) => setEditNameValue(e.target.value)}
-                className="border-primary ring-1 ring-primary"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void handleEditNameToggle();
-                  if (e.key === "Escape" && !isSavingName) setIsEditingName(false);
-                }}
-              />
-            ) : (
-              <div className="flex h-9 w-full items-center rounded-md border border-input bg-transparent px-3 py-1 text-base text-foreground shadow-xs md:text-sm">
-                <span className="truncate">{getDisplayName(chat)}</span>
-              </div>
-            )}
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="h-8 w-8 text-muted-foreground shrink-0"
-              onClick={() => void handleEditNameToggle()}
-              disabled={isSavingName}
-            >
-              {isEditingName ? <Check className="h-4 w-4 text-green-500" /> : <Pencil className="h-4 w-4" />}
-            </Button>
-          </div>
-        </div>
-
         <div className="mb-4 grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1.5 block text-xs text-muted-foreground">Status contato</label>
@@ -211,30 +154,25 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
 
         <div className="mb-4">
           <Accordion type="single" collapsible defaultValue="contact-info">
-            <AccordionItem value="contact-info" className="border-none rounded-md bg-muted/60 px-3">
-              <AccordionTrigger className="py-3 text-sm font-semibold text-foreground hover:no-underline">
-                Informações do contato
-              </AccordionTrigger>
+            <AccordionItem value="contact-info" className="border-none rounded-xl bg-muted/60 px-3">
+              <AccordionTrigger className="py-3 text-sm font-semibold text-foreground hover:no-underline">Informações do contato</AccordionTrigger>
               <AccordionContent>
-                <div className="mt-1 grid grid-cols-2 gap-3 pb-1">
+                <div className="grid grid-cols-2 gap-3 p-1">
                   <div>
-                    <label className="mb-1.5 block text-sm font-semibold text-foreground">Cidade residência</label>
+                    <label className="mb-1.5 block text-xs font-semibold text-foreground">Cidade residência</label>
                     <Input className="h-8 bg-background text-sm" />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-sm font-semibold text-foreground">Cidade desejada</label>
+                    <label className="mb-1.5 block text-xs font-semibold text-foreground">Cidade desejada</label>
                     <Input className="h-8 bg-background text-sm" />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-sm font-semibold text-foreground">Email</label>
+                    <label className="mb-1.5 block text-xs font-semibold text-foreground">Email</label>
                     <Input className="h-8 bg-background text-sm" type="email" />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-sm font-semibold text-foreground">Celular</label>
-                    <Input
-                      className="h-8 bg-background text-sm"
-                      defaultValue={contactPhone || chat?.phone_contact || ""}
-                    />
+                    <label className="mb-1.5 block text-xs font-semibold text-foreground">Celular</label>
+                    <Input className="h-8 bg-background text-sm" defaultValue={contactPhone || chat?.phone_contact || ""} />
                   </div>
                 </div>
               </AccordionContent>
@@ -245,70 +183,63 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
         <div className="mb-4">
           <label className="mb-1.5 block text-sm font-semibold text-foreground">Interesses</label>
           <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button type="button" className="flex w-full flex-wrap items-center gap-2 rounded border border-border bg-card px-3 py-2 text-left">
-                    {selectedInterests.length > 0 ? (
-                      selectedInterests.map((interest) => (
-                        <span
-                          key={interest.id}
-                          draggable
-                          className={cn(
-                            "flex cursor-grab items-center gap-1 rounded bg-teal-600 px-2 py-0.5 text-xs font-medium text-white transition-opacity active:cursor-grabbing",
-                            draggedTagId === interest.id && "opacity-50",
-                          )}
-                          style={
-                            interest.color
-                              ? {
-                                  backgroundColor: interest.color,
-                                  color: getReadableTextColor(interest.color),
-                                }
-                              : undefined
-                          }
-                          onPointerDown={(event) => event.stopPropagation()}
-                          onDragStart={(event) => {
-                            event.dataTransfer.effectAllowed = "move";
-                            event.dataTransfer.setData("text/plain", interest.id);
-                            setDraggedTagId(interest.id);
-                          }}
-                          onDragEnter={() => moveTag(interest.id)}
-                          onDragOver={(event) => event.preventDefault()}
-                          onDragEnd={finishTagDrag}
-                        >
-                          <GripVertical className="h-3 w-3 opacity-60" />
-                          {interest.label}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-sm text-muted-foreground">Nenhum interesse</span>
-                    )}
-                    <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="z-[100] max-h-72 w-72">
-                  {availableInterest.length > 0 ? (
-                    availableInterest.map((interest) => (
-                      <DropdownMenuCheckboxItem
-                        key={interest.id || interest.label}
-                        checked={selectedInterests.some((i) => i.id === interest.id)}
-                        className="cursor-pointer"
-                        onSelect={(event) => event.preventDefault()}
-                        onCheckedChange={() => {
-                          setSelectedInterests((prev) =>
-                            prev.some((i) => i.id === interest.id)
-                              ? prev.filter((i) => i.id !== interest.id)
-                              : [...prev, interest]
-                          );
-                        }}
-                      >
-                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: interest.color || "#0d9488" }} />
-                        <span className="truncate">{interest.label}</span>
-                      </DropdownMenuCheckboxItem>
-                    ))
-                  ) : (
-                    <DropdownMenuItem disabled>Nenhum interesse encontrado</DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className="flex w-full flex-wrap items-center gap-2 rounded border border-border bg-card px-3 py-2 text-left">
+                {selectedInterests.length > 0 ? (
+                  selectedInterests.map((interest) => (
+                    <span
+                      key={interest.id}
+                      draggable
+                      className={cn("flex cursor-grab items-center gap-1 rounded bg-teal-600 px-2 py-0.5 text-xs font-medium text-white transition-opacity active:cursor-grabbing", draggedTagId === interest.id && "opacity-50")}
+                      style={
+                        interest.color
+                          ? {
+                              backgroundColor: interest.color,
+                              color: getReadableTextColor(interest.color),
+                            }
+                          : undefined
+                      }
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onDragStart={(event) => {
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData("text/plain", interest.id);
+                        setDraggedTagId(interest.id);
+                      }}
+                      onDragEnter={() => moveTag(interest.id)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDragEnd={finishTagDrag}
+                    >
+                      <GripVertical className="h-3 w-3 opacity-60" />
+                      {interest.label}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-sm text-muted-foreground">Nenhum interesse</span>
+                )}
+                <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="z-[100] max-h-72 w-72">
+              {availableInterest.length > 0 ? (
+                availableInterest.map((interest) => (
+                  <DropdownMenuCheckboxItem
+                    key={interest.id || interest.label}
+                    checked={selectedInterests.some((i) => i.id === interest.id)}
+                    className="cursor-pointer"
+                    onSelect={(event) => event.preventDefault()}
+                    onCheckedChange={() => {
+                      setSelectedInterests((prev) => (prev.some((i) => i.id === interest.id) ? prev.filter((i) => i.id !== interest.id) : [...prev, interest]));
+                    }}
+                  >
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: interest.color || "#0d9488" }} />
+                    <span className="truncate">{interest.label}</span>
+                  </DropdownMenuCheckboxItem>
+                ))
+              ) : (
+                <DropdownMenuItem disabled>Nenhum interesse encontrado</DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <div className="mb-4">
@@ -316,71 +247,71 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
             <label className="block text-sm font-semibold text-foreground">Tags do contato</label>
             <p className="mt-0.5 text-[11px] text-muted-foreground">Arraste para reordenar. As 3 primeiras aparecem na lista.</p>
           </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button type="button" className="flex w-full flex-wrap items-center gap-2 rounded border border-border bg-card px-3 py-2 text-left">
-                    {tags.length > 0 ? (
-                      tags.map((tag) => (
-                        <span
-                          key={tag.id}
-                          draggable
-                          className={cn(
-                            "flex cursor-grab items-center gap-1 rounded bg-teal-600 px-2 py-0.5 text-xs font-medium text-white transition-opacity active:cursor-grabbing",
-                            draggedTagId === tag.id && "opacity-50",
-                          )}
-                          style={
-                            tag.color
-                              ? {
-                                  backgroundColor: tag.color,
-                                  color: getReadableTextColor(tag.color),
-                                }
-                              : undefined
-                          }
-                          onPointerDown={(event) => event.stopPropagation()}
-                          onDragStart={(event) => {
-                            event.dataTransfer.effectAllowed = "move";
-                            event.dataTransfer.setData("text/plain", tag.id);
-                            setDraggedTagId(tag.id);
-                          }}
-                          onDragEnter={() => moveTag(tag.id)}
-                          onDragOver={(event) => event.preventDefault()}
-                          onDragEnd={finishTagDrag}
-                        >
-                          <GripVertical className="h-3 w-3 opacity-60" />
-                          {tag.label}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-sm text-muted-foreground">Nenhuma tag</span>
-                    )}
-                    <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="z-[100] max-h-72 w-72">
-                  {availableTags.length > 0 ? (
-                    availableTags.map((tag) => (
-                      <DropdownMenuCheckboxItem
-                        key={tag.id || tag.label}
-                        checked={selectedTagKeys.has(tag.id) || selectedTagKeys.has(tag.label.toLowerCase())}
-                        className="cursor-pointer"
-                        onSelect={(event) => event.preventDefault()}
-                        onCheckedChange={() => onToggleTag?.(tag)}
-                      >
-                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: tag.color || "#0d9488" }} />
-                        <span className="truncate">{tag.label}</span>
-                      </DropdownMenuCheckboxItem>
-                    ))
-                  ) : (
-                    <DropdownMenuItem disabled>Nenhuma tag encontrada</DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className="flex w-full flex-wrap items-center gap-2 rounded border border-border bg-card px-3 py-2 text-left">
+                {tags.length > 0 ? (
+                  tags.map((tag) => (
+                    <span
+                      key={tag.id}
+                      draggable
+                      className={cn("flex cursor-grab items-center gap-1 rounded bg-teal-600 px-2 py-0.5 text-xs font-medium text-white transition-opacity active:cursor-grabbing", draggedTagId === tag.id && "opacity-50")}
+                      style={
+                        tag.color
+                          ? {
+                              backgroundColor: tag.color,
+                              color: getReadableTextColor(tag.color),
+                            }
+                          : undefined
+                      }
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onDragStart={(event) => {
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData("text/plain", tag.id);
+                        setDraggedTagId(tag.id);
+                      }}
+                      onDragEnter={() => moveTag(tag.id)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDragEnd={finishTagDrag}
+                    >
+                      <GripVertical className="h-3 w-3 opacity-60" />
+                      {tag.label}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-sm text-muted-foreground">Nenhuma tag</span>
+                )}
+                <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="z-[100] max-h-72 w-72">
+              {availableTags.length > 0 ? (
+                availableTags.map((tag) => (
+                  <DropdownMenuCheckboxItem
+                    key={tag.id || tag.label}
+                    checked={selectedTagKeys.has(tag.id) || selectedTagKeys.has(tag.label.toLowerCase())}
+                    className="cursor-pointer"
+                    onSelect={(event) => event.preventDefault()}
+                    onCheckedChange={() => onToggleTag?.(tag)}
+                  >
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: tag.color || "#0d9488" }} />
+                    <span className="truncate">{tag.label}</span>
+                  </DropdownMenuCheckboxItem>
+                ))
+              ) : (
+                <DropdownMenuItem disabled>Nenhuma tag encontrada</DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
-            <div className="mb-4">
-              <label className="mb-1.5 block text-sm font-semibold text-foreground">Anotações</label>
-              <textarea className="min-h-[100px] w-full resize-none rounded border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring" placeholder="" />
-            </div>
+        <div className="mb-4">
+          <Field>
+            <FieldLabel htmlFor="textarea-message">Anotações</FieldLabel>
+            <FieldDescription className="text-[11px] text-muted-foreground">Adicione anotações sobre o atendimento, preferências ou lembretes.</FieldDescription>
+            <Textarea id="textarea-message" className="max-h-48" />
+          </Field>
+        </div>
       </div>
 
       <div className="border-t border-border">
@@ -401,4 +332,3 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
     </>
   );
 }
-
