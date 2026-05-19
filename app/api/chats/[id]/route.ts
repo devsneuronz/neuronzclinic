@@ -73,6 +73,10 @@ function formatTagsLikeExisting(existingValue: unknown, tags: TagInput[]) {
 function buildPatch(body: RawChat, currentChat: RawChat) {
   const patch: RawChat = {}
 
+  if ("nome_contato" in body) {
+    patch.nome_contato = getString(body.nome_contato) || null
+  }
+
   if ("Status_chat" in body) {
     patch.Status_chat = getString(body.Status_chat) || null
   }

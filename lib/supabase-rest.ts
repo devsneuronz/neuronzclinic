@@ -100,6 +100,7 @@ export interface DeleteMessagesInput {
 
 export interface UpdateChatDetailsInput {
   id: string
+  nome_contato?: string | null
   Status_chat?: string | null
   hex_status?: string | null
   finalizada?: boolean | null

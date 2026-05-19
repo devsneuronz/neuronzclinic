@@ -23,6 +23,7 @@ interface ContactDetailsProps {
   tagOptions?: ChatTag[];
   onChangeStatus?: (status: ChatStatusOption) => void;
   onToggleTag?: (tag: ChatTag) => void;
+  onChangeName?: (name: string) => Promise<void> | void;
   onMarkAsRead?: () => void;
   onMarkAsUnread?: () => void;
   onReorderTags?: (tags: ChatTag[]) => void;
@@ -47,6 +48,7 @@ export function ContactDetails({
   tagOptions,
   onChangeStatus,
   onToggleTag,
+  onChangeName,
   onMarkAsRead,
   onMarkAsUnread,
   onReorderTags,
@@ -164,6 +166,7 @@ export function ContactDetails({
               tagOptions={tagOptions}
               onChangeStatus={onChangeStatus}
               onToggleTag={onToggleTag}
+              onChangeName={onChangeName}
               onReorderTags={onReorderTags}
               onCommitTagOrder={onCommitTagOrder}
             />

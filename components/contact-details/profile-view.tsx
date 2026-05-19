@@ -20,6 +20,7 @@ interface ProfileViewProps {
   onToggleTag?: (tag: ChatTag) => void;
   onReorderTags?: (tags: ChatTag[]) => void;
   onCommitTagOrder?: (tags: ChatTag[]) => void;
+  onChangeName?: (name: string) => Promise<void> | void;
 
 }
 
@@ -53,10 +54,11 @@ function getMergedStatusOptions(...groups: ChatStatusOption[][]) {
   return Array.from(statuses.values());
 }
 
-export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions = [], onChangeStatus, onToggleTag, onReorderTags, onCommitTagOrder }: ProfileViewProps) {
+export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions = [], onChangeStatus, onToggleTag, onReorderTags, onCommitTagOrder, onChangeName }: ProfileViewProps) {
   const [bottomTab, setBottomTab] = useState<"consultas" | "avisos">("consultas");
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
+  const [isSavingName, setIsSavingName] = useState(false);
   const [draggedTagId, setDraggedTagId] = useState<string | null>(null);
   const pendingReorderedTagsRef = useRef<ChatTag[] | null>(null);
   const tags = getChatTags(chat);
@@ -102,15 +104,29 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
     }
   }
 
-  function handleEditNameToggle() {
-    if (isEditingName) {
-      setIsEditingName(false);
-    } else {
+  async function handleEditNameToggle() {
+    if (!isEditingName) {
       setEditNameValue(getDisplayName(chat));
       setIsEditingName(true);
+      return;
     }
 
-    //adicionar persistencia de dados
+    const nextName = editNameValue.trim();
+    const currentName = chat?.nome_contato?.trim() || "";
+
+    if (nextName === currentName) {
+      setIsEditingName(false);
+      return;
+    }
+
+    setIsSavingName(true);
+
+    try {
+      await onChangeName?.(nextName);
+      setIsEditingName(false);
+    } finally {
+      setIsSavingName(false);
+    }
   }
 
   return (
@@ -118,21 +134,29 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
       <div className="flex-1 overflow-y-auto p-4">
         <div className="mb-4">
           <div className="flex items-center gap-2">
-            <Input 
-              value={isEditingName ? editNameValue : getDisplayName(chat)} 
-              readOnly={!isEditingName} 
-              onChange={(e) => setEditNameValue(e.target.value)}
-              className={cn("transition-all", isEditingName && "border-primary ring-1 ring-primary")}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleEditNameToggle();
-                if (e.key === "Escape") setIsEditingName(false);
-              }}
-            />
+            {isEditingName ? (
+              <Input
+                value={editNameValue}
+                disabled={isSavingName}
+                autoFocus
+                onChange={(e) => setEditNameValue(e.target.value)}
+                className="border-primary ring-1 ring-primary"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleEditNameToggle();
+                  if (e.key === "Escape" && !isSavingName) setIsEditingName(false);
+                }}
+              />
+            ) : (
+              <div className="flex h-9 w-full items-center rounded-md border border-input bg-transparent px-3 py-1 text-base text-foreground shadow-xs md:text-sm">
+                <span className="truncate">{getDisplayName(chat)}</span>
+              </div>
+            )}
             <Button 
               variant="ghost" 
               size="icon" 
               className="h-8 w-8 text-muted-foreground shrink-0"
-              onClick={handleEditNameToggle}
+              onClick={() => void handleEditNameToggle()}
+              disabled={isSavingName}
             >
               {isEditingName ? <Check className="h-4 w-4 text-green-500" /> : <Pencil className="h-4 w-4" />}
             </Button>

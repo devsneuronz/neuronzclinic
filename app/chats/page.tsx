@@ -710,6 +710,33 @@ export default function ChatsPage() {
     [selectedChatId],
   );
 
+  const handleChangeContactName = useCallback(
+    async (name: string) => {
+      if (!selectedChat || !selectedChatId) return;
+
+      const previousChat = selectedChat;
+      const nextName = name.trim() || null;
+      const updateName = (list: ChatRecord[]) => list.map((chat) => (chat.id === selectedChatId ? { ...chat, nome_contato: nextName } : chat));
+
+      setChats((current) => updateName(current));
+      setSearchChats((current) => updateName(current));
+      setError(undefined);
+
+      try {
+        await updateChatDetails({
+          id: selectedChat.id,
+          nome_contato: nextName,
+        });
+      } catch (err) {
+        restoreSelectedChat(previousChat);
+        const message = err instanceof Error ? err.message : "Nao foi possivel salvar o nome do contato.";
+        setError(message);
+        throw new Error(message);
+      }
+    },
+    [restoreSelectedChat, selectedChat, selectedChatId],
+  );
+
   const handleChangeContactStatus = useCallback(
     async (status: ChatStatusOption) => {
       if (!selectedChat || !selectedChatId) return;
@@ -853,6 +880,7 @@ export default function ChatsPage() {
                 tagOptions={contactTagOptions}
                 onChangeStatus={handleChangeContactStatus}
                 onToggleTag={handleToggleContactTag}
+                onChangeName={handleChangeContactName}
                 onMarkAsRead={handleMarkAsRead}
                 onMarkAsUnread={handleMarkAsUnread}
                 onReorderTags={handleReorderTags}
