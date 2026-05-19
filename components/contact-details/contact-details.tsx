@@ -73,97 +73,7 @@ export function ContactDetails({ chat, onClose, onToggleStatus, onToggleIA, stat
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {/* <div className="flex items-start gap-4 p-4">
-          <Avatar className="h-16 w-16 shrink-0 shadow-sm">
-            <AvatarImage src={chat?.url_foto_perfil ?? undefined} alt={chat?.nome_contato || ""} className="rounded-full" />
-            <AvatarFallback className="bg-(--chat-muted) text-(--chat-muted-foreground)">{chat?.nome_contato?.charAt(0) || "U"}</AvatarFallback>
-          </Avatar>
-
-          <div className="mb-4">
-            <div className="flex items-center gap-2">
-              <Input
-                value={isEditingName ? editNameValue : getDisplayName(chat)}
-                readOnly={!isEditingName}
-                onChange={(e) => setEditNameValue(e.target.value)}
-                className={cn("transition-all", isEditingName && "border-primary ring-1 ring-primary")}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleEditNameToggle();
-                  if (e.key === "Escape") setIsEditingName(false);
-                }}
-              />
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0" onClick={handleEditNameToggle}>
-                {isEditingName ? <Check className="h-4 w-4 text-green-500" /> : <Pencil className="h-4 w-4" />}
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex flex-1 flex-col gap-3">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  className="flex w-full items-center justify-between rounded-md px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 shadow-sm"
-                  style={{ backgroundColor: chat?.finalizada ? "#00c950" : "#2b7fff" }}
-                >
-                  {chat?.finalizada ? "Finalizada" : "Aberta"}
-                  <ChevronDown className="h-3 w-3" />
-                </button>
-              </DropdownMenuTrigger>
-
-              <DropdownMenuContent align="start" className="w-48 shadow-xl z-[100]">
-                <DropdownMenuItem className="cursor-pointer" onClick={() => onToggleStatus()}>
-                  {chat?.finalizada ? "Reabrir Conversa" : "Finalizar Conversa"}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <div className="space-y-1.5">
-              <button type="button" className={cn("flex items-center gap-2 text-xs transition-colors hover:text-foreground", hasUnreadMessages ? "text-muted-foreground" : "text-blue-500")} onClick={onMarkAsRead}>
-                <CheckCheck className="h-3.5 w-3.5 text-blue-500" />
-                <span>Marcar como lido</span>
-              </button>
-              <button type="button" className={cn("flex items-center gap-2 text-xs transition-colors hover:text-foreground", hasUnreadMessages ? "text-blue-500" : "text-muted-foreground")} onClick={onMarkAsUnread}>
-                <MessageSquareDashed className="h-3.5 w-3.5" />
-                <span>Marcar como não lido</span>
-              </button>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Phone className="h-3.5 w-3.5" />
-                <span>{contactPhone}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-center gap-3">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    disabled={!chat?.ia_responde}
-                    className={cn(
-                      "h-10 w-10 border-2 shadow-sm transition-all",
-                      activeView === "profile" ? "bg-(--chat-primary) text-white border-(--chat-primary)" : "border-(--chat-primary) text-(--chat-primary) hover:bg-(--chat-primary)/10",
-                      !chat?.ia_responde && "opacity-50",
-                    )}
-                    onClick={() => setView((prev) => (prev === "profile" ? "training" : "profile"))}
-                  >
-                    <Bot className="h-5 w-5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="left">
-                  <p>{chat?.ia_responde ? "Treinar sua IA" : "Ative a IA para treinar"}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-
-            <div className="flex flex-col items-center gap-1">
-              <Switch checked={!!chat?.ia_responde} onCheckedChange={onToggleIA} className="data-[state=checked]:bg-[#22c55e]" />
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">IA</span>
-            </div>
-          </div>
-        </div> */}
-
-        <div className="w-full h-18 rounded-b-3xl bg-radial-[80%_480%_at_17%_100%] from-transparent to-white/60 dark:to-black/90" style={{ backgroundColor: getChatStatusColor(chat) }}></div>
+        <div className="w-full h-18 rounded-b-3xl bg-radial-[80%_480%_at_17%_100%] from-transparent to-white/60 dark:to-black/60" style={{ backgroundColor: getChatStatusColor(chat) }}></div>
         <div className="flex flex-col p-4">
           <div className="flex flex-col w-full -mt-12">
             {/* Avatar e Status */}
@@ -195,13 +105,13 @@ export function ContactDetails({ chat, onClose, onToggleStatus, onToggleIA, stat
             </div>
           </div>
           {/* (Nome, telefone) e IA */}
-          <div className="flex flex-row justify-between gap-4 pb-4">
+          <div className="flex flex-row justify-between gap-4 pb-4 w-full min-w-0">
             {/* Nome e telefone */}
-            <div className="flex flex-col justify-between gap-4">
+            <div className="flex flex-col justify-between gap-4 flex-1 min-w-0">
               {/* Nome */}
               <div className="group flex items-center gap-2">
                 {!isEditingName ? (
-                  <span onClick={handleEditNameToggle} className="h-9 text-lg font-bold text-foreground cursor-pointer truncate select-none py-1.25">
+                  <span onClick={handleEditNameToggle} title={getDisplayName(chat)} className="h-9 text-lg font-bold text-foreground cursor-pointer truncate select-none py-1.25">
                     {getDisplayName(chat)}
                   </span>
                 ) : (
@@ -209,7 +119,7 @@ export function ContactDetails({ chat, onClose, onToggleStatus, onToggleIA, stat
                     value={editNameValue}
                     onChange={(e) => setEditNameValue(e.target.value)}
                     autoFocus
-                    className="w-full font-bold text-lg!"
+                    className="font-bold text-lg!"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") handleEditNameToggle();
                       if (e.key === "Escape") setIsEditingName(false);
@@ -234,7 +144,7 @@ export function ContactDetails({ chat, onClose, onToggleStatus, onToggleIA, stat
               </div>
             </div>
             {/* IA */}
-            <div className="flex flex-col items-center gap-1">
+            <div className="flex flex-col items-center gap-1 shrink-0">
               <Button
                 variant="outline"
                 disabled={!chat?.ia_responde}
