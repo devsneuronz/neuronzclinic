@@ -35,6 +35,8 @@ interface ContactListProps {
   onToggleAssinatura: (checked: boolean) => void;
   isGhostMode: boolean;
   onToggleGhost: (checked: boolean) => void;
+
+  isMobile?: boolean;
 }
 
 const ALL_FILTERS = "all";
@@ -107,22 +109,23 @@ function getSectorLabel(id: string, labels: Record<string, string>) {
   return labels[id] || id;
 }
 
-export function ContactList({ 
-  chats, 
-  search, 
-  isLoading, 
-  isLoadingMore, 
-  isSearching, 
-  hasMore, 
-  selectedId, 
-  latestMessageStatuses = {}, 
-  onSearchChange, 
-  onSelect, 
+export function ContactList({
+  chats,
+  search,
+  isLoading,
+  isLoadingMore,
+  isSearching,
+  hasMore,
+  selectedId,
+  latestMessageStatuses = {},
+  onSearchChange,
+  onSelect,
   onLoadMore,
   isAssinaturaMode,
   onToggleAssinatura,
   isGhostMode,
-  onToggleGhost
+  onToggleGhost,
+  isMobile,
 }: ContactListProps) {
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState(ALL_FILTERS);
@@ -237,7 +240,7 @@ export function ContactList({
   }
 
   return (
-    <div className="flex h-full w-[340px] shrink-0 flex-col border-r border-border bg-card">
+    <div className={cn("flex h-full shrink-0 flex-col border-r border-border bg-card", isMobile ? "w-full" : "w-[340px]")}>
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <Avatar className="h-9 w-9">
           <AvatarFallback className="bg-gradient-to-br from-teal-600 to-teal-800 text-xs text-white">P</AvatarFallback>
@@ -249,36 +252,28 @@ export function ContactList({
             <Repeat className="h-4 w-4" />
           </Button>
           <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center">
-                    <Feather className="mr-1 h-3.5 w-3.5 text-muted-foreground" />
-                    <Switch 
-                      className="scale-75 data-[state=checked]:bg-primary" 
-                      checked={isAssinaturaMode}
-                      onCheckedChange={onToggleAssinatura}
-                    />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" align="start">
-                  <p className="text-xs font-medium">Modo assinatura</p>
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center">
-                    <HatGlasses className="mr-1 h-4 w-4 text-muted-foreground" />
-                    <Switch 
-                      className="scale-75 data-[state=checked]:bg-primary" 
-                      checked={isGhostMode}
-                      onCheckedChange={onToggleGhost}
-                    />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" align="start">
-                  <p className="text-xs font-medium">Não visualizar mensagens</p>
-                </TooltipContent>
-              </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center">
+                  <Feather className="mr-1 h-3.5 w-3.5 text-muted-foreground" />
+                  <Switch className="scale-75 data-[state=checked]:bg-primary" checked={isAssinaturaMode} onCheckedChange={onToggleAssinatura} />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="start">
+                <p className="text-xs font-medium">Modo assinatura</p>
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center">
+                  <HatGlasses className="mr-1 h-4 w-4 text-muted-foreground" />
+                  <Switch className="scale-75 data-[state=checked]:bg-primary" checked={isGhostMode} onCheckedChange={onToggleGhost} />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="start">
+                <p className="text-xs font-medium">Não visualizar mensagens</p>
+              </TooltipContent>
+            </Tooltip>
           </TooltipProvider>
         </div>
       </div>
@@ -366,8 +361,7 @@ export function ContactList({
               type="button"
               className={cn(
                 "relative text-xs font-medium text-muted-foreground transition-colors hover:text-foreground",
-                scopeTab === tab.id &&
-                  "text-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-(--chat-primary)",
+                scopeTab === tab.id && "text-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-(--chat-primary)",
               )}
               onClick={() => setScopeTab(tab.id)}
             >
@@ -380,10 +374,7 @@ export function ContactList({
             <button
               key={tab.id}
               type="button"
-              className={cn(
-                "h-8 rounded-md text-xs font-medium text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground",
-                stateTab === tab.id && "bg-background text-foreground shadow-sm ring-1 ring-border/70",
-              )}
+              className={cn("h-8 rounded-md text-xs font-medium text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground", stateTab === tab.id && "bg-background text-foreground shadow-sm ring-1 ring-border/70")}
               onClick={() => setStateTab(tab.id)}
             >
               {tab.label}

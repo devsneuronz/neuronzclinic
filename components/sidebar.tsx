@@ -42,9 +42,11 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
   return (
     <aside className={cn("relative flex h-screen flex-col transition-all duration-300 ease-in-out border-r", isCollapsed ? "w-[68px]" : "w-[200px]")}>
-      <Logo isCollapsed={isCollapsed} />
+      <div className="max-w-full overflow-clip">
+        <Logo isCollapsed={isCollapsed} />
+      </div>
 
-      <Button onClick={() => setIsCollapsed(!isCollapsed)} className="absolute top-1/2 right-0 h-14 w-4 translate-x-[50%] translate-y-[-50%] rounded-sm !p-0 shadow-md">
+      <Button onClick={() => setIsCollapsed(!isCollapsed)} className="absolute top-1/2 right-0 h-14 w-4 translate-x-[50%] translate-y-[-50%] rounded-sm p-0! shadow-md z-95">
         {isCollapsed ? <ChevronRight /> : <ChevronLeft />}
       </Button>
 
@@ -56,10 +58,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
               key={item.label}
               href={item.href}
               title={isCollapsed ? item.label : ""}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors",
-                isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
+              className={cn("flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors", isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}
             >
               <item.icon className="h-5 w-5 shrink-0" />
               <span className={cn("transition-all whitespace-nowrap", isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100")}>{item.label}</span>
@@ -70,9 +69,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
       <div className="border-t p-4">
         <div className="flex items-center gap-3">
-          <Avatar className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-primary text-sm font-semibold text-primary-foreground">
-            {isLoading ? "" : userInitial}
-          </Avatar>
+          <Avatar className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-primary text-sm font-semibold text-primary-foreground">{isLoading ? "" : userInitial}</Avatar>
           {!isCollapsed && (
             <div className="flex-1 overflow-hidden">
               <p className="truncate text-sm font-medium">{isLoading ? "Carregando usuário..." : userName}</p>

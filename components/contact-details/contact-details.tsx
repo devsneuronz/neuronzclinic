@@ -2,11 +2,10 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { X, ChevronDown, Phone, CheckCheck, MessageSquareDashed, Bot, Check, Pencil } from "lucide-react";
+import { X, ChevronDown, Phone, CheckCheck, MessageSquareDashed, Bot, Check, Pencil, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ChatRecord } from "@/lib/supabase-rest";
-import { getAvatarInitials } from "@/lib/avatar-initials";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getChatStatusColor, type ChatStatusOption } from "@/lib/chat-status";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
@@ -30,6 +29,7 @@ interface ContactDetailsProps {
   onMarkAsUnread?: () => void;
   onReorderTags?: (tags: ChatTag[]) => void;
   onCommitTagOrder?: (tags: ChatTag[]) => void;
+  isMobile?: boolean;
 }
 
 function getDisplayName(chat?: ChatRecord) {
@@ -43,7 +43,22 @@ function getContactPhone(chat?: ChatRecord) {
   return phone || chat?.phone_contact?.trim() || chat?.chat_id?.replace(/@.+$/, "") || "Sem telefone";
 }
 
-export function ContactDetails({ chat, onClose, onToggleStatus, onToggleIA, statusOptions, tagOptions, onChangeStatus, onToggleTag, onMarkAsRead, onMarkAsUnread, onReorderTags, onCommitTagOrder, onChangeName }: ContactDetailsProps) {
+export function ContactDetails({
+  chat,
+  onClose,
+  onToggleStatus,
+  onToggleIA,
+  statusOptions,
+  tagOptions,
+  onChangeStatus,
+  onToggleTag,
+  onMarkAsRead,
+  onMarkAsUnread,
+  onReorderTags,
+  onCommitTagOrder,
+  onChangeName,
+  isMobile,
+}: ContactDetailsProps) {
   const [view, setView] = useState<"profile" | "training">("profile");
   const contactPhone = getContactPhone(chat);
   const hasUnreadMessages = !!chat?.unread_count;
@@ -81,13 +96,13 @@ export function ContactDetails({ chat, onClose, onToggleStatus, onToggleIA, stat
 
   return (
     <div className="flex h-full w-full flex-col border-l border-border bg-card">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+      <div className="flex items-center gap-4 border-b border-border px-4 py-3 h-15.25">
+        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={onClose}>
+          {isMobile ? <ChevronLeft className="h-5 w-5" /> : <X className="h-4 w-4" />}
+        </Button>
         <div className="flex items-center gap-4">
           <label className="text-sm font-medium transition-colors text-foreground">Detalhes do contato</label>
         </div>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </Button>
       </div>
 
       <div className="flex-1 overflow-y-auto">

@@ -60,7 +60,7 @@ export const MessageBubble = memo(
         <div
           id={`message-bubble-${message.id}`}
           className={cn(
-            "group relative min-w-[168px] max-w-[72%] rounded-lg px-3 py-2 shadow-sm sm:min-w-[196px] transition-all",
+            "group relative max-w-[72%] rounded-lg px-3 py-2 shadow-sm transition-all",
             fromMe ? "rounded-tr-none bg-(--chat-me)" : "rounded-tl-none bg-(--chat-other)",
             selected && "ring-2 ring-teal-500/70",
             isHighlighted && "ring-2 ring-teal-500/30 bg-teal-500/20 duration-300",

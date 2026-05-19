@@ -43,7 +43,7 @@ export const MessageAudioPlayer = memo(function MessageAudioPlayer({ mediaUrl }:
   }, []);
 
   return (
-    <div className="flex items-end gap-3 bg-(--chat-background)/40 p-2 rounded-xl min-w-[260px]">
+    <div className="flex items-end gap-3 bg-(--chat-background)/40 p-2 rounded-xl">
       <button onClick={togglePlay} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-(--chat-primary) text-white hover:scale-105 transition-transform">
         {isPlaying ? <Pause size={20} fill="currentColor" /> : <PlayIcon size={20} className="ml-1" fill="currentColor" />}
       </button>
