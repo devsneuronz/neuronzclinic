@@ -1,24 +1,19 @@
 "use client";
 
-import Image from "next/image";
 import type { FormEvent, UIEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, Camera, Check, FileImage, FileText, Forward, Info, MapPin, Mic, Paperclip, Pause, PenLine, Reply, Search, Send, Trash2, UserRound, Video, X } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { getAvatarInitials } from "@/lib/avatar-initials";
-import { cn } from "@/lib/utils";
 import { ChatRecord, MessageRecord, fetchChats } from "@/lib/supabase-rest";
-import { MessageBubble } from "./message-bubble";
-import { formatTime, getDateLabel, getDisplayName, getMediaKind, getMessagePreviewText, isDeletedMessage } from "./message-utils";
+import { AttachmentPreviewModal } from "./attachment-preview-modal";
+import { ChatComposer } from "./chat-composer";
+import { getAttachmentType } from "./chat-attachment-utils";
+import { ChatHeader } from "./chat-header";
+import { DeleteMessageDialog } from "./delete-message-dialog";
+import { ExpandedImageModal } from "./expanded-image-modal";
+import { ForwardMessageDialog } from "./forward-message-dialog";
+import { MessageList } from "./message-list";
+import { getDateLabel, isDeletedMessage } from "./message-utils";
 
-type AttachmentPreviewKind = "image" | "video" | "audio" | "document";
-
-const attachmentMenuItemClass = "flex h-[76px] cursor-pointer flex-col items-center justify-center gap-2 rounded-md p-2 text-xs font-medium text-foreground transition-colors focus:bg-muted";
-const disabledAttachmentMenuItemClass = "flex h-[76px] cursor-not-allowed flex-col items-center justify-center gap-2 rounded-md p-2 text-xs font-medium text-muted-foreground focus:bg-transparent";
 const FORWARD_TARGET_PAGE_SIZE = 50;
 
 interface ChatWindowProps {
@@ -40,23 +35,6 @@ interface ChatWindowProps {
   onToggleDetails: () => void;
   onToggleStatus: () => void;
   isDetailsOpen: boolean;
-}
-
-function getAttachmentType(file: File | null) {
-  if (!file) return null;
-  if (file.type.startsWith("image/")) return "image";
-  if (file.type.startsWith("video/")) return "video";
-  if (file.type.startsWith("audio/")) return "audio";
-  return "document";
-}
-
-function getAttachmentLabel(file: File) {
-  const kind = getAttachmentType(file);
-
-  if (kind === "image") return "Foto";
-  if (kind === "video") return "Video";
-  if (kind === "audio") return "Audio";
-  return "Documento";
 }
 
 function getSupportedAudioMimeType() {
@@ -700,500 +678,121 @@ export function ChatWindow({
     return <div className="flex flex-1 items-center justify-center h-full bg-background px-6 text-center text-sm text-muted-foreground">Selecione um contato para visualizar a conversa.</div>;
   }
 
-  const attachmentKind = getAttachmentType(attachment) as AttachmentPreviewKind | null;
+  const attachmentKind = getAttachmentType(attachment);
 
   return (
     <div className="flex h-full flex-1 overflow-hidden bg-background">
       <div className="flex flex-1 flex-col border-r border-border relative">
-        <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
-          {isSelectionMode ? (
-            <>
-              <div className="flex min-w-0 items-center gap-3">
-                <Button type="button" variant="ghost" size="icon" onClick={clearSelectedMessages} aria-label="Cancelar selecao">
-                  <X className="h-5 w-5" />
-                </Button>
-                <span className="truncate text-sm font-semibold text-foreground">
-                  {selectedMessages.length} {selectedMessages.length === 1 ? "mensagem selecionada" : "mensagens selecionadas"}
-                </span>
-              </div>
+        <ChatHeader
+          chat={chat}
+          isSelectionMode={isSelectionMode}
+          selectedMessagesCount={selectedMessages.length}
+          canDeleteSelectedMessages={canDeleteSelectedMessages}
+          onClearSelection={clearSelectedMessages}
+          onForwardSelected={beginForwardSelected}
+          onDeleteSelected={beginDeleteSelected}
+          onToggleDetails={onToggleDetails}
+          onToggleStatus={onToggleStatus}
+        />
 
-              <div className="flex items-center gap-1">
-                <Button type="button" variant="ghost" size="icon" onClick={beginForwardSelected} aria-label="Encaminhar selecionadas">
-                  <Forward className="h-5 w-5" />
-                </Button>
-                {canDeleteSelectedMessages && (
-                  <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-red-500" onClick={beginDeleteSelected} aria-label="Apagar selecionadas">
-                    <Trash2 className="h-5 w-5" />
-                  </Button>
-                )}
-              </div>
-            </>
-          ) : (
-            <>
-              <div onClick={onToggleDetails} className="flex items-center gap-3 cursor-pointer">
-                <button className="rounded-full transition-opacity hover:opacity-90 cursor-pointer" aria-label="Abrir detalhes do contato">
-                  <Avatar className="h-10 w-10">
-                    <AvatarImage src={chat.url_foto_perfil ?? undefined} alt={getDisplayName(chat)} />
-                    <AvatarFallback className="bg-gradient-to-br from-teal-500 to-teal-700 text-sm font-semibold text-white">{getAvatarInitials(getDisplayName(chat), "C")}</AvatarFallback>
-                  </Avatar>
-                </button>
-                <div className="flex min-w-0 flex-col">
-                  <span className="truncate font-medium leading-none text-foreground">{getDisplayName(chat)}</span>
-                  <span className="mt-1 text-[10px] text-muted-foreground">{chat.finalizada ? "Finalizada" : chat.ia_responde ? "IA responde" : "Atendimento aberto"}</span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button onClick={() => onToggleStatus()} className="bg-teal-500 px-4 font-medium text-white hover:bg-teal-600 cursor-pointer">
-                  {chat.finalizada ? "Reabrir" : "Finalizar"}
-                </Button>
-                <Button onClick={onToggleDetails} variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground cursor-pointer">
-                  <Info className="h-5 w-5" />
-                </Button>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div
-          ref={scrollAreaRef}
-          className="flex-1 overflow-y-auto relative"
-          onScroll={handleMessagesScroll}
-          style={{
-            backgroundColor: "var(--chat-background)",
-            backgroundImage: "url(/bgs/bgdefault.png)",
-            backgroundRepeat: "repeat",
-            backgroundSize: "600px",
+        <MessageList
+          chat={chat}
+          groupedMessages={groupedMessages}
+          messagesByRemoteId={messagesByRemoteId}
+          selectedMessageIds={selectedMessageIds}
+          isSelectionMode={isSelectionMode}
+          highlightedMessageId={highlightedMessageId}
+          isLoading={isLoading}
+          isLoadingOlder={isLoadingOlder}
+          hasMoreMessages={hasMoreMessages}
+          error={error}
+          showScrollButton={showScrollButton}
+          scrollAreaRef={scrollAreaRef}
+          bottomRef={bottomRef}
+          onMessagesScroll={handleMessagesScroll}
+          onLoadOlderClick={async () => {
+            const scrollArea = scrollAreaRef.current;
+            if (scrollArea) previousScrollHeightRef.current = scrollArea.scrollHeight;
+            const addedCount = await onLoadOlderMessages?.();
+            if (!addedCount) previousScrollHeightRef.current = null;
           }}
-        >
-          <div className="mx-auto flex min-h-full w-full flex-col px-6 py-4">
-            {isLoading ? (
-              <div className="m-auto rounded px-4 py-2 text-sm shadow-sm border shadow-x bg-input/30 border-input">Carregando mensagens...</div>
-            ) : error ? (
-              <div className="m-auto max-w-md rounded bg-red-400/30 px-4 py-3 text-sm text-red-500 shadow-sm">{error}</div>
-            ) : groupedMessages.length === 0 ? (
-              <div className="m-auto rounded px-4 py-2 text-sm shadow-sm border shadow-x text-foreground/75 bg-input/30 border-input">Esta conversa ainda não tem mensagens visíveis.</div>
-            ) : (
-              <>
-                <div className="mb-2 flex justify-center">
-                  {hasMoreMessages ? (
-                    <Button
-                      variant="ghost"
-                      className="h-8 bg-(--chat-muted)/70 px-3 text-xs text-(--chat-muted-foreground) shadow-sm hover:bg-(--chat-muted)"
-                      disabled={isLoadingOlder}
-                      onClick={async () => {
-                        const scrollArea = scrollAreaRef.current;
-                        if (scrollArea) previousScrollHeightRef.current = scrollArea.scrollHeight;
-                        const addedCount = await onLoadOlderMessages?.();
-                        if (!addedCount) previousScrollHeightRef.current = null;
-                      }}
-                    >
-                      {isLoadingOlder ? "Carregando mensagens antigas..." : "Carregar mensagens antigas"}
-                    </Button>
-                  ) : (
-                    <span className="rounded bg-(--chat-muted)/70 px-3 py-1 text-xs text-(--chat-muted-foreground) shadow-sm">Início do histórico carregado</span>
-                  )}
-                </div>
-
-                {groupedMessages.map((group) => (
-                  <div key={group.date}>
-                    <div className="my-3 flex justify-center">
-                      <span className="rounded bg-(--chat-other)/80 px-3 py-1 text-xs text-(--chat-muted-foreground) shadow-sm">{group.date}</span>
-                    </div>
-
-                    {group.items.map((message) => (
-                      <MessageBubble
-                        key={message.id}
-                        message={message}
-                        chat={chat!}
-                        messagesByRemoteId={messagesByRemoteId}
-                        selected={selectedMessageIds.has(message.id)}
-                        isSelectionMode={isSelectionMode}
-                        isHighlighted={highlightedMessageId === message.id}
-                        onToggleSelection={toggleMessageSelection}
-                        onReply={beginReply}
-                        onForward={beginForward}
-                        onDelete={beginDelete}
-                        onExpandImage={(url: string, alt: string) => setExpandedImage({ url, alt })}
-                        onScrollToMessage={handleScrollToMessage}
-                      />
-                    ))}
-                  </div>
-                ))}
-              </>
-            )}
-            <div ref={bottomRef} />
-          </div>
-        </div>
-
-        {showScrollButton && (
-          <Button size="icon" variant="outline" onClick={handleScrollToLastMessage} className="absolute left-1/2 bottom-18 rounded-full -translate-x-2/3 transition-all active:scale-95 animate-in fade-in zoom-in-95 backdrop-blur-sm">
-            <ArrowDown className="h-4 w-4 stroke-[2.5]" />
-          </Button>
-        )}
-
-        <form onSubmit={handleSubmit} className="border-t border-border bg-card px-4 py-3">
-          {attachment && (
-            <div className="mb-2 flex items-center justify-between rounded-md border border-border bg-secondary px-3 py-2 text-sm">
-              <button type="button" className="min-w-0 text-left" onClick={() => setIsAttachmentPreviewOpen(true)}>
-                <p className="truncate font-medium text-foreground">{attachment.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {getAttachmentLabel(attachment)} · {(attachment.size / 1024 / 1024).toFixed(2)} MB
-                </p>
-              </button>
-              <Button type="button" variant="ghost" size="icon-sm" className="shrink-0 text-muted-foreground hover:text-foreground" onClick={removeAttachment} aria-label="Remover anexo">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-
-          {replyTo && (
-            <div className="mb-2 flex items-center gap-3 overflow-hidden rounded-lg border-l-4 border-[#00a884] bg-[#f0f2f5] px-3 py-2 text-sm shadow-[inset_0_0_0_1px_rgba(17,27,33,0.05)] dark:bg-[#202c33]">
-              <Reply className="h-4 w-4 shrink-0 text-[#00a884]" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-semibold text-[#008069] dark:text-[#06cf9c]">Respondendo {replyTo.from_me ? "voce" : getDisplayName(chat)}</p>
-                <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted-foreground">
-                  {getMediaKind(replyTo) === "image" && <FileImage className="h-3.5 w-3.5 shrink-0 opacity-75" />}
-                  {getMediaKind(replyTo) === "video" && <Video className="h-3.5 w-3.5 shrink-0 opacity-75" />}
-                  {getMediaKind(replyTo) === "audio" && <Mic className="h-3.5 w-3.5 shrink-0 opacity-75" />}
-                  {getMediaKind(replyTo) === "file" && <FileText className="h-3.5 w-3.5 shrink-0 opacity-75" />}
-                  <p className="truncate text-xs">{getMessagePreviewText(replyTo)}</p>
-                </div>
-              </div>
-              <Button type="button" variant="ghost" size="icon-sm" className="shrink-0 text-muted-foreground hover:text-foreground" onClick={() => setReplyTo(null)} aria-label="Cancelar resposta">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-
-          {messageActionError && <p className="mb-2 rounded-md bg-red-500/10 px-3 py-2 text-xs text-red-500">{messageActionError}</p>}
-          {recordingError && <p className="mb-2 rounded-md bg-red-500/10 px-3 py-2 text-xs text-red-500">{recordingError}</p>}
-
-          <div className="flex items-center gap-3">
-            {isRecording ? (
-              <div className="flex min-w-0 flex-1 items-center gap-3 rounded-full bg-secondary px-2 py-2 shadow-sm">
-                <Button type="button" variant="ghost" size="icon" className="shrink-0 rounded-full text-muted-foreground hover:text-red-500" onClick={cancelRecording} disabled={isSending} aria-label="Cancelar gravacao">
-                  <Trash2 className="h-5 w-5" />
-                </Button>
-
-                <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full bg-rose-400", isRecordingPaused ? "opacity-40" : "animate-pulse")} />
-                <span className="w-12 shrink-0 text-sm font-semibold tabular-nums text-foreground">{formatTime(recordingSeconds)}</span>
-
-                <div className="flex min-w-0 flex-1 items-center justify-center gap-1 overflow-hidden px-2" aria-hidden="true">
-                  {Array.from({ length: 26 }).map((_, index) => {
-                    const height = 6 + ((index * 7 + recordingSeconds * 5) % 18);
-
-                    return (
-                      <span
-                        key={index}
-                        className={cn("w-1 rounded-full bg-muted-foreground/60 transition-all duration-300", !isRecordingPaused && "animate-pulse")}
-                        style={{
-                          height,
-                          animationDelay: `${index * 45}ms`,
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="shrink-0 rounded-full text-rose-400 hover:bg-rose-400/10 hover:text-rose-400"
-                  onClick={toggleRecordingPause}
-                  disabled={isSending}
-                  aria-label={isRecordingPaused ? "Retomar gravacao" : "Pausar gravacao"}
-                >
-                  {isRecordingPaused ? <Mic className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
-                </Button>
-
-                <Button type="button" disabled={isSending} size="icon" className="shrink-0 rounded-full bg-teal-500 text-white hover:bg-teal-600" onClick={sendRecording} aria-label="Enviar audio gravado">
-                  <Send className="h-5 w-5" />
-                </Button>
-              </div>
-            ) : (
-              <>
-                <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-foreground">
-                  <PenLine className="h-5 w-5" />
-                </Button>
-                <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-foreground" onClick={startRecording} disabled={isSending || !!attachment} aria-label="Gravar audio">
-                  <Mic className="h-5 w-5" />
-                </Button>
-              </>
-            )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              className="hidden"
-              onChange={(event) => handleAttachmentSelected(event.target.files?.[0])}
-            />
-            <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => handleAttachmentSelected(event.target.files?.[0])} />
-            <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={(event) => handleAttachmentSelected(event.target.files?.[0])} />
-            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(event) => handleAttachmentSelected(event.target.files?.[0])} />
-            {!isRecording && (
-              <>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-foreground" aria-label="Anexar arquivo">
-                      <Paperclip className="h-5 w-5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" side="top" sideOffset={12} className="w-[300px] rounded-lg border-border bg-card p-3 shadow-xl">
-                    <div className="grid grid-cols-3 gap-2">
-                      <DropdownMenuItem className={attachmentMenuItemClass} onSelect={() => photoInputRef.current?.click()}>
-                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
-                          <FileImage className="h-5 w-5 text-current" />
-                        </span>
-                        Fotos
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className={attachmentMenuItemClass} onSelect={() => videoInputRef.current?.click()}>
-                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-rose-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
-                          <Video className="h-5 w-5 text-current" />
-                        </span>
-                        Videos
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className={attachmentMenuItemClass} onSelect={() => fileInputRef.current?.click()}>
-                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
-                          <FileText className="h-5 w-5 text-current" />
-                        </span>
-                        Documentos
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className={attachmentMenuItemClass} onSelect={() => cameraInputRef.current?.click()}>
-                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
-                          <Camera className="h-5 w-5 text-current" />
-                        </span>
-                        Camera
-                      </DropdownMenuItem>
-                      <DropdownMenuItem aria-disabled className={disabledAttachmentMenuItemClass} onSelect={(event) => event.preventDefault()}>
-                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
-                          <MapPin className="h-5 w-5 text-current" />
-                        </span>
-                        Localizacao
-                      </DropdownMenuItem>
-                      <DropdownMenuItem aria-disabled className={disabledAttachmentMenuItemClass} onSelect={(event) => event.preventDefault()}>
-                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
-                          <UserRound className="h-5 w-5 text-current" />
-                        </span>
-                        Contato
-                      </DropdownMenuItem>
-                    </div>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <Input value={draft} onChange={(event) => setDraft(event.target.value)} disabled={isSending} placeholder={attachment ? "Legenda opcional" : "Digite uma mensagem"} className="flex-1 border-0 bg-secondary" />
-                <Button type="submit" disabled={isSending || (!draft.trim() && !attachment)} size="icon" className="shrink-0 rounded-full bg-teal-500 text-white hover:bg-teal-600" aria-label="Enviar mensagem">
-                  <Send className="h-5 w-5" />
-                </Button>
-              </>
-            )}
-          </div>
-        </form>
+          onScrollToLastMessage={handleScrollToLastMessage}
+          onToggleSelection={toggleMessageSelection}
+          onReply={beginReply}
+          onForward={beginForward}
+          onDelete={beginDelete}
+          onExpandImage={(url: string, alt: string) => setExpandedImage({ url, alt })}
+          onScrollToMessage={handleScrollToMessage}
+        />
+        <ChatComposer
+          chat={chat}
+          draft={draft}
+          attachment={attachment}
+          replyTo={replyTo}
+          isSending={isSending}
+          isRecording={isRecording}
+          isRecordingPaused={isRecordingPaused}
+          recordingSeconds={recordingSeconds}
+          messageActionError={messageActionError}
+          recordingError={recordingError}
+          fileInputRef={fileInputRef}
+          photoInputRef={photoInputRef}
+          videoInputRef={videoInputRef}
+          cameraInputRef={cameraInputRef}
+          onSubmit={handleSubmit}
+          onDraftChange={setDraft}
+          onOpenAttachmentPreview={() => setIsAttachmentPreviewOpen(true)}
+          onRemoveAttachment={removeAttachment}
+          onCancelReply={() => setReplyTo(null)}
+          onAttachmentSelected={handleAttachmentSelected}
+          onStartRecording={startRecording}
+          onCancelRecording={cancelRecording}
+          onToggleRecordingPause={toggleRecordingPause}
+          onSendRecording={sendRecording}
+        />
       </div>
 
       {attachment && isAttachmentPreviewOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-background/95 backdrop-blur-sm">
-          <div className="flex h-16 items-center justify-between border-b border-border bg-card px-4">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-foreground">{attachment.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {getAttachmentLabel(attachment)} · {(attachment.size / 1024 / 1024).toFixed(2)} MB
-              </p>
-            </div>
-            <Button type="button" variant="ghost" size="icon" onClick={removeAttachment} aria-label="Fechar preview">
-              <X className="h-5 w-5" />
-            </Button>
-          </div>
-
-          <div className="flex min-h-0 flex-1 items-center justify-center bg-black/5 p-4 sm:p-8">
-            {attachmentPreviewUrl && attachmentKind === "image" && (
-              <Image src={attachmentPreviewUrl} alt={attachment.name} width={1200} height={900} className="max-h-full w-auto max-w-full rounded-md object-contain shadow-2xl" unoptimized />
-            )}
-
-            {attachmentPreviewUrl && attachmentKind === "video" && <video src={attachmentPreviewUrl} className="max-h-full w-auto max-w-full rounded-md bg-black shadow-2xl" controls preload="metadata" />}
-
-            {attachmentPreviewUrl && attachmentKind === "audio" && (
-              <div className="flex w-full max-w-xl flex-col items-center gap-5 rounded-lg border border-border bg-card p-8 shadow-2xl">
-                <span className="flex h-20 w-20 items-center justify-center rounded-full bg-teal-500 text-white">
-                  <Mic className="h-10 w-10" />
-                </span>
-                <div className="min-w-0 text-center">
-                  <p className="truncate text-base font-medium text-foreground">{attachment.name}</p>
-                  <p className="text-sm text-muted-foreground">{attachment.type || "audio"}</p>
-                </div>
-                <audio src={attachmentPreviewUrl} className="w-full" controls />
-              </div>
-            )}
-
-            {attachmentKind === "document" && (
-              <div className="flex w-full max-w-md flex-col items-center gap-4 rounded-lg border border-border bg-card p-8 text-center shadow-2xl">
-                <span className="flex h-20 w-20 items-center justify-center rounded-full bg-purple-600 text-white">
-                  <FileText className="h-10 w-10" />
-                </span>
-                <div className="min-w-0">
-                  <p className="break-words text-base font-medium text-foreground">{attachment.name}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {attachment.type || "Arquivo"} · {(attachment.size / 1024 / 1024).toFixed(2)} MB
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <form onSubmit={handleSubmit} className="border-t border-border bg-card p-4">
-            <div className="mx-auto flex w-full max-w-4xl items-center gap-3">
-              <Input value={draft} onChange={(event) => setDraft(event.target.value)} disabled={isSending} placeholder="Adicione uma legenda" className="h-11 flex-1 border-0 bg-secondary" />
-              <Button type="submit" disabled={isSending} size="icon-lg" className="shrink-0 rounded-full bg-teal-500 text-white hover:bg-teal-600" aria-label="Enviar anexo">
-                <Send className="h-5 w-5" />
-              </Button>
-            </div>
-          </form>
-        </div>
+        <AttachmentPreviewModal
+          attachment={attachment}
+          attachmentKind={attachmentKind}
+          attachmentPreviewUrl={attachmentPreviewUrl}
+          draft={draft}
+          isSending={isSending}
+          onDraftChange={setDraft}
+          onRemoveAttachment={removeAttachment}
+          onSubmit={handleSubmit}
+        />
       )}
 
-      {expandedImage && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-black/85 backdrop-blur-sm">
-          <div className="flex h-14 items-center justify-end px-4">
-            <Button type="button" variant="ghost" size="icon" onClick={() => setExpandedImage(null)} className="text-white hover:bg-white/10 hover:text-white" aria-label="Fechar imagem">
-              <X className="h-5 w-5" />
-            </Button>
-          </div>
+      {expandedImage && <ExpandedImageModal image={expandedImage} onClose={() => setExpandedImage(null)} />}
 
-          <button type="button" className="flex min-h-0 flex-1 items-center justify-center px-4 pb-6" onClick={() => setExpandedImage(null)} aria-label="Fechar imagem expandida">
-            <span className="relative block h-full max-h-full w-full max-w-6xl">
-              <Image src={expandedImage.url} alt={expandedImage.alt} fill sizes="100vw" className="object-contain" priority unoptimized />
-            </span>
-          </button>
-        </div>
-      )}
+      <ForwardMessageDialog
+        chat={chat}
+        messages={forwardingMessages}
+        selectedForwardTarget={selectedForwardTarget}
+        selectedForwardTargetRecord={selectedForwardTargetRecord}
+        forwardSearch={forwardSearch}
+        forwardTargetResults={forwardTargetResults}
+        isLoadingForwardTargets={isLoadingForwardTargets}
+        isLoadingMoreForwardTargets={isLoadingMoreForwardTargets}
+        hasMoreForwardTargets={hasMoreForwardTargets}
+        isForwarding={isForwarding}
+        messageActionError={messageActionError}
+        onClose={() => setForwardingMessages([])}
+        onSearchChange={setForwardSearch}
+        onSelectTarget={setSelectedForwardTarget}
+        onLoadMore={loadMoreForwardTargets}
+        onSubmit={handleForwardSubmit}
+      />
 
-      {forwardingMessages.length > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-xl rounded-lg border border-border bg-card shadow-2xl">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground">Encaminhar {forwardingMessages.length === 1 ? "mensagem" : `${forwardingMessages.length} mensagens`}</p>
-                <p className="truncate text-xs text-muted-foreground">{selectedForwardTargetRecord ? `Para ${getDisplayName(selectedForwardTargetRecord)}` : "Escolha um contato"}</p>
-              </div>
-              <Button type="button" variant="ghost" size="icon" onClick={() => setForwardingMessages([])} aria-label="Fechar encaminhamento">
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-
-            <div className="space-y-3 p-4">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input value={forwardSearch} onChange={(event) => setForwardSearch(event.target.value)} placeholder="Pesquisar todos os chats" className="border-border bg-secondary pl-9" />
-              </div>
-
-              <div className="max-h-56 overflow-y-auto rounded-md border border-border">
-                {isLoadingForwardTargets ? (
-                  <p className="px-3 py-4 text-center text-xs text-muted-foreground">Buscando chats...</p>
-                ) : forwardTargetResults.length === 0 ? (
-                  <p className="px-3 py-4 text-center text-xs text-muted-foreground">Nenhum chat encontrado.</p>
-                ) : (
-                  forwardTargetResults.map((target) => {
-                    const isSelectedTarget = selectedForwardTarget === target.chat_id;
-
-                    return (
-                      <button
-                        key={target.id}
-                        type="button"
-                        className={cn("flex w-full items-center gap-3 border-b border-border px-3 py-2 text-left last:border-b-0 transition-colors hover:bg-secondary", isSelectedTarget && "bg-teal-500/10")}
-                        onClick={() => setSelectedForwardTarget(target.chat_id)}
-                      >
-                        <Avatar className="h-8 w-8">
-                          <AvatarImage src={target.url_foto_perfil ?? undefined} alt={getDisplayName(target)} />
-                          <AvatarFallback className="bg-teal-500 text-xs font-semibold text-white">{getAvatarInitials(getDisplayName(target), "C")}</AvatarFallback>
-                        </Avatar>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium text-foreground">{getDisplayName(target)}</span>
-                          <span className="block truncate text-xs text-muted-foreground">{target.phone_contact || target.chat_id}</span>
-                        </span>
-                        <span className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-full border", isSelectedTarget ? "border-teal-500 bg-teal-500 text-white" : "border-muted-foreground/30 text-transparent")}>
-                          <Check className="h-3.5 w-3.5" />
-                        </span>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-
-              {hasMoreForwardTargets && (
-                <Button type="button" variant="ghost" className="w-full" onClick={loadMoreForwardTargets} disabled={isLoadingMoreForwardTargets}>
-                  {isLoadingMoreForwardTargets ? "Carregando..." : "Carregar mais chats"}
-                </Button>
-              )}
-
-              <div className="max-h-32 space-y-2 overflow-y-auto rounded-md border-l-4 border-teal-500 bg-secondary px-3 py-2">
-                {forwardingMessages.map((message) => (
-                  <div key={message.id} className="min-w-0">
-                    <p className="text-xs font-semibold text-teal-600 dark:text-teal-300">{message.from_me ? "Voce" : getDisplayName(chat)}</p>
-                    <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{getMessagePreviewText(message)}</p>
-                  </div>
-                ))}
-              </div>
-
-              {messageActionError && <p className="rounded-md bg-red-500/10 px-3 py-2 text-xs text-red-500">{messageActionError}</p>}
-            </div>
-
-            <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
-              <Button type="button" variant="ghost" onClick={() => setForwardingMessages([])}>
-                Cancelar
-              </Button>
-              <Button type="button" className="bg-teal-500 text-white hover:bg-teal-600" onClick={handleForwardSubmit} disabled={!selectedForwardTarget || isForwarding}>
-                {isForwarding ? (
-                  "Encaminhando..."
-                ) : (
-                  <>
-                    <Check className="h-4 w-4" />
-                    Encaminhar
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {deleteConfirmationMessages.length > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-lg border border-border bg-card shadow-2xl">
-            <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-500">
-                <Trash2 className="h-5 w-5" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground">Apagar {deleteConfirmationMessages.length === 1 ? "mensagem?" : `${deleteConfirmationMessages.length} mensagens?`}</p>
-                <p className="text-xs text-muted-foreground">A acao sera enviada ao webhook de apagar. O banco nao sera alterado diretamente.</p>
-              </div>
-            </div>
-
-            <div className="space-y-3 p-4">
-              <div className="max-h-36 space-y-2 overflow-y-auto rounded-md border-l-4 border-red-500 bg-secondary px-3 py-2">
-                {deleteConfirmationMessages.map((message) => (
-                  <div key={message.id} className="min-w-0">
-                    <p className="text-xs font-semibold text-red-500">{message.from_me ? "Voce" : getDisplayName(chat)}</p>
-                    <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{getMessagePreviewText(message)}</p>
-                  </div>
-                ))}
-              </div>
-              <p className="text-xs leading-relaxed text-muted-foreground">Depois da confirmacao, as mensagens ficam marcadas visualmente como apagadas e o webhook recebe os dados originais para processar o apagamento.</p>
-              {messageActionError && <p className="rounded-md bg-red-500/10 px-3 py-2 text-xs text-red-500">{messageActionError}</p>}
-            </div>
-
-            <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
-              <Button type="button" variant="ghost" onClick={() => setDeleteConfirmationMessages([])}>
-                Cancelar
-              </Button>
-              <Button type="button" variant="destructive" onClick={handleDeleteMessage}>
-                <Trash2 className="h-4 w-4" />
-                Confirmar
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeleteMessageDialog
+        chat={chat}
+        messages={deleteConfirmationMessages}
+        messageActionError={messageActionError}
+        onClose={() => setDeleteConfirmationMessages([])}
+        onConfirm={handleDeleteMessage}
+      />
     </div>
   );
 }
