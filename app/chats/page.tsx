@@ -628,27 +628,61 @@ export default function ChatsPage() {
     };
   }, [latestMessageStatuses, visibleChats]);
 
-  const handleToggleStatus = () => {
-    if (!selectedChatId) return;
+  const restoreSelectedChat = useCallback(
+    (previousChat: ChatRecord) => {
+      if (!selectedChatId) return;
 
-    const toggleStatus = (list: ChatRecord[]) => list.map((chat) => (chat.id === selectedChatId ? { ...chat, finalizada: !chat.finalizada } : chat));
+      const restoreChat = (list: ChatRecord[]) => list.map((chat) => (chat.id === selectedChatId ? previousChat : chat));
+
+      setChats((current) => restoreChat(current));
+      setSearchChats((current) => restoreChat(current));
+    },
+    [selectedChatId],
+  );
+
+  const handleToggleStatus = useCallback(async () => {
+    if (!selectedChat || !selectedChatId) return;
+
+    const previousChat = selectedChat;
+    const nextFinalizada = !selectedChat.finalizada;
+    const toggleStatus = (list: ChatRecord[]) => list.map((chat) => (chat.id === selectedChatId ? { ...chat, finalizada: nextFinalizada } : chat));
 
     setChats((current) => toggleStatus(current));
     setSearchChats((current) => toggleStatus(current));
+    setError(undefined);
 
-    //adicionar persistencia de dados
-  };
+    try {
+      await updateChatDetails({
+        id: selectedChat.id,
+        finalizada: nextFinalizada,
+      });
+    } catch (err) {
+      restoreSelectedChat(previousChat);
+      setError(err instanceof Error ? err.message : "Nao foi possivel salvar o status da conversa.");
+    }
+  }, [restoreSelectedChat, selectedChat, selectedChatId]);
 
-  const handleToggleIA = () => {
-    if (!selectedChatId) return;
+  const handleToggleIA = useCallback(async () => {
+    if (!selectedChat || !selectedChatId) return;
 
-    const toggleIAStatus = (list: ChatRecord[]) => list.map((chat) => (chat.id === selectedChatId ? { ...chat, ia_responde: !chat.ia_responde } : chat));
+    const previousChat = selectedChat;
+    const nextIAStatus = !selectedChat.ia_responde;
+    const toggleIAStatus = (list: ChatRecord[]) => list.map((chat) => (chat.id === selectedChatId ? { ...chat, ia_responde: nextIAStatus } : chat));
 
     setChats((current) => toggleIAStatus(current));
     setSearchChats((current) => toggleIAStatus(current));
+    setError(undefined);
 
-    //adicionar persistencia de dados
-  };
+    try {
+      await updateChatDetails({
+        id: selectedChat.id,
+        ia_responde: nextIAStatus,
+      });
+    } catch (err) {
+      restoreSelectedChat(previousChat);
+      setError(err instanceof Error ? err.message : "Nao foi possivel salvar o status da IA.");
+    }
+  }, [restoreSelectedChat, selectedChat, selectedChatId]);
 
   const updateSelectedChatUnreadCount = useCallback(
     (unreadCount: number) => {
@@ -675,18 +709,6 @@ export default function ChatsPage() {
   const handleMarkAsUnread = useCallback(() => {
     updateSelectedChatUnreadCount(Math.max(selectedChat?.unread_count || 0, 1));
   }, [selectedChat?.unread_count, updateSelectedChatUnreadCount]);
-
-  const restoreSelectedChat = useCallback(
-    (previousChat: ChatRecord) => {
-      if (!selectedChatId) return;
-
-      const restoreChat = (list: ChatRecord[]) => list.map((chat) => (chat.id === selectedChatId ? previousChat : chat));
-
-      setChats((current) => restoreChat(current));
-      setSearchChats((current) => restoreChat(current));
-    },
-    [selectedChatId],
-  );
 
   const updateSelectedChatTags = useCallback(
     (tags: ChatTag[]) => {

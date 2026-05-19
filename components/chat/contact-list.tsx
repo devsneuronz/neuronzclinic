@@ -2,7 +2,7 @@
 
 import type { UIEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { Bot, ChevronDown, ChevronUp, Contact, Feather, Filter, FilterX, HatGlasses, Pencil, Repeat, Search, SlidersHorizontal, SquarePlus } from "lucide-react";
+import { ChevronDown, ChevronUp, Feather, Filter, FilterX, HatGlasses, Repeat, Search, SquarePlus } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,19 @@ interface ContactListProps {
 }
 
 const ALL_FILTERS = "all";
+const scopeTabs = [
+  { id: "all", label: "Todos" },
+  { id: "ia", label: "Chats IA" },
+  { id: "mine", label: "Meus Chats" },
+] as const;
+const stateTabs = [
+  { id: "entrada", label: "Entrada" },
+  { id: "aguardando", label: "Aguardando" },
+  { id: "finalizados", label: "Finalizados" },
+] as const;
+
+type ScopeTab = (typeof scopeTabs)[number]["id"];
+type StateTab = (typeof stateTabs)[number]["id"];
 
 function getDisplayName(chat: ChatRecord) {
   return chat.nome_contato || chat.pushname || chat.chat_id?.replace("@s.whatsapp.net", "") || "Contato sem nome";
@@ -115,6 +128,8 @@ export function ContactList({
   const [statusFilter, setStatusFilter] = useState(ALL_FILTERS);
   const [tagFilter, setTagFilter] = useState(ALL_FILTERS);
   const [sectorFilter, setSectorFilter] = useState(ALL_FILTERS);
+  const [scopeTab, setScopeTab] = useState<ScopeTab>("all");
+  const [stateTab, setStateTab] = useState<StateTab>("entrada");
   const [sectorLabels, setSectorLabels] = useState<Record<string, string>>({});
   const [sectorCatalog, setSectorCatalog] = useState<string[]>([]);
 
@@ -192,6 +207,19 @@ export function ContactList({
       return true;
     });
   }, [chats, sectorFilter, sectorLabels, statusFilter, tagFilter]);
+
+  const visibleChats = useMemo(() => {
+    return filteredChats.filter((chat) => {
+      if (scopeTab === "ia" && chat.ia_responde !== true) return false;
+      if (scopeTab === "mine" && chat.ia_responde === true) return false;
+
+      if (stateTab === "finalizados") return chat.finalizada === true;
+      if (chat.finalizada === true) return false;
+      if (stateTab === "aguardando") return chat.last_message_fromMe === true;
+
+      return chat.last_message_fromMe !== true;
+    });
+  }, [filteredChats, scopeTab, stateTab]);
 
   function clearFilters() {
     setStatusFilter(ALL_FILTERS);
@@ -330,13 +358,47 @@ export function ContactList({
         )}
       </div>
 
+      <div className="border-b border-border bg-card">
+        <div className="grid h-11 grid-cols-3 px-2">
+          {scopeTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={cn(
+                "relative text-xs font-medium text-muted-foreground transition-colors hover:text-foreground",
+                scopeTab === tab.id &&
+                  "text-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-(--chat-primary)",
+              )}
+              onClick={() => setScopeTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-1 border-t border-border/60 bg-secondary/60 p-1.5">
+          {stateTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={cn(
+                "h-8 rounded-md text-xs font-medium text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground",
+                stateTab === tab.id && "bg-background text-foreground shadow-sm ring-1 ring-border/70",
+              )}
+              onClick={() => setStateTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="flex-1 overflow-y-auto" onScroll={handleListScroll}>
         {isLoading || isSearching ? (
           <div className="p-4 text-sm text-muted-foreground">Carregando conversas...</div>
-        ) : filteredChats.length === 0 ? (
+        ) : visibleChats.length === 0 ? (
           <div className="p-4 text-sm text-muted-foreground">Nenhuma conversa encontrada.</div>
         ) : (
-          filteredChats.map((chat) => {
+          visibleChats.map((chat) => {
             const name = getDisplayName(chat);
             const tags = getChatTags(chat).slice(0, 3);
             const latestStatus = latestMessageStatuses[chat.chat_id];

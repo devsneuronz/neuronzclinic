@@ -89,6 +89,10 @@ function buildPatch(body: RawChat, currentChat: RawChat) {
     patch.finalizada = getBoolean(body.finalizada)
   }
 
+  if ("ia_responde" in body) {
+    patch.ia_responde = getBoolean(body.ia_responde)
+  }
+
   if ("tags" in body) {
     const tags = normalizeTags(body.tags)
 

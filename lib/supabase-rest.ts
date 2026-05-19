@@ -104,6 +104,7 @@ export interface UpdateChatDetailsInput {
   Status_chat?: string | null
   hex_status?: string | null
   finalizada?: boolean | null
+  ia_responde?: boolean | null
   tags?: Array<{ id: string; label: string; color?: string | null }>
 }
 
