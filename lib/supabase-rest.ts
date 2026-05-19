@@ -119,6 +119,16 @@ export interface LatestMessageStatus {
   timestamp_msg: string | null
 }
 
+export interface LatestChatMessage {
+  chat_id: string | null
+  content: string | null
+  message_type: string | null
+  media_mime_type: string | null
+  timestamp_msg: string | null
+  from_me: boolean | null
+  status: string | null
+}
+
 async function supabaseGet<T>(path: string): Promise<T> {
   const url = `${supabaseRestUrl.replace(/\/$/, "")}/${path}`
   const response = await fetch(url, {
@@ -233,6 +243,32 @@ export function fetchLatestMessageStatuses(chatIds: string[]): Promise<Record<st
 
       return statuses
     }, initialStatuses)
+  })
+}
+
+export function fetchLatestMessagesForChats(chatIds: string[]): Promise<Record<string, LatestChatMessage>> {
+  const uniqueChatIds = Array.from(new Set(chatIds.filter(Boolean)))
+
+  if (uniqueChatIds.length === 0) {
+    return Promise.resolve({})
+  }
+
+  const select = ["chat_id", "content", "message_type", "media_mime_type", "timestamp_msg", "from_me", "status"].join(",")
+  const encodedIds = uniqueChatIds.map((chatId) => encodeURIComponent(chatId)).join(",")
+  const limit = Math.max(uniqueChatIds.length * 20, 1000)
+
+  return supabaseGet<LatestChatMessage[]>(
+    `messages?select=${select}&chat_id=in.(${encodedIds})&order=timestamp_msg.desc.nullslast&limit=${limit}`,
+  ).then((messages) => {
+    const latestMessages: Record<string, LatestChatMessage> = {}
+
+    for (const message of messages) {
+      if (message.chat_id && !latestMessages[message.chat_id]) {
+        latestMessages[message.chat_id] = message
+      }
+    }
+
+    return latestMessages
   })
 }
 

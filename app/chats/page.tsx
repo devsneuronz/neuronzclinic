@@ -6,12 +6,15 @@ import { ChatWindow } from "@/components/chat/chat-window";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { getChatTags, type ChatTag } from "@/lib/chat-tags";
 import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
-import { ChatRecord, LatestMessageStatus, MessageRecord, fetchChats, fetchLatestMessageStatuses, fetchMessages, deleteMessage, deleteMessages, forwardMessage, forwardMessages, sendMessage, updateChatDetails } from "@/lib/supabase-rest";
+import { ChatRecord, LatestChatMessage, LatestMessageStatus, MessageRecord, fetchChats, fetchLatestMessagesForChats, fetchLatestMessageStatuses, fetchMessages, deleteMessage, deleteMessages, forwardMessage, forwardMessages, sendMessage, updateChatDetails } from "@/lib/supabase-rest";
+import { createSupabaseRealtimeSubscription, type SupabasePostgresChangePayload } from "@/lib/supabase-realtime";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { ContactDetails } from "@/components/contact-details/contact-details";
 
 const CHAT_PAGE_SIZE = 50;
 const MESSAGE_PAGE_SIZE = 50;
+const CHAT_SYNC_INTERVAL_MS = 5000;
+const MESSAGE_SYNC_INTERVAL_MS = 2500;
 
 function getOptimisticMessageType(file: File | null) {
   if (!file) return "text";
@@ -32,6 +35,120 @@ function getMessagePreviewText(message: MessageRecord) {
   if (type.includes("document")) return "Documento";
 
   return "Mensagem";
+}
+
+function getTimestampValue(value?: string | null) {
+  if (!value) return 0;
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : 0;
+}
+
+function sortChatsByLatestMessage(chatList: ChatRecord[]) {
+  return [...chatList].sort((a, b) => getTimestampValue(b.last_message_time) - getTimestampValue(a.last_message_time));
+}
+
+function sortMessagesByTimestamp(messageList: MessageRecord[]) {
+  return [...messageList].sort((a, b) => getTimestampValue(a.timestamp_msg) - getTimestampValue(b.timestamp_msg));
+}
+
+function mergeMessages(currentMessages: MessageRecord[], incomingMessages: MessageRecord[]) {
+  const realIncomingMessages = incomingMessages.filter((message) => !message.id.startsWith("optimistic-"));
+  const filteredCurrentMessages = currentMessages.filter((message) => {
+    if (!message.id.startsWith("optimistic-")) return true;
+    return !realIncomingMessages.some((incomingMessage) => isMatchingSentMessage(incomingMessage, message));
+  });
+
+  const indexedMessages = new Map<string, MessageRecord>();
+
+  for (const message of [...filteredCurrentMessages, ...incomingMessages]) {
+    const keys = [message.id, message.message_id].filter(Boolean) as string[];
+    const existingMessage = keys.map((key) => indexedMessages.get(key)).find(Boolean);
+    const nextMessage = existingMessage ? { ...existingMessage, ...message } : message;
+
+    for (const key of keys) {
+      indexedMessages.set(key, nextMessage);
+    }
+  }
+
+  return sortMessagesByTimestamp(Array.from(new Set(indexedMessages.values())));
+}
+
+function getMessageKeys(message: MessageRecord) {
+  return [message.id, message.message_id].filter(Boolean) as string[];
+}
+
+function countNewIncomingMessages(currentMessages: MessageRecord[], incomingMessages: MessageRecord[]) {
+  const knownKeys = new Set(currentMessages.flatMap(getMessageKeys));
+
+  return incomingMessages.filter((message) => {
+    if (message.from_me) return false;
+    const keys = getMessageKeys(message);
+    return keys.length > 0 && keys.every((key) => !knownKeys.has(key));
+  }).length;
+}
+
+function mergeChats(currentChats: ChatRecord[], incomingChats: ChatRecord[]) {
+  const indexedChats = new Map(currentChats.map((chat) => [chat.id, chat]));
+
+  for (const chat of incomingChats) {
+    const currentChat = indexedChats.get(chat.id);
+
+    if (chat.archived) {
+      indexedChats.delete(chat.id);
+      continue;
+    }
+
+    indexedChats.set(chat.id, {
+      ...(currentChat ?? {}),
+      ...chat,
+      text_last_message: chat.text_last_message || currentChat?.text_last_message || null,
+      unread_count: chat.unread_count ?? currentChat?.unread_count ?? null,
+    });
+  }
+
+  return sortChatsByLatestMessage(Array.from(indexedChats.values()));
+}
+
+function getLatestChatMessagePreviewText(message: Pick<LatestChatMessage, "content" | "media_mime_type" | "message_type">) {
+  if (message.content?.trim()) return message.content.trim();
+
+  const type = `${message.media_mime_type || ""} ${message.message_type || ""}`.toLowerCase();
+  if (type.includes("image")) return "Foto";
+  if (type.includes("video")) return "Video";
+  if (type.includes("audio")) return "Audio";
+  if (type.includes("sticker")) return "Figurinha";
+  if (type.includes("document")) return "Documento";
+
+  return "Mensagem";
+}
+
+function updateChatPreview(chat: ChatRecord, message: Pick<LatestChatMessage, "content" | "media_mime_type" | "message_type" | "timestamp_msg" | "from_me">) {
+  if (!message.timestamp_msg || getTimestampValue(message.timestamp_msg) < getTimestampValue(chat.last_message_time)) {
+    return chat;
+  }
+
+  return {
+    ...chat,
+    text_last_message: getLatestChatMessagePreviewText(message),
+    last_message_time: message.timestamp_msg,
+    last_message_fromMe: message.from_me,
+  };
+}
+
+function updateChatUnreadCount(chat: ChatRecord, newIncomingCount: number, shouldMarkAsRead: boolean) {
+  if (shouldMarkAsRead) {
+    return {
+      ...chat,
+      unread_count: 0,
+    };
+  }
+
+  if (newIncomingCount === 0) return chat;
+
+  return {
+    ...chat,
+    unread_count: (chat.unread_count ?? 0) + newIncomingCount,
+  };
 }
 
 function isMatchingSentMessage(message: MessageRecord, optimisticMessage: MessageRecord) {
@@ -154,10 +271,20 @@ export default function ChatsPage() {
   const hasLoadedSelectedMessages = !!selectedChatRemoteId && selectedChatRemoteId in messagesByChatId;
   const isLoadingSelectedMessages = !!selectedChatRemoteId && !hasLoadedSelectedMessages;
   const selectedChatRemoteIdRef = useRef<string | undefined>(undefined);
+  const isGhostModeRef = useRef(isGhostMode);
+  const messagesByChatIdRef = useRef(messagesByChatId);
 
   useEffect(() => {
     selectedChatRemoteIdRef.current = selectedChatRemoteId;
   }, [selectedChatRemoteId]);
+
+  useEffect(() => {
+    isGhostModeRef.current = isGhostMode;
+  }, [isGhostMode]);
+
+  useEffect(() => {
+    messagesByChatIdRef.current = messagesByChatId;
+  }, [messagesByChatId]);
 
   const loadMoreChats = useCallback(async () => {
     if (isSearching) {
@@ -275,7 +402,7 @@ export default function ChatsPage() {
   const appendChatMessage = useCallback((chatId: string, message: MessageRecord) => {
     setMessagesByChatId((current) => ({
       ...current,
-      [chatId]: [...(current[chatId] ?? []), message],
+      [chatId]: mergeMessages(current[chatId] ?? [], [message]),
     }));
   }, []);
 
@@ -285,6 +412,69 @@ export default function ChatsPage() {
       [chatId]: updater(current[chatId] ?? []),
     }));
   }, []);
+
+  const mergeFreshChats = useCallback((freshChats: ChatRecord[]) => {
+    setChats((current) => mergeChats(current, freshChats));
+    setSearchChats((current) => {
+      if (current.length === 0) return current;
+
+      const currentIds = new Set(current.map((chat) => chat.id));
+      return mergeChats(
+        current,
+        freshChats.filter((chat) => currentIds.has(chat.id)),
+      );
+    });
+  }, []);
+
+  const mergeFreshMessages = useCallback(
+    (chatId: string, freshMessages: MessageRecord[]) => {
+      const currentMessages = messagesByChatIdRef.current[chatId] ?? [];
+      const newIncomingCount = countNewIncomingMessages(currentMessages, freshMessages);
+      const shouldMarkAsRead = selectedChatRemoteIdRef.current === chatId && !isGhostModeRef.current;
+
+      setMessagesByChatId((current) => {
+        if (!(chatId in current) && selectedChatRemoteIdRef.current !== chatId) {
+          return current;
+        }
+
+        const nextMessages = mergeMessages(current[chatId] ?? [], freshMessages);
+
+        return {
+          ...current,
+          [chatId]: nextMessages,
+        };
+      });
+
+      const updateChatFromMessages = (chat: ChatRecord) => {
+        if (chat.chat_id !== chatId) return chat;
+
+        const chatWithPreview = freshMessages.length > 0 ? updateChatPreview(chat, freshMessages[freshMessages.length - 1]) : chat;
+        return updateChatUnreadCount(chatWithPreview, newIncomingCount, shouldMarkAsRead);
+      };
+
+      setChats((current) => sortChatsByLatestMessage(current.map(updateChatFromMessages)));
+      setSearchChats((current) => sortChatsByLatestMessage(current.map(updateChatFromMessages)));
+      updateLatestMessageStatus(chatId, freshMessages);
+    },
+    [updateLatestMessageStatus],
+  );
+
+  const handleRealtimeMessage = useCallback(
+    (message: MessageRecord) => {
+      const chatId = message.chat_id;
+      if (!chatId) return;
+
+      mergeFreshMessages(chatId, [message]);
+    },
+    [mergeFreshMessages],
+  );
+
+  const handleRealtimeChat = useCallback(
+    (chat: ChatRecord) => {
+      mergeFreshChats([chat]);
+    },
+    [mergeFreshChats],
+  );
 
   const refreshMessagesAfterSend = useCallback(
     async (chatId: string, optimisticId: string) => {
@@ -537,6 +727,59 @@ export default function ChatsPage() {
   }, []);
 
   useEffect(() => {
+    const unsubscribe = createSupabaseRealtimeSubscription(
+      [
+        { table: "messages" },
+        { table: "chats" },
+      ],
+      (payload: SupabasePostgresChangePayload) => {
+        if (payload.table === "messages" && payload.record) {
+          handleRealtimeMessage(payload.record as unknown as MessageRecord);
+        }
+
+        if (payload.table === "chats" && payload.record) {
+          handleRealtimeChat(payload.record as unknown as ChatRecord);
+        }
+      },
+    );
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [handleRealtimeChat, handleRealtimeMessage]);
+
+  useEffect(() => {
+    if (isSearching) return;
+
+    let isMounted = true;
+    let isRefreshing = false;
+
+    const refreshVisibleChats = async () => {
+      if (isRefreshing || document.visibilityState === "hidden") return;
+      isRefreshing = true;
+
+      try {
+        const data = await fetchChats({ limit: CHAT_PAGE_SIZE, offset: 0 });
+        if (!isMounted) return;
+        mergeFreshChats(data);
+        setHasMoreChats((current) => current || data.length === CHAT_PAGE_SIZE);
+      } catch (err) {
+        if (!isMounted) return;
+        setError(err instanceof Error ? err.message : "Nao foi possivel sincronizar os chats.");
+      } finally {
+        isRefreshing = false;
+      }
+    };
+
+    const intervalId = window.setInterval(refreshVisibleChats, CHAT_SYNC_INTERVAL_MS);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+    };
+  }, [isSearching, mergeFreshChats]);
+
+  useEffect(() => {
     const term = searchQuery;
     const requestId = ++searchRequestIdRef.current;
 
@@ -594,6 +837,38 @@ export default function ChatsPage() {
   }, [replaceChatMessages, selectedChatRemoteId, setChatHasMoreMessages, updateLatestMessageStatus]);
 
   useEffect(() => {
+    if (!selectedChatRemoteId) return;
+
+    let isMounted = true;
+    let isRefreshing = false;
+
+    const refreshSelectedMessages = async () => {
+      if (isRefreshing || document.visibilityState === "hidden") return;
+      isRefreshing = true;
+
+      try {
+        const data = await fetchMessages(selectedChatRemoteId, { limit: MESSAGE_PAGE_SIZE, offset: 0 });
+        if (!isMounted) return;
+        const freshMessages = [...data].reverse();
+        mergeFreshMessages(selectedChatRemoteId, freshMessages);
+        setChatHasMoreMessages(selectedChatRemoteId, data.length === MESSAGE_PAGE_SIZE);
+      } catch (err) {
+        if (!isMounted) return;
+        setError(err instanceof Error ? err.message : "Nao foi possivel sincronizar as mensagens.");
+      } finally {
+        isRefreshing = false;
+      }
+    };
+
+    const intervalId = window.setInterval(refreshSelectedMessages, MESSAGE_SYNC_INTERVAL_MS);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+    };
+  }, [mergeFreshMessages, selectedChatRemoteId, setChatHasMoreMessages]);
+
+  useEffect(() => {
     const chatsNeedingStatus = visibleChats.filter((chat) => chat.last_message_fromMe && !hasFreshLatestStatus(chat, latestMessageStatuses[chat.chat_id]));
     const chatIds = chatsNeedingStatus.map((chat) => chat.chat_id);
 
@@ -627,6 +902,55 @@ export default function ChatsPage() {
       isMounted = false;
     };
   }, [latestMessageStatuses, visibleChats]);
+
+  useEffect(() => {
+    const chatsNeedingPreview = visibleChats.filter((chat) => !chat.text_last_message?.trim() && chat.chat_id);
+    const chatIds = chatsNeedingPreview.map((chat) => chat.chat_id);
+
+    if (chatIds.length === 0) return;
+
+    let isMounted = true;
+
+    fetchLatestMessagesForChats(chatIds)
+      .then((latestMessages) => {
+        if (!isMounted) return;
+        if (Object.keys(latestMessages).length === 0) return;
+
+        const updatePreviews = (list: ChatRecord[]) =>
+          sortChatsByLatestMessage(
+            list.map((chat) => {
+              if (chat.text_last_message?.trim()) return chat;
+
+              const latestMessage = latestMessages[chat.chat_id];
+              return latestMessage ? updateChatPreview(chat, latestMessage) : chat;
+            }),
+          );
+
+        setChats(updatePreviews);
+        setSearchChats(updatePreviews);
+
+        setLatestMessageStatuses((current) => ({
+          ...current,
+          ...Object.fromEntries(
+            Object.entries(latestMessages).map(([chatId, message]) => [
+              chatId,
+              {
+                status: message.status,
+                timestamp_msg: message.timestamp_msg,
+              },
+            ]),
+          ),
+        }));
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        setError(err instanceof Error ? err.message : "Nao foi possivel carregar as ultimas mensagens.");
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [visibleChats]);
 
   const restoreSelectedChat = useCallback(
     (previousChat: ChatRecord) => {
