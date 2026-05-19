@@ -11,14 +11,18 @@ interface AppShellProps {
 }
 
 export function AppShell({ children }: AppShellProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(getSavedSidebarState);
 
   const pathname = usePathname();
   const router = useRouter();
+  const isHydrated = useSyncExternalStore(subscribeToHydration, () => true, () => false);
   const isAuthenticated = useSyncExternalStore(subscribeToAuthSession, hasValidSession, () => false);
 
   useEffect(() => {
+    if (!isHydrated) {
+      return;
+    }
+
     if (pathname === "/login" && isAuthenticated) {
       router.replace("/");
       return;
@@ -27,33 +31,28 @@ export function AppShell({ children }: AppShellProps) {
     if (pathname !== "/login" && !isAuthenticated) {
       router.replace("/login");
     }
-  }, [isAuthenticated, pathname, router]);
+  }, [isAuthenticated, isHydrated, pathname, router]);
 
   useEffect(() => {
-    const saved = localStorage.getItem("sidebar-collapsed");
-    if (saved !== null) {
-      setIsCollapsed(JSON.parse(saved));
-    }
-
-    setIsMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (isMounted) {
+    if (isHydrated) {
       localStorage.setItem("sidebar-collapsed", JSON.stringify(isCollapsed));
     }
-  }, [isCollapsed, isMounted]);
+  }, [isCollapsed, isHydrated]);
+
+  if (!isHydrated) {
+    return <div className="flex h-screen bg-background" />;
+  }
 
   if (pathname === "/login") {
-    return <main className="flex min-h-screen w-full bg-background">{children}</main>;
+    return isAuthenticated ? (
+      <main className="flex min-h-screen w-full bg-background" />
+    ) : (
+      <main className="flex min-h-screen w-full bg-background">{children}</main>
+    );
   }
 
   if (!isAuthenticated) {
     return <main className="flex min-h-screen w-full bg-background" />;
-  }
-
-  if (!isMounted) {
-    return <div className="flex h-screen bg-background" />;
   }
 
   return (
@@ -62,6 +61,28 @@ export function AppShell({ children }: AppShellProps) {
       <main className="flex-1 overflow-y-auto bg-background">{children}</main>
     </>
   );
+}
+
+function getSavedSidebarState() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const saved = window.localStorage.getItem("sidebar-collapsed");
+
+  if (saved === null) {
+    return false;
+  }
+
+  try {
+    return Boolean(JSON.parse(saved));
+  } catch {
+    return false;
+  }
+}
+
+function subscribeToHydration() {
+  return () => {};
 }
 
 function subscribeToAuthSession(onStoreChange: () => void) {
