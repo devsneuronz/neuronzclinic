@@ -129,6 +129,35 @@ export interface LatestChatMessage {
   status: string | null
 }
 
+function getTimestampValue(value?: string | null) {
+  if (!value) return 0
+  const time = Date.parse(value)
+  return Number.isFinite(time) ? time : 0
+}
+
+function hasMediaPreview(message: Pick<LatestChatMessage, "media_mime_type" | "message_type">) {
+  const type = `${message.media_mime_type || ""} ${message.message_type || ""}`.toLowerCase()
+  return (
+    type.includes("image") ||
+    type.includes("video") ||
+    type.includes("audio") ||
+    type.includes("sticker") ||
+    type.includes("document") ||
+    type.includes("file") ||
+    type.includes("application/")
+  )
+}
+
+function isBetterLatestMessage(message: LatestChatMessage, currentMessage?: LatestChatMessage) {
+  if (!currentMessage) return true
+
+  const messageTime = getTimestampValue(message.timestamp_msg)
+  const currentTime = getTimestampValue(currentMessage.timestamp_msg)
+
+  if (messageTime !== currentTime) return messageTime > currentTime
+  return hasMediaPreview(message) && !hasMediaPreview(currentMessage)
+}
+
 async function supabaseGet<T>(path: string): Promise<T> {
   const url = `${supabaseRestUrl.replace(/\/$/, "")}/${path}`
   const response = await fetch(url, {
@@ -263,7 +292,7 @@ export function fetchLatestMessagesForChats(chatIds: string[]): Promise<Record<s
     const latestMessages: Record<string, LatestChatMessage> = {}
 
     for (const message of messages) {
-      if (message.chat_id && !latestMessages[message.chat_id]) {
+      if (message.chat_id && isBetterLatestMessage(message, latestMessages[message.chat_id])) {
         latestMessages[message.chat_id] = message
       }
     }

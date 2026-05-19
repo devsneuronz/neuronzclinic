@@ -1,14 +1,27 @@
 "use client";
 
 import type { RefObject, UIEvent } from "react";
-import { ArrowDown } from "lucide-react";
+import { ArrowDown, MessageSquareText, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ChatRecord, MessageRecord } from "@/lib/supabase-rest";
 import { MessageBubble } from "./message-bubble";
+import { getDisplayName, getTimeLabel } from "./message-utils";
 
-type MessageGroup = {
+export type InternalNote = {
+  id: string;
+  chatId: string;
+  content: string;
+  createdAt: string;
+  linkedMessageId?: string | null;
+  linkedMessagePreview?: string | null;
+  linkedMessageFromMe?: boolean | null;
+};
+
+export type TimelineItem = { kind: "message"; message: MessageRecord; timestamp: string | null } | { kind: "note"; note: InternalNote; timestamp: string | null };
+
+export type MessageGroup = {
   date: string;
-  items: MessageRecord[];
+  items: TimelineItem[];
 };
 
 type MessageListProps = {
@@ -32,9 +45,52 @@ type MessageListProps = {
   onReply: (message: MessageRecord) => void;
   onForward: (message: MessageRecord) => void;
   onDelete: (message: MessageRecord) => void;
+  onCreateNote: (message: MessageRecord) => void;
+  onDeleteNote: (noteId: string) => void;
   onExpandImage: (url: string, alt: string) => void;
   onScrollToMessage: (id: string) => void;
 };
+
+function InternalNoteBubble({ chat, note, onScrollToMessage, onDeleteNote }: { chat: ChatRecord; note: InternalNote; onScrollToMessage: (id: string) => void; onDeleteNote: (noteId: string) => void }) {
+  return (
+    <div id={`note-${note.id}`} className="mb-2 flex justify-center px-4">
+      <div className="group relative w-full max-w-[74%] overflow-hidden rounded-sm border border-amber-300/70 bg-[#fff7a8] text-yellow-950 shadow-sm ring-1 ring-black/5 dark:border-amber-500/60 dark:bg-[#f8ec82] dark:text-yellow-950">
+        <div className="flex items-center gap-2 border-b border-amber-300/55 bg-amber-200/35 px-3 py-1.5 text-xs">
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-700">
+            <MessageSquareText className="h-3.5 w-3.5" />
+          </span>
+          <span className="font-semibold text-red-600">Pedro</span>
+          <span className="text-yellow-950/55">anotacao interna</span>
+          <button
+            type="button"
+            className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-yellow-950/45 opacity-0 transition hover:bg-red-500/10 hover:text-red-600 group-hover:opacity-100"
+            onClick={() => onDeleteNote(note.id)}
+            aria-label="Apagar anotacao"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        <div className="px-3 py-2">
+          {note.linkedMessageId && note.linkedMessagePreview && (
+            <button
+              type="button"
+              className="mb-2 w-full rounded border-l-4 border-amber-500 bg-white/55 px-2.5 py-2 text-left text-xs text-yellow-950 transition-colors hover:bg-white/85"
+              onClick={() => onScrollToMessage(note.linkedMessageId!)}
+            >
+              <span className="block truncate font-semibold">{note.linkedMessageFromMe ? "Voce" : getDisplayName(chat)}</span>
+              <span className="mt-0.5 line-clamp-2 text-yellow-950/70">{note.linkedMessagePreview}</span>
+            </button>
+          )}
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{note.content}</p>
+          <div className="mt-2 flex justify-end text-[10px] text-yellow-950/60">
+            <span>{getTimeLabel(note.createdAt)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function MessageList({
   chat,
@@ -57,6 +113,8 @@ export function MessageList({
   onReply,
   onForward,
   onDelete,
+  onCreateNote,
+  onDeleteNote,
   onExpandImage,
   onScrollToMessage,
 }: MessageListProps) {
@@ -98,23 +156,28 @@ export function MessageList({
                     <span className="rounded bg-(--chat-other)/80 px-3 py-1 text-xs text-(--chat-muted-foreground) shadow-sm">{group.date}</span>
                   </div>
 
-                  {group.items.map((message) => (
-                    <MessageBubble
-                      key={message.id}
-                      message={message}
-                      chat={chat}
-                      messagesByRemoteId={messagesByRemoteId}
-                      selected={selectedMessageIds.has(message.id)}
-                      isSelectionMode={isSelectionMode}
-                      isHighlighted={highlightedMessageId === message.id}
-                      onToggleSelection={onToggleSelection}
-                      onReply={onReply}
-                      onForward={onForward}
-                      onDelete={onDelete}
-                      onExpandImage={onExpandImage}
-                      onScrollToMessage={onScrollToMessage}
-                    />
-                  ))}
+                  {group.items.map((item) =>
+                    item.kind === "note" ? (
+                      <InternalNoteBubble key={item.note.id} chat={chat} note={item.note} onScrollToMessage={onScrollToMessage} onDeleteNote={onDeleteNote} />
+                    ) : (
+                      <MessageBubble
+                        key={item.message.id}
+                        message={item.message}
+                        chat={chat}
+                        messagesByRemoteId={messagesByRemoteId}
+                        selected={selectedMessageIds.has(item.message.id)}
+                        isSelectionMode={isSelectionMode}
+                        isHighlighted={highlightedMessageId === item.message.id}
+                        onToggleSelection={onToggleSelection}
+                        onReply={onReply}
+                        onForward={onForward}
+                        onDelete={onDelete}
+                        onCreateNote={onCreateNote}
+                        onExpandImage={onExpandImage}
+                        onScrollToMessage={onScrollToMessage}
+                      />
+                    ),
+                  )}
                 </div>
               ))}
             </>

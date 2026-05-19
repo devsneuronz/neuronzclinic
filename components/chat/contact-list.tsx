@@ -209,7 +209,7 @@ export function ContactList({
   }, [chats, sectorFilter, sectorLabels, statusFilter, tagFilter]);
 
   const visibleChats = useMemo(() => {
-    return filteredChats.filter((chat) => {
+    const stateFilteredChats = filteredChats.filter((chat) => {
       if (scopeTab === "ia" && chat.ia_responde !== true) return false;
       if (scopeTab === "mine" && chat.ia_responde === true) return false;
 
@@ -219,7 +219,16 @@ export function ContactList({
 
       return chat.last_message_fromMe !== true;
     });
-  }, [filteredChats, scopeTab, stateTab]);
+
+    if (!selectedId) {
+      return stateFilteredChats;
+    }
+
+    const selectedChat = filteredChats.find((chat) => chat.id === selectedId);
+    if (!selectedChat) return stateFilteredChats;
+
+    return [selectedChat, ...stateFilteredChats.filter((chat) => chat.id !== selectedId)];
+  }, [filteredChats, scopeTab, selectedId, stateTab]);
 
   function clearFilters() {
     setStatusFilter(ALL_FILTERS);

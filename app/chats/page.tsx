@@ -15,6 +15,9 @@ const CHAT_PAGE_SIZE = 50;
 const MESSAGE_PAGE_SIZE = 50;
 const CHAT_SYNC_INTERVAL_MS = 5000;
 const MESSAGE_SYNC_INTERVAL_MS = 2500;
+const MEDIA_PREVIEW_LABELS = new Set(["Foto", "Video", "Audio", "Figurinha", "Documento"]);
+
+type ChatPreviewMessage = Pick<LatestChatMessage, "content" | "media_mime_type" | "message_type" | "timestamp_msg" | "from_me">;
 
 function getOptimisticMessageType(file: File | null) {
   if (!file) return "text";
@@ -24,17 +27,21 @@ function getOptimisticMessageType(file: File | null) {
   return "document";
 }
 
-function getMessagePreviewText(message: MessageRecord) {
-  if (message.content?.trim()) return message.content.trim();
-
+function getMediaPreviewLabel(message: Pick<LatestChatMessage, "media_mime_type" | "message_type">) {
   const type = `${message.media_mime_type || ""} ${message.message_type || ""}`.toLowerCase();
   if (type.includes("image")) return "Foto";
   if (type.includes("video")) return "Video";
   if (type.includes("audio")) return "Audio";
   if (type.includes("sticker")) return "Figurinha";
   if (type.includes("document")) return "Documento";
+  if (type.includes("file") || type.includes("application/")) return "Documento";
 
-  return "Mensagem";
+  return "";
+}
+
+function getMessagePreviewText(message: MessageRecord) {
+  if (message.content?.trim()) return message.content.trim();
+  return getMediaPreviewLabel(message) || "Mensagem";
 }
 
 function getTimestampValue(value?: string | null) {
@@ -49,6 +56,10 @@ function sortChatsByLatestMessage(chatList: ChatRecord[]) {
 
 function sortMessagesByTimestamp(messageList: MessageRecord[]) {
   return [...messageList].sort((a, b) => getTimestampValue(a.timestamp_msg) - getTimestampValue(b.timestamp_msg));
+}
+
+function isMediaPreviewText(value?: string | null) {
+  return MEDIA_PREVIEW_LABELS.has(value?.trim() ?? "");
 }
 
 function mergeMessages(currentMessages: MessageRecord[], incomingMessages: MessageRecord[]) {
@@ -92,37 +103,70 @@ function mergeChats(currentChats: ChatRecord[], incomingChats: ChatRecord[]) {
 
   for (const chat of incomingChats) {
     const currentChat = indexedChats.get(chat.id);
+    const currentLastMessageTime = getTimestampValue(currentChat?.last_message_time);
+    const incomingLastMessageTime = getTimestampValue(chat.last_message_time);
+    const shouldKeepCurrentLatestMessage =
+      !!currentChat &&
+      currentLastMessageTime > 0 &&
+      (currentLastMessageTime > incomingLastMessageTime ||
+        (currentLastMessageTime === incomingLastMessageTime && isMediaPreviewText(currentChat.text_last_message) && !isMediaPreviewText(chat.text_last_message)));
 
     if (chat.archived) {
       indexedChats.delete(chat.id);
       continue;
     }
 
-    indexedChats.set(chat.id, {
+    const mergedChat = {
       ...(currentChat ?? {}),
       ...chat,
       text_last_message: chat.text_last_message || currentChat?.text_last_message || null,
       unread_count: chat.unread_count ?? currentChat?.unread_count ?? null,
-    });
+    };
+
+    indexedChats.set(
+      chat.id,
+      shouldKeepCurrentLatestMessage
+        ? {
+            ...mergedChat,
+            text_last_message: currentChat.text_last_message,
+            last_message_time: currentChat.last_message_time,
+            last_time_formatado: currentChat.last_time_formatado,
+            last_message_fromMe: currentChat.last_message_fromMe,
+          }
+        : mergedChat,
+    );
   }
 
   return sortChatsByLatestMessage(Array.from(indexedChats.values()));
 }
 
-function getLatestChatMessagePreviewText(message: Pick<LatestChatMessage, "content" | "media_mime_type" | "message_type">) {
-  if (message.content?.trim()) return message.content.trim();
+function getLatestMessageForPreview<T extends ChatPreviewMessage>(messages: T[]) {
+  return messages.reduce<T | undefined>((latestMessage, message) => {
+    if (!latestMessage) return message;
 
-  const type = `${message.media_mime_type || ""} ${message.message_type || ""}`.toLowerCase();
-  if (type.includes("image")) return "Foto";
-  if (type.includes("video")) return "Video";
-  if (type.includes("audio")) return "Audio";
-  if (type.includes("sticker")) return "Figurinha";
-  if (type.includes("document")) return "Documento";
+    const messageTime = getTimestampValue(message.timestamp_msg);
+    const latestTime = getTimestampValue(latestMessage.timestamp_msg);
+
+    if (messageTime > latestTime) return message;
+    if (messageTime < latestTime) return latestMessage;
+
+    const messageHasMedia = !!getMediaPreviewLabel(message);
+    const latestHasMedia = !!getMediaPreviewLabel(latestMessage);
+
+    if (messageHasMedia && !latestHasMedia) return message;
+    return latestMessage;
+  }, undefined);
+}
+
+function getLatestChatMessagePreviewText(message: Pick<LatestChatMessage, "content" | "media_mime_type" | "message_type">) {
+  const mediaPreview = getMediaPreviewLabel(message);
+  if (mediaPreview) return mediaPreview;
+  if (message.content?.trim()) return message.content.trim();
 
   return "Mensagem";
 }
 
-function updateChatPreview(chat: ChatRecord, message: Pick<LatestChatMessage, "content" | "media_mime_type" | "message_type" | "timestamp_msg" | "from_me">) {
+function updateChatPreview(chat: ChatRecord, message: ChatPreviewMessage) {
   if (!message.timestamp_msg || getTimestampValue(message.timestamp_msg) < getTimestampValue(chat.last_message_time)) {
     return chat;
   }
@@ -133,6 +177,11 @@ function updateChatPreview(chat: ChatRecord, message: Pick<LatestChatMessage, "c
     last_message_time: message.timestamp_msg,
     last_message_fromMe: message.from_me,
   };
+}
+
+function updateChatPreviewFromMessages(chat: ChatRecord, messages: MessageRecord[]) {
+  const latestMessage = getLatestMessageForPreview(messages);
+  return latestMessage ? updateChatPreview(chat, latestMessage) : chat;
 }
 
 function updateChatUnreadCount(chat: ChatRecord, newIncomingCount: number, shouldMarkAsRead: boolean) {
@@ -426,6 +475,31 @@ export default function ChatsPage() {
     });
   }, []);
 
+  const updateChatPreviewForMessages = useCallback((chatId: string, freshMessages: MessageRecord[]) => {
+    if (freshMessages.length === 0) return;
+
+    const updateLoadedChatPreview = (list: ChatRecord[]) => {
+      let didUpdate = false;
+      const nextList = list.map((chat) => {
+        if (chat.chat_id !== chatId) return chat;
+
+        const nextChat = updateChatPreviewFromMessages(chat, freshMessages);
+        const hasChanged =
+          nextChat.text_last_message !== chat.text_last_message ||
+          nextChat.last_message_time !== chat.last_message_time ||
+          nextChat.last_message_fromMe !== chat.last_message_fromMe;
+
+        if (hasChanged) didUpdate = true;
+        return hasChanged ? nextChat : chat;
+      });
+
+      return didUpdate ? sortChatsByLatestMessage(nextList) : list;
+    };
+
+    setChats(updateLoadedChatPreview);
+    setSearchChats(updateLoadedChatPreview);
+  }, []);
+
   const mergeFreshMessages = useCallback(
     (chatId: string, freshMessages: MessageRecord[]) => {
       const currentMessages = messagesByChatIdRef.current[chatId] ?? [];
@@ -482,6 +556,7 @@ export default function ChatsPage() {
       const freshMessages = [...data].reverse();
 
       updateLatestMessageStatus(chatId, freshMessages);
+      updateChatPreviewForMessages(chatId, freshMessages);
 
       if (selectedChatRemoteIdRef.current !== chatId) return;
 
@@ -502,7 +577,7 @@ export default function ChatsPage() {
       });
       setChatHasMoreMessages(chatId, data.length === MESSAGE_PAGE_SIZE);
     },
-    [setChatHasMoreMessages, updateLatestMessageStatus],
+    [setChatHasMoreMessages, updateChatPreviewForMessages, updateLatestMessageStatus],
   );
 
   const handleSendMessage = useCallback(
@@ -530,6 +605,7 @@ export default function ChatsPage() {
       };
 
       appendChatMessage(selectedChatRemoteId, optimisticMessage);
+      updateChatPreviewForMessages(selectedChatRemoteId, [optimisticMessage]);
       setError(undefined);
 
       try {
@@ -547,7 +623,7 @@ export default function ChatsPage() {
         }
       }
     },
-    [appendChatMessage, refreshMessagesAfterSend, selectedChatRemoteId, updateChatMessages],
+    [appendChatMessage, refreshMessagesAfterSend, selectedChatRemoteId, updateChatMessages, updateChatPreviewForMessages],
   );
 
   const handleReplyMessage = useCallback(
@@ -579,6 +655,7 @@ export default function ChatsPage() {
       };
 
       appendChatMessage(selectedChatRemoteId, optimisticMessage);
+      updateChatPreviewForMessages(selectedChatRemoteId, [optimisticMessage]);
       setError(undefined);
 
       try {
@@ -596,7 +673,7 @@ export default function ChatsPage() {
         }
       }
     },
-    [appendChatMessage, refreshMessagesAfterSend, selectedChatRemoteId, updateChatMessages],
+    [appendChatMessage, refreshMessagesAfterSend, selectedChatRemoteId, updateChatMessages, updateChatPreviewForMessages],
   );
 
   const handleForwardMessage = useCallback(
@@ -822,6 +899,7 @@ export default function ChatsPage() {
         const freshMessages = [...data].reverse();
         replaceChatMessages(selectedChatRemoteId, freshMessages);
         updateLatestMessageStatus(selectedChatRemoteId, freshMessages);
+        updateChatPreviewForMessages(selectedChatRemoteId, freshMessages);
         setChatHasMoreMessages(selectedChatRemoteId, data.length === MESSAGE_PAGE_SIZE);
       })
       .catch((err) => {
@@ -834,7 +912,7 @@ export default function ChatsPage() {
     return () => {
       isMounted = false;
     };
-  }, [replaceChatMessages, selectedChatRemoteId, setChatHasMoreMessages, updateLatestMessageStatus]);
+  }, [replaceChatMessages, selectedChatRemoteId, setChatHasMoreMessages, updateChatPreviewForMessages, updateLatestMessageStatus]);
 
   useEffect(() => {
     if (!selectedChatRemoteId) return;
@@ -904,7 +982,7 @@ export default function ChatsPage() {
   }, [latestMessageStatuses, visibleChats]);
 
   useEffect(() => {
-    const chatsNeedingPreview = visibleChats.filter((chat) => !chat.text_last_message?.trim() && chat.chat_id);
+    const chatsNeedingPreview = visibleChats.filter((chat) => chat.chat_id);
     const chatIds = chatsNeedingPreview.map((chat) => chat.chat_id);
 
     if (chatIds.length === 0) return;
@@ -919,8 +997,6 @@ export default function ChatsPage() {
         const updatePreviews = (list: ChatRecord[]) =>
           sortChatsByLatestMessage(
             list.map((chat) => {
-              if (chat.text_last_message?.trim()) return chat;
-
               const latestMessage = latestMessages[chat.chat_id];
               return latestMessage ? updateChatPreview(chat, latestMessage) : chat;
             }),

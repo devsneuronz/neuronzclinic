@@ -11,11 +11,10 @@ import { ChatHeader } from "./chat-header";
 import { DeleteMessageDialog } from "./delete-message-dialog";
 import { ExpandedImageModal } from "./expanded-image-modal";
 import { ForwardMessageDialog } from "./forward-message-dialog";
-import { MessageList } from "./message-list";
-import { getDateLabel, isDeletedMessage } from "./message-utils";
+import { MessageList, type InternalNote, type TimelineItem } from "./message-list";
+import { getDateLabel, getMediaKind, getMessagePreviewText, isDeletedMessage } from "./message-utils";
 
 const FORWARD_TARGET_PAGE_SIZE = 50;
-
 interface ChatWindowProps {
   chat?: ChatRecord;
   messages: MessageRecord[];
@@ -92,6 +91,11 @@ export function ChatWindow({
   const [isRecordingPaused, setIsRecordingPaused] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [internalNotes, setInternalNotes] = useState<InternalNote[]>([]);
+  const [internalNotesChatId, setInternalNotesChatId] = useState<string | null>(null);
+  const [isInternalNoteOpen, setIsInternalNoteOpen] = useState(false);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteLinkedMessage, setNoteLinkedMessage] = useState<MessageRecord | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const previousScrollHeightRef = useRef<number | null>(null);
@@ -179,19 +183,28 @@ export function ChatWindow({
   }, [handleScrollToMessage]);
 
   const groupedMessages = useMemo(() => {
-    return messages.reduce<Array<{ date: string; items: MessageRecord[] }>>((groups, message) => {
-      const date = getDateLabel(message.timestamp_msg) || "Sem data";
+    const timelineItems: TimelineItem[] = [
+      ...messages.map((message) => ({ kind: "message" as const, message, timestamp: message.timestamp_msg })),
+      ...internalNotes.map((note) => ({ kind: "note" as const, note, timestamp: note.createdAt })),
+    ].sort((a, b) => {
+      const aTime = a.timestamp ? Date.parse(a.timestamp) : 0;
+      const bTime = b.timestamp ? Date.parse(b.timestamp) : 0;
+      return aTime - bTime;
+    });
+
+    return timelineItems.reduce<Array<{ date: string; items: TimelineItem[] }>>((groups, item) => {
+      const date = getDateLabel(item.timestamp) || "Sem data";
       const lastGroup = groups[groups.length - 1];
 
       if (lastGroup?.date === date) {
-        lastGroup.items.push(message);
+        lastGroup.items.push(item);
       } else {
-        groups.push({ date, items: [message] });
+        groups.push({ date, items: [item] });
       }
 
       return groups;
     }, []);
-  }, [messages]);
+  }, [internalNotes, messages]);
 
   const messagesByRemoteId = useMemo(() => {
     return messages.reduce<Map<string, MessageRecord>>((indexedMessages, message) => {
@@ -301,10 +314,44 @@ export function ChatWindow({
       setForwardingMessages([]);
       setDeleteConfirmationMessages([]);
       setMessageActionError(null);
+      setIsInternalNoteOpen(false);
+      setNoteDraft("");
+      setNoteLinkedMessage(null);
     }, 0);
 
     return () => window.clearTimeout(timeout);
   }, [chat?.id]);
+
+  useEffect(() => {
+    let nextNotes: InternalNote[] = [];
+
+    if (!chat?.chat_id) {
+      nextNotes = [];
+    } else {
+      const storedNotes = window.localStorage.getItem(`neuronzclinic.internal-notes.${chat.chat_id}`);
+
+      if (storedNotes) {
+        try {
+          const parsedNotes = JSON.parse(storedNotes) as InternalNote[];
+          nextNotes = Array.isArray(parsedNotes) ? parsedNotes : [];
+        } catch {
+          nextNotes = [];
+        }
+      }
+    }
+
+    const timeout = window.setTimeout(() => {
+      setInternalNotes(nextNotes);
+      setInternalNotesChatId(chat?.chat_id ?? null);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [chat?.chat_id]);
+
+  useEffect(() => {
+    if (!chat?.chat_id) return;
+    if (internalNotesChatId !== chat.chat_id) return;
+    window.localStorage.setItem(`neuronzclinic.internal-notes.${chat.chat_id}`, JSON.stringify(internalNotes));
+  }, [chat?.chat_id, internalNotes, internalNotesChatId]);
 
   useEffect(() => {
     return () => {
@@ -352,6 +399,11 @@ export function ChatWindow({
   async function handleSubmit(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
 
+    if (isInternalNoteOpen) {
+      saveInternalNote();
+      return;
+    }
+
     if ((!onSendMessage && !onReplyMessage) || isSending) return;
 
     const text = draft.trim();
@@ -397,6 +449,47 @@ export function ChatWindow({
     setSelectedMessageIds(new Set());
     setReplyTo(message);
     setMessageActionError(null);
+  }
+
+  function openInternalNote(message?: MessageRecord | null) {
+    setSelectedMessageIds(new Set());
+    setReplyTo(null);
+    setMessageActionError(null);
+    setNoteLinkedMessage(message ?? null);
+    setIsInternalNoteOpen(true);
+  }
+
+  function closeInternalNote() {
+    setIsInternalNoteOpen(false);
+    setNoteDraft("");
+    setNoteLinkedMessage(null);
+  }
+
+  function saveInternalNote() {
+    if (!chat?.chat_id) return;
+
+    const content = noteDraft.trim();
+    if (!content) return;
+
+    const linkedKind = noteLinkedMessage ? getMediaKind(noteLinkedMessage) : null;
+    const linkedPrefix = linkedKind === "image" ? "Foto" : linkedKind === "video" ? "Video" : linkedKind === "audio" ? "Audio" : linkedKind === "file" ? "Arquivo" : null;
+
+    const note: InternalNote = {
+      id: crypto.randomUUID(),
+      chatId: chat.chat_id,
+      content,
+      createdAt: new Date().toISOString(),
+      linkedMessageId: noteLinkedMessage?.message_id || noteLinkedMessage?.id || null,
+      linkedMessagePreview: noteLinkedMessage ? linkedPrefix || getMessagePreviewText(noteLinkedMessage) : null,
+      linkedMessageFromMe: noteLinkedMessage?.from_me ?? null,
+    };
+
+    setInternalNotes((current) => [...current, note]);
+    closeInternalNote();
+  }
+
+  function deleteInternalNote(noteId: string) {
+    setInternalNotes((current) => current.filter((note) => note.id !== noteId));
   }
 
   function clearSelectedMessages() {
@@ -721,6 +814,8 @@ export function ChatWindow({
           onReply={beginReply}
           onForward={beginForward}
           onDelete={beginDelete}
+          onCreateNote={openInternalNote}
+          onDeleteNote={deleteInternalNote}
           onExpandImage={(url: string, alt: string) => setExpandedImage({ url, alt })}
           onScrollToMessage={handleScrollToMessage}
         />
@@ -735,6 +830,9 @@ export function ChatWindow({
           recordingSeconds={recordingSeconds}
           messageActionError={messageActionError}
           recordingError={recordingError}
+          isInternalNoteOpen={isInternalNoteOpen}
+          noteDraft={noteDraft}
+          noteLinkedMessage={noteLinkedMessage}
           fileInputRef={fileInputRef}
           photoInputRef={photoInputRef}
           videoInputRef={videoInputRef}
@@ -749,6 +847,10 @@ export function ChatWindow({
           onCancelRecording={cancelRecording}
           onToggleRecordingPause={toggleRecordingPause}
           onSendRecording={sendRecording}
+          onOpenInternalNote={() => openInternalNote()}
+          onCloseInternalNote={closeInternalNote}
+          onNoteDraftChange={setNoteDraft}
+          onSaveInternalNote={saveInternalNote}
         />
       </div>
 

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { memo } from "react";
-import { Check, CheckSquare, Download, FileImage, FileText, Forward, Mic, Reply, Trash2, Video } from "lucide-react";
+import { Check, CheckSquare, Download, FileImage, FileText, Forward, Mic, PenLine, Reply, Trash2, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ChatRecord, MessageRecord } from "@/lib/supabase-rest";
@@ -21,12 +21,13 @@ export type MessageBubbleProps = {
   onReply: (m: MessageRecord) => void;
   onForward: (m: MessageRecord) => void;
   onDelete: (m: MessageRecord) => void;
+  onCreateNote: (m: MessageRecord) => void;
   onExpandImage: (url: string, alt: string) => void;
   onScrollToMessage?: (id: string) => void;
 };
 
 export const MessageBubble = memo(
-  function MessageBubble({ message, chat, messagesByRemoteId, selected, isSelectionMode, onToggleSelection, onReply, onForward, onDelete, onExpandImage, isHighlighted, onScrollToMessage }: MessageBubbleProps) {
+  function MessageBubble({ message, chat, messagesByRemoteId, selected, isSelectionMode, onToggleSelection, onReply, onForward, onDelete, onCreateNote, onExpandImage, isHighlighted, onScrollToMessage }: MessageBubbleProps) {
     const fromMe = !!message.from_me;
     const mediaUrl = getMediaUrl(message);
     const mediaKind = getMediaKind(message);
@@ -80,6 +81,9 @@ export const MessageBubble = memo(
               </Button>
               <Button type="button" variant="ghost" size="icon-sm" className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground" onClick={() => onToggleSelection(message)} aria-label="Selecionar mensagem">
                 <CheckSquare className="h-4 w-4" />
+              </Button>
+              <Button type="button" variant="ghost" size="icon-sm" className="h-7 w-7 rounded-full text-muted-foreground hover:text-amber-600" onClick={() => onCreateNote(message)} aria-label="Criar anotacao vinculada">
+                <PenLine className="h-4 w-4" />
               </Button>
               {fromMe && (
                 <Button type="button" variant="ghost" size="icon-sm" className="h-7 w-7 rounded-full text-muted-foreground hover:text-red-500" onClick={() => onDelete(message)} aria-label="Apagar mensagem">
