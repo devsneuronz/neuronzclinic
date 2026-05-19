@@ -1,7 +1,6 @@
 import { ChatRecord } from "@/lib/supabase-rest";
 import { Input } from "../ui/input";
-import { Button } from "../ui/button";
-import { Calendar, ChevronDown, FileText, Pencil, GripVertical, Check } from "lucide-react";
+import { Calendar, ChevronDown, FileText, GripVertical, Check } from "lucide-react";
 import { useRef, useState } from "react";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getChatTags, getReadableTextColor } from "@/lib/chat-tags";

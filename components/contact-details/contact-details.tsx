@@ -9,7 +9,6 @@ import { ChatRecord } from "@/lib/supabase-rest";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getChatStatusColor, type ChatStatusOption } from "@/lib/chat-status";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { IATrainingView } from "./ia-training-view";
 import { ProfileView } from "./profile-view";
