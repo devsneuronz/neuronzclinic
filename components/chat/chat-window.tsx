@@ -3,7 +3,7 @@
 import Image from "next/image";
 import type { FormEvent, MouseEvent, UIEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
-import { Camera, Check, CheckSquare, Download, FileImage, FileText, Forward, Info, MapPin, Mic, MoreHorizontal, Paperclip, Pause, PenLine, PlayIcon, Reply, Search, Send, Trash2, UserRound, Video, X } from "lucide-react";
+import { ArrowDown, Camera, Check, CheckSquare, Download, FileImage, FileText, Forward, Info, MapPin, Mic, MoreHorizontal, Paperclip, Pause, PenLine, PlayIcon, Reply, Search, Send, Trash2, UserRound, Video, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -472,7 +472,13 @@ const MessageBubble = memo(
     );
   },
   (prevProps: any, nextProps: any) => {
-    return prevProps.message === nextProps.message && prevProps.selected === nextProps.selected && prevProps.isSelectionMode === nextProps.isSelectionMode && prevProps.chat === nextProps.chat && prevProps.isHighlighted === nextProps.isHighlighted;
+    return (
+      prevProps.message === nextProps.message &&
+      prevProps.selected === nextProps.selected &&
+      prevProps.isSelectionMode === nextProps.isSelectionMode &&
+      prevProps.chat === nextProps.chat &&
+      prevProps.isHighlighted === nextProps.isHighlighted
+    );
   },
 );
 
@@ -532,49 +538,74 @@ export function ChatWindow({
   const recordingTimerRef = useRef<number | null>(null);
   const shouldSendRecordingRef = useRef(false);
   const recordingPausedRef = useRef(false);
+  const [showScrollButton, setShowScrollButton] = useState(false);
 
   const messagesRef = useRef(messages);
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
 
-  const handleScrollToMessage = useCallback(async (targetId: string) => {
-    let foundMessage = messagesRef.current.find((m) => m.id === targetId || m.message_id === targetId);
+  const handleScrollToMessage = useCallback(
+    async (targetId: string) => {
+      let foundMessage = messagesRef.current.find((m) => m.id === targetId || m.message_id === targetId);
 
-    if (!foundMessage) {
-      if (!onLoadOlderMessages || !hasMoreMessages || isLoadingOlder) return;
+      if (!foundMessage) {
+        if (!onLoadOlderMessages || !hasMoreMessages || isLoadingOlder) return;
 
-      let attempts = 0;
-      const maxAttempts = 15;
+        let attempts = 0;
+        const maxAttempts = 15;
 
-      while (!foundMessage && attempts < maxAttempts) {
-        const scrollArea = scrollAreaRef.current;
-        if (scrollArea) {
-          previousScrollHeightRef.current = scrollArea.scrollHeight;
+        while (!foundMessage && attempts < maxAttempts) {
+          const scrollArea = scrollAreaRef.current;
+          if (scrollArea) {
+            previousScrollHeightRef.current = scrollArea.scrollHeight;
+          }
+
+          const addedCount = await onLoadOlderMessages();
+          if (addedCount === 0) {
+            if (scrollArea) previousScrollHeightRef.current = null;
+            break;
+          }
+          attempts++;
+
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          foundMessage = messagesRef.current.find((m) => m.id === targetId || m.message_id === targetId);
         }
+      }
 
-        const addedCount = await onLoadOlderMessages();
-        if (addedCount === 0) {
-          if (scrollArea) previousScrollHeightRef.current = null;
-          break;
+      if (foundMessage) {
+        const el = document.getElementById(`message-${foundMessage.id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          setHighlightedMessageId(foundMessage.id);
+          setTimeout(() => setHighlightedMessageId(null), 1500);
         }
-        attempts++;
+      }
+    },
+    [onLoadOlderMessages, hasMoreMessages, isLoadingOlder],
+  );
 
-        await new Promise((resolve) => setTimeout(resolve, 200));
+  const handleScrollToLastMessage = useCallback(() => {
+    const messages = messagesRef.current;
 
-        foundMessage = messagesRef.current.find((m) => m.id === targetId || m.message_id === targetId);
+    if (messages && messages.length > 0) {
+      // Pegamos a última mensagem do array (a mais recente)
+      const lastMessage = messages[messages.length - 1];
+
+      // Passamos o ID dela para o seu método robusto que já faz o scroll e o highlight!
+      handleScrollToMessage(lastMessage.id);
+    } else {
+      // Caso o array em memória esteja estranho por algum motivo, fazemos o scroll nativo pelo ref do container
+      const scrollArea = scrollAreaRef.current;
+      if (scrollArea) {
+        scrollArea.scrollTo({
+          top: scrollArea.scrollHeight,
+          behavior: "smooth",
+        });
       }
     }
-
-    if (foundMessage) {
-      const el = document.getElementById(`message-${foundMessage.id}`);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        setHighlightedMessageId(foundMessage.id);
-        setTimeout(() => setHighlightedMessageId(null), 1500);
-      }
-    }
-  }, [onLoadOlderMessages, hasMoreMessages, isLoadingOlder]);
+  }, [handleScrollToMessage]);
 
   const groupedMessages = useMemo(() => {
     return messages.reduce<Array<{ date: string; items: MessageRecord[] }>>((groups, message) => {
@@ -727,6 +758,19 @@ export function ChatWindow({
   }, [chat?.id]);
 
   async function handleMessagesScroll(event: UIEvent<HTMLDivElement>) {
+    // === LÓGICA DO BOTÃO FLUTUANTE (Adicionada aqui) ===
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+
+    // Calcula a distância que falta para chegar ao fundo do chat
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+
+    // Se o médico subiu mais de 300px, mostra o botão, senão esconde
+    if (distanceFromBottom > 300) {
+      setShowScrollButton(true);
+    } else {
+      setShowScrollButton(false);
+    }
+
     if (!onLoadOlderMessages || !hasMoreMessages || isLoadingOlder || isLoading) return;
     if (event.currentTarget.scrollTop > 120) return;
 
@@ -1071,7 +1115,7 @@ export function ChatWindow({
 
   return (
     <div className="flex h-full flex-1 overflow-hidden bg-background">
-      <div className="flex flex-1 flex-col border-r border-border">
+      <div className="flex flex-1 flex-col border-r border-border relative">
         <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
           {isSelectionMode ? (
             <>
@@ -1124,7 +1168,7 @@ export function ChatWindow({
 
         <div
           ref={scrollAreaRef}
-          className="flex-1 overflow-y-auto"
+          className="flex-1 overflow-y-auto relative"
           onScroll={handleMessagesScroll}
           style={{
             backgroundColor: "var(--chat-background)",
@@ -1165,7 +1209,7 @@ export function ChatWindow({
                 {groupedMessages.map((group) => (
                   <div key={group.date}>
                     <div className="my-3 flex justify-center">
-                      <span className="rounded bg-(--chat-muted)/80 px-3 py-1 text-xs text-(--chat-muted-foreground) shadow-sm">{group.date}</span>
+                      <span className="rounded bg-(--chat-other)/80 px-3 py-1 text-xs text-(--chat-muted-foreground) shadow-sm">{group.date}</span>
                     </div>
 
                     {group.items.map((message) => (
@@ -1192,6 +1236,12 @@ export function ChatWindow({
             <div ref={bottomRef} />
           </div>
         </div>
+
+        {showScrollButton && (
+          <Button size="icon" variant="outline" onClick={handleScrollToLastMessage} className="absolute left-1/2 bottom-18 rounded-full -translate-x-2/3 transition-all active:scale-95 animate-in fade-in zoom-in-95 backdrop-blur-sm">
+            <ArrowDown className="h-4 w-4 stroke-[2.5]" />
+          </Button>
+        )}
 
         <form onSubmit={handleSubmit} className="border-t border-border bg-card px-4 py-3">
           {attachment && (
