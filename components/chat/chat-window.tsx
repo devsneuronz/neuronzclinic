@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { getAvatarInitials } from "@/lib/avatar-initials";
 import { extractQuotedMessageInfo } from "@/lib/message-replies";
 import { cn } from "@/lib/utils";
 import { ChatRecord, MessageRecord, fetchChats } from "@/lib/supabase-rest";
@@ -1060,7 +1061,7 @@ export function ChatWindow({
                 <button className="rounded-full transition-opacity hover:opacity-90 cursor-pointer" aria-label="Abrir detalhes do contato">
                   <Avatar className="h-10 w-10">
                     <AvatarImage src={chat.url_foto_perfil ?? undefined} alt={getDisplayName(chat)} />
-                    <AvatarFallback className="bg-gradient-to-br from-teal-500 to-teal-700 text-sm font-semibold text-white">{getDisplayName(chat).slice(0, 1).toUpperCase()}</AvatarFallback>
+                    <AvatarFallback className="bg-gradient-to-br from-teal-500 to-teal-700 text-sm font-semibold text-white">{getAvatarInitials(getDisplayName(chat), "C")}</AvatarFallback>
                   </Avatar>
                 </button>
                 <div className="flex min-w-0 flex-col">
@@ -1429,7 +1430,7 @@ export function ChatWindow({
                       >
                         <Avatar className="h-8 w-8">
                           <AvatarImage src={target.url_foto_perfil ?? undefined} alt={getDisplayName(target)} />
-                          <AvatarFallback className="bg-teal-500 text-xs font-semibold text-white">{getDisplayName(target).slice(0, 1).toUpperCase()}</AvatarFallback>
+                          <AvatarFallback className="bg-teal-500 text-xs font-semibold text-white">{getAvatarInitials(getDisplayName(target), "C")}</AvatarFallback>
                         </Avatar>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium text-foreground">{getDisplayName(target)}</span>

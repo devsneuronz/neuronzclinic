@@ -6,6 +6,7 @@ import { X, ChevronDown, Phone, CheckCheck, MessageSquareDashed, Bot } from "luc
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ChatRecord } from "@/lib/supabase-rest";
+import { getAvatarInitials } from "@/lib/avatar-initials";
 import type { ChatTag } from "@/lib/chat-tags";
 import type { ChatStatusOption } from "@/lib/chat-status";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
@@ -37,6 +38,10 @@ function getContactPhone(chat?: ChatRecord) {
     .find((value) => value && value.length >= 8);
 
   return phone || chat?.phone_contact?.trim() || chat?.chat_id?.replace(/@.+$/, "") || "Sem telefone";
+}
+
+function getDisplayName(chat?: ChatRecord) {
+  return chat?.nome_contato || chat?.pushname || chat?.chat_id?.replace("@s.whatsapp.net", "") || "Contato sem nome";
 }
 
 export function ContactDetails({
@@ -74,7 +79,7 @@ export function ContactDetails({
         <div className="flex items-start gap-4 p-4">
           <Avatar className="h-16 w-16 shrink-0 shadow-sm">
             <AvatarImage src={chat?.url_foto_perfil ?? undefined} alt={chat?.nome_contato || ""} className="rounded-full" />
-            <AvatarFallback className="bg-(--chat-muted) text-(--chat-muted-foreground)">{chat?.nome_contato?.charAt(0) || "U"}</AvatarFallback>
+            <AvatarFallback className="bg-(--chat-muted) text-(--chat-muted-foreground)">{getAvatarInitials(getDisplayName(chat), "C")}</AvatarFallback>
           </Avatar>
 
           <div className="flex flex-1 flex-col gap-3">

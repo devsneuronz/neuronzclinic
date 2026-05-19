@@ -13,6 +13,7 @@ import { getChatTags, getReadableTextColor } from "@/lib/chat-tags";
 import { getChatStatusColor, getChatStatusLabel } from "@/lib/chat-status";
 import { cn } from "@/lib/utils";
 import { ChatRecord, LatestMessageStatus } from "@/lib/supabase-rest";
+import { getAvatarInitials } from "@/lib/avatar-initials";
 import { MessageStatusIcon } from "./message-status-icon";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
@@ -40,16 +41,6 @@ const ALL_FILTERS = "all";
 
 function getDisplayName(chat: ChatRecord) {
   return chat.nome_contato || chat.pushname || chat.chat_id?.replace("@s.whatsapp.net", "") || "Contato sem nome";
-}
-
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
 }
 
 function getTime(chat: ChatRecord) {
@@ -359,7 +350,7 @@ export function ContactList({
                 <div className="relative h-11 w-11 shrink-0">
                   <Avatar className="h-11 w-11">
                     <AvatarImage src={chat.url_foto_perfil ?? undefined} alt={name} />
-                    <AvatarFallback className="bg-muted text-sm font-medium text-muted-foreground">{getInitials(name)}</AvatarFallback>
+                    <AvatarFallback className="bg-muted text-sm font-medium text-muted-foreground">{getAvatarInitials(name)}</AvatarFallback>
                   </Avatar>
                   <span
                     className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card"
