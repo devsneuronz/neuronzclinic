@@ -388,8 +388,8 @@ const MessageBubble = memo(
             {quotedMessage && (
               <div
                 onClick={() => {
-                  if (!quotedOriginal || !onScrollToMessage) return;
-                  onScrollToMessage(quotedOriginal.id);
+                  if (!quotedInfo?.messageId || !onScrollToMessage) return;
+                  onScrollToMessage(quotedInfo.messageId);
                 }}
                 className={cn(
                   "mb-2 overflow-hidden rounded-md border-l-4 px-2.5 py-2 shadow-[inset_0_0_0_1px_rgba(17,27,33,0.035)] cursor-pointer hover:opacity-80 transition-opacity",
@@ -532,6 +532,49 @@ export function ChatWindow({
   const recordingTimerRef = useRef<number | null>(null);
   const shouldSendRecordingRef = useRef(false);
   const recordingPausedRef = useRef(false);
+
+  const messagesRef = useRef(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  const handleScrollToMessage = useCallback(async (targetId: string) => {
+    let foundMessage = messagesRef.current.find((m) => m.id === targetId || m.message_id === targetId);
+
+    if (!foundMessage) {
+      if (!onLoadOlderMessages || !hasMoreMessages || isLoadingOlder) return;
+
+      let attempts = 0;
+      const maxAttempts = 15;
+
+      while (!foundMessage && attempts < maxAttempts) {
+        const scrollArea = scrollAreaRef.current;
+        if (scrollArea) {
+          previousScrollHeightRef.current = scrollArea.scrollHeight;
+        }
+
+        const addedCount = await onLoadOlderMessages();
+        if (addedCount === 0) {
+          if (scrollArea) previousScrollHeightRef.current = null;
+          break;
+        }
+        attempts++;
+
+        await new Promise((resolve) => setTimeout(resolve, 200));
+
+        foundMessage = messagesRef.current.find((m) => m.id === targetId || m.message_id === targetId);
+      }
+    }
+
+    if (foundMessage) {
+      const el = document.getElementById(`message-${foundMessage.id}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        setHighlightedMessageId(foundMessage.id);
+        setTimeout(() => setHighlightedMessageId(null), 1500);
+      }
+    }
+  }, [onLoadOlderMessages, hasMoreMessages, isLoadingOlder]);
 
   const groupedMessages = useMemo(() => {
     return messages.reduce<Array<{ date: string; items: MessageRecord[] }>>((groups, message) => {
@@ -1139,12 +1182,7 @@ export function ChatWindow({
                         onForward={beginForward}
                         onDelete={beginDelete}
                         onExpandImage={(url: string, alt: string) => setExpandedImage({ url, alt })}
-                        onScrollToMessage={(id) => {
-                          const el = document.getElementById(`message-${id}`);
-                          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-                          setHighlightedMessageId(id);
-                          setTimeout(() => setHighlightedMessageId(null), 1000);
-                        }}
+                        onScrollToMessage={handleScrollToMessage}
                       />
                     ))}
                   </div>
