@@ -3,11 +3,12 @@
 import Image from "next/image";
 import type { FormEvent, MouseEvent, UIEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
-import { Camera, Check, CheckSquare, Download, FileImage, FileText, Forward, Info, MapPin, Mic, MoreHorizontal, Paperclip, Pause, PenLine, PlayIcon, Reply, Search, Send, Trash2, UserRound, Video, X } from "lucide-react";
+import { Camera, Check, CheckSquare, Download, FileImage, FileText, Forward, Info, MapPin, Mic, Paperclip, Pause, PenLine, PlayIcon, Reply, Search, Send, Trash2, UserRound, Video, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { extractQuotedMessageInfo } from "@/lib/message-replies";
 import { cn } from "@/lib/utils";
 import { ChatRecord, MessageRecord, fetchChats } from "@/lib/supabase-rest";
@@ -282,6 +283,21 @@ const AudioPlayer = memo(function AudioPlayer({ mediaUrl }: { mediaUrl: string }
   );
 });
 
+type MessageBubbleProps = {
+  message: MessageRecord;
+  chat: ChatRecord;
+  messagesByRemoteId: Map<string, MessageRecord>;
+  selected: boolean;
+  isHighlighted?: boolean;
+  isSelectionMode: boolean;
+  onToggleSelection: (m: MessageRecord) => void;
+  onReply: (m: MessageRecord) => void;
+  onForward: (m: MessageRecord) => void;
+  onDelete: (m: MessageRecord) => void;
+  onExpandImage: (url: string, alt: string) => void;
+  onScrollToMessage?: (id: string) => void;
+};
+
 const MessageBubble = memo(
   function MessageBubble({
     message,
@@ -296,20 +312,7 @@ const MessageBubble = memo(
     onExpandImage,
     isHighlighted,
     onScrollToMessage,
-  }: {
-    message: MessageRecord;
-    chat: ChatRecord;
-    messagesByRemoteId: Map<string, MessageRecord>;
-    selected: boolean;
-    isHighlighted?: boolean;
-    isSelectionMode: boolean;
-    onToggleSelection: (m: MessageRecord) => void;
-    onReply: (m: MessageRecord) => void;
-    onForward: (m: MessageRecord) => void;
-    onDelete: (m: MessageRecord) => void;
-    onExpandImage: (url: string, alt: string) => void;
-    onScrollToMessage?: (id: string) => void;
-  }) {
+  }: MessageBubbleProps) {
     const fromMe = !!message.from_me;
     const mediaUrl = getMediaUrl(message);
     const mediaKind = getMediaKind(message);
@@ -471,7 +474,7 @@ const MessageBubble = memo(
       </div>
     );
   },
-  (prevProps: any, nextProps: any) => {
+  (prevProps: MessageBubbleProps, nextProps: MessageBubbleProps) => {
     return prevProps.message === nextProps.message && prevProps.selected === nextProps.selected && prevProps.isSelectionMode === nextProps.isSelectionMode && prevProps.chat === nextProps.chat && prevProps.isHighlighted === nextProps.isHighlighted;
   },
 );
@@ -494,8 +497,8 @@ export function ChatWindow({
   error,
   onToggleDetails,
   onToggleStatus,
+  isDetailsOpen,
 }: ChatWindowProps) {
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
   const [isAttachmentPreviewOpen, setIsAttachmentPreviewOpen] = useState(false);
@@ -507,7 +510,6 @@ export function ChatWindow({
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(() => new Set());
   const [selectedForwardTarget, setSelectedForwardTarget] = useState("");
   const [forwardSearch, setForwardSearch] = useState("");
-  const [debouncedForwardSearch, setDebouncedForwardSearch] = useState("");
   const [forwardTargetResults, setForwardTargetResults] = useState<ChatRecord[]>(forwardTargets);
   const [isLoadingForwardTargets, setIsLoadingForwardTargets] = useState(false);
   const [isLoadingMoreForwardTargets, setIsLoadingMoreForwardTargets] = useState(false);
@@ -532,6 +534,10 @@ export function ChatWindow({
   const recordingTimerRef = useRef<number | null>(null);
   const shouldSendRecordingRef = useRef(false);
   const recordingPausedRef = useRef(false);
+  const forwardSearchRequestIdRef = useRef(0);
+  const normalizedForwardSearch = forwardSearch.trim();
+  const debouncedForwardSearch = useDebouncedValue(normalizedForwardSearch, 250);
+  const forwardSearchQuery = normalizedForwardSearch ? debouncedForwardSearch.trim() : "";
 
   const groupedMessages = useMemo(() => {
     return messages.reduce<Array<{ date: string; items: MessageRecord[] }>>((groups, message) => {
@@ -575,35 +581,28 @@ export function ChatWindow({
   }, [attachmentPreviewUrl]);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setDebouncedForwardSearch(forwardSearch.trim());
-    }, 250);
-
-    return () => window.clearTimeout(timeout);
-  }, [forwardSearch]);
-
-  useEffect(() => {
     if (forwardingMessages.length === 0) return;
 
     let isMounted = true;
+    const requestId = ++forwardSearchRequestIdRef.current;
 
     async function loadForwardTargets() {
-      const term = debouncedForwardSearch.trim();
+      const term = forwardSearchQuery;
 
       setIsLoadingForwardTargets(true);
       try {
         const data = await fetchChats({ limit: FORWARD_TARGET_PAGE_SIZE, offset: 0, search: term || undefined });
-        if (!isMounted) return;
+        if (!isMounted || requestId !== forwardSearchRequestIdRef.current) return;
         setForwardTargetResults(data);
         setHasMoreForwardTargets(data.length === FORWARD_TARGET_PAGE_SIZE);
         setSelectedForwardTarget((current) => current || chat?.chat_id || data[0]?.chat_id || "");
       } catch (error) {
-        if (!isMounted) return;
+        if (!isMounted || requestId !== forwardSearchRequestIdRef.current) return;
         setForwardTargetResults([]);
         setHasMoreForwardTargets(false);
         setMessageActionError(error instanceof Error ? error.message : "Nao foi possivel buscar os chats.");
       } finally {
-        if (isMounted) setIsLoadingForwardTargets(false);
+        if (isMounted && requestId === forwardSearchRequestIdRef.current) setIsLoadingForwardTargets(false);
       }
     }
 
@@ -612,7 +611,7 @@ export function ChatWindow({
     return () => {
       isMounted = false;
     };
-  }, [chat?.chat_id, debouncedForwardSearch, forwardingMessages.length]);
+  }, [chat?.chat_id, forwardSearchQuery, forwardingMessages.length]);
 
   useEffect(() => {
     const scrollArea = scrollAreaRef.current;
@@ -646,13 +645,16 @@ export function ChatWindow({
         setDeleteConfirmationMessages([]);
         return;
       }
-      setIsDetailsOpen(false);
+      if (isDetailsOpen) {
+        onToggleDetails();
+        return;
+      }
       onCloseChat?.();
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [chat, deleteConfirmationMessages.length, forwardingMessages.length, onCloseChat, selectedMessageIds.size]);
+  }, [chat, deleteConfirmationMessages.length, forwardingMessages.length, isDetailsOpen, onCloseChat, onToggleDetails, selectedMessageIds.size]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -773,7 +775,7 @@ export function ChatWindow({
     setForwardingMessages(validMessages);
     setSelectedForwardTarget(chat?.chat_id || "");
     setForwardSearch("");
-    setDebouncedForwardSearch("");
+    forwardSearchRequestIdRef.current += 1;
     setForwardTargetResults(forwardTargets);
     setMessageActionError(null);
   }
@@ -796,7 +798,7 @@ export function ChatWindow({
       const data = await fetchChats({
         limit: FORWARD_TARGET_PAGE_SIZE,
         offset: forwardTargetResults.length,
-        search: debouncedForwardSearch || undefined,
+        search: forwardSearchQuery || undefined,
       });
       setForwardTargetResults((current) => {
         const knownIds = new Set(current.map((target) => target.id));

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ContactList } from "@/components/chat/contact-list";
 import { ChatWindow } from "@/components/chat/chat-window";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { getChatTags, type ChatTag } from "@/lib/chat-tags";
 import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
 import { ChatRecord, LatestMessageStatus, MessageRecord, fetchChats, fetchLatestMessageStatuses, fetchMessages, deleteMessage, deleteMessages, forwardMessage, forwardMessages, sendMessage, updateChatDetails } from "@/lib/supabase-rest";
@@ -116,7 +117,6 @@ export default function ChatsPage() {
   const [latestMessageStatuses, setLatestMessageStatuses] = useState<Record<string, LatestMessageStatus>>({});
   const [selectedChatId, setSelectedChatId] = useState<string>();
   const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [isLoadingMoreChats, setIsLoadingMoreChats] = useState(false);
   const [searchChatsTerm, setSearchChatsTerm] = useState("");
@@ -130,9 +130,13 @@ export default function ChatsPage() {
   const [error, setError] = useState<string>();
   const [isAssinaturaMode, setIsAssinaturaMode] = useState(false);
   const [isGhostMode, setIsGhostMode] = useState(true);
+  const searchRequestIdRef = useRef(0);
 
-  const isSearching = !!debouncedSearch.trim();
-  const isSearchingChats = isSearching && searchChatsTerm !== debouncedSearch.trim();
+  const normalizedSearch = search.trim();
+  const debouncedSearch = useDebouncedValue(normalizedSearch, 350);
+  const searchQuery = normalizedSearch ? debouncedSearch.trim() : "";
+  const isSearching = !!searchQuery;
+  const isSearchingChats = !!normalizedSearch && (normalizedSearch !== searchQuery || searchChatsTerm !== searchQuery);
   const visibleChats = isSearching ? searchChats : chats;
   const knownChats = useMemo(() => {
     const indexedChats = new Map<string, ChatRecord>();
@@ -165,7 +169,7 @@ export default function ChatsPage() {
         const data = await fetchChats({
           limit: CHAT_PAGE_SIZE,
           offset: searchChats.length,
-          search: debouncedSearch,
+          search: searchQuery,
         });
         setSearchChats((current) => {
           const knownIds = new Set(current.map((chat) => chat.id));
@@ -196,7 +200,18 @@ export default function ChatsPage() {
     } finally {
       setIsLoadingMoreChats(false);
     }
-  }, [chats.length, debouncedSearch, hasMoreChats, hasMoreSearchChats, isLoadingMoreChats, isLoadingMoreSearchChats, isSearching, searchChats.length]);
+  }, [chats.length, hasMoreChats, hasMoreSearchChats, isLoadingMoreChats, isLoadingMoreSearchChats, isSearching, searchChats.length, searchQuery]);
+
+  const handleSearchChange = useCallback((value: string) => {
+    setSearch(value);
+
+    if (!value.trim()) {
+      searchRequestIdRef.current += 1;
+      setSearchChats([]);
+      setSearchChatsTerm("");
+      setHasMoreSearchChats(false);
+    }
+  }, []);
 
   const setChatHasMoreMessages = useCallback((chatId: string, hasMore: boolean) => {
     setHasMoreMessagesByChatId((current) => ({
@@ -522,15 +537,8 @@ export default function ChatsPage() {
   }, []);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setDebouncedSearch(search.trim());
-    }, 350);
-
-    return () => window.clearTimeout(timeout);
-  }, [search]);
-
-  useEffect(() => {
-    const term = debouncedSearch.trim();
+    const term = searchQuery;
+    const requestId = ++searchRequestIdRef.current;
 
     if (!term) {
       return;
@@ -540,13 +548,13 @@ export default function ChatsPage() {
 
     fetchChats({ limit: CHAT_PAGE_SIZE, offset: 0, search: term })
       .then((data) => {
-        if (!isMounted) return;
+        if (!isMounted || requestId !== searchRequestIdRef.current) return;
         setSearchChats(data);
         setSearchChatsTerm(term);
         setHasMoreSearchChats(data.length === CHAT_PAGE_SIZE);
       })
       .catch((err) => {
-        if (!isMounted) return;
+        if (!isMounted || requestId !== searchRequestIdRef.current) return;
         setSearchChats([]);
         setSearchChatsTerm(term);
         setHasMoreSearchChats(false);
@@ -556,7 +564,7 @@ export default function ChatsPage() {
     return () => {
       isMounted = false;
     };
-  }, [debouncedSearch]);
+  }, [searchQuery]);
 
   useEffect(() => {
     if (!selectedChatRemoteId) {
@@ -583,7 +591,7 @@ export default function ChatsPage() {
     return () => {
       isMounted = false;
     };
-  }, [selectedChatRemoteId]);
+  }, [replaceChatMessages, selectedChatRemoteId, setChatHasMoreMessages, updateLatestMessageStatus]);
 
   useEffect(() => {
     const chatsNeedingStatus = visibleChats.filter((chat) => chat.last_message_fromMe && !hasFreshLatestStatus(chat, latestMessageStatuses[chat.chat_id]));
@@ -660,7 +668,7 @@ export default function ChatsPage() {
 
   useEffect(() => {
     if (selectedChatId && !isGhostMode) {
-      handleMarkAsRead();
+      window.queueMicrotask(handleMarkAsRead);
     }
   }, [selectedChatId, isGhostMode, handleMarkAsRead]);
 
@@ -799,7 +807,7 @@ export default function ChatsPage() {
         hasMore={isSearching ? hasMoreSearchChats : hasMoreChats}
         selectedId={selectedChat?.id}
         latestMessageStatuses={latestMessageStatuses}
-        onSearchChange={setSearch}
+        onSearchChange={handleSearchChange}
         onSelect={setSelectedChatId}
         onLoadMore={loadMoreChats}
         isAssinaturaMode={isAssinaturaMode}
