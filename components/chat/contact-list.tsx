@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { getChatTags, getReadableTextColor } from "@/lib/chat-tags";
 import { getChatStatusColor, getChatStatusLabel } from "@/lib/chat-status";
+import { CHAT_DRAFT_CHANGED_EVENT, CHAT_DRAFT_STORAGE_PREFIX, readChatDraft, type ChatDraftChangedDetail } from "@/lib/chat-drafts";
 import { cn } from "@/lib/utils";
 import { ChatRecord, LatestMessageStatus } from "@/lib/supabase-rest";
 import { getAvatarInitials } from "@/lib/avatar-initials";
@@ -132,6 +133,7 @@ export function ContactList({
   const [stateTab, setStateTab] = useState<StateTab>("entrada");
   const [sectorLabels, setSectorLabels] = useState<Record<string, string>>({});
   const [sectorCatalog, setSectorCatalog] = useState<string[]>([]);
+  const [draftsByChatId, setDraftsByChatId] = useState<Record<string, string>>({});
 
   const statusOptions = useMemo(() => getUniqueOptions(chats.map(getChatStatusLabel)), [chats]);
   const tagOptions = useMemo(() => getUniqueOptions(chats.flatMap((chat) => getChatTags(chat).map((tag) => tag.label))), [chats]);
@@ -139,6 +141,67 @@ export function ContactList({
   const sectorOptions = useMemo(() => (sectorCatalog.length > 0 ? sectorCatalog : getUniqueOptions(sectorIds.map((id) => getSectorLabel(id, sectorLabels)))), [sectorCatalog, sectorIds, sectorLabels]);
 
   const hasActiveFilters = statusFilter !== ALL_FILTERS || tagFilter !== ALL_FILTERS || sectorFilter !== ALL_FILTERS;
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDraftsByChatId((current) => {
+        const next = { ...current };
+
+        for (const chat of chats) {
+          const draft = readChatDraft(chat.chat_id, chat.draft ?? "");
+          if (draft.trim()) {
+            next[chat.chat_id] = draft;
+          } else {
+            delete next[chat.chat_id];
+          }
+        }
+
+        return next;
+      });
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [chats]);
+
+  useEffect(() => {
+    function handleDraftChanged(event: Event) {
+      const detail = (event as CustomEvent<ChatDraftChangedDetail>).detail;
+      if (!detail?.chatId) return;
+
+      setDraftsByChatId((current) => {
+        if (detail.draft.trim()) {
+          return { ...current, [detail.chatId]: detail.draft };
+        }
+
+        const next = { ...current };
+        delete next[detail.chatId];
+        return next;
+      });
+    }
+
+    function handleStorage(event: StorageEvent) {
+      if (!event.key?.startsWith(CHAT_DRAFT_STORAGE_PREFIX)) return;
+
+      const chatId = event.key.slice(CHAT_DRAFT_STORAGE_PREFIX.length);
+      setDraftsByChatId((current) => {
+        if (event.newValue?.trim()) {
+          return { ...current, [chatId]: event.newValue };
+        }
+
+        const next = { ...current };
+        delete next[chatId];
+        return next;
+      });
+    }
+
+    window.addEventListener(CHAT_DRAFT_CHANGED_EVENT, handleDraftChanged);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener(CHAT_DRAFT_CHANGED_EVENT, handleDraftChanged);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -220,15 +283,8 @@ export function ContactList({
       return chat.last_message_fromMe !== true;
     });
 
-    if (!selectedId) {
-      return stateFilteredChats;
-    }
-
-    const selectedChat = filteredChats.find((chat) => chat.id === selectedId);
-    if (!selectedChat) return stateFilteredChats;
-
-    return [selectedChat, ...stateFilteredChats.filter((chat) => chat.id !== selectedId)];
-  }, [filteredChats, scopeTab, selectedId, stateTab]);
+    return stateFilteredChats;
+  }, [filteredChats, scopeTab, stateTab]);
 
   function clearFilters() {
     setStatusFilter(ALL_FILTERS);
@@ -411,6 +467,9 @@ export function ContactList({
             const name = getDisplayName(chat);
             const tags = getChatTags(chat).slice(0, 3);
             const latestStatus = latestMessageStatuses[chat.chat_id];
+            const draft = draftsByChatId[chat.chat_id]?.trim();
+            const hasDraft = !!draft;
+            const previewText = hasDraft ? draft : chat.text_last_message || "Sem mensagens recentes";
 
             return (
               <button
@@ -438,8 +497,11 @@ export function ContactList({
                   </div>
 
                   <div className="mt-0.5 flex items-center gap-1">
-                    {chat.text_last_message && <MessageStatusIcon fromMe={chat.last_message_fromMe} status={latestStatus?.status} timestamp={latestStatus?.timestamp_msg ?? chat.last_message_time} />}
-                    <p className="truncate text-sm text-muted-foreground">{chat.text_last_message || "Sem mensagens recentes"}</p>
+                    {!hasDraft && chat.text_last_message && <MessageStatusIcon fromMe={chat.last_message_fromMe} status={latestStatus?.status} timestamp={latestStatus?.timestamp_msg ?? chat.last_message_time} />}
+                    <p className="truncate text-sm text-muted-foreground">
+                      {hasDraft && <span className="font-medium text-red-500">Rascunho: </span>}
+                      {previewText}
+                    </p>
                     {!!chat.unread_count && <Badge className="ml-auto h-5 min-w-5 shrink-0 bg-green-500 px-1.5 text-[10px] font-medium text-white">{chat.unread_count}</Badge>}
                   </div>
 

@@ -3,6 +3,7 @@
 import type { FormEvent, UIEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { readChatDraft, writeChatDraft } from "@/lib/chat-drafts";
 import { ChatRecord, MessageRecord, fetchChats } from "@/lib/supabase-rest";
 import { AttachmentPreviewModal } from "./attachment-preview-modal";
 import { ChatComposer } from "./chat-composer";
@@ -70,6 +71,7 @@ export function ChatWindow({
   isDetailsOpen,
 }: ChatWindowProps) {
   const [draft, setDraft] = useState("");
+  const [draftChatId, setDraftChatId] = useState<string | null>(null);
   const [attachment, setAttachment] = useState<File | null>(null);
   const [isAttachmentPreviewOpen, setIsAttachmentPreviewOpen] = useState(false);
   const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
@@ -264,6 +266,23 @@ export function ChatWindow({
       isMounted = false;
     };
   }, [chat?.chat_id, forwardSearchQuery, forwardingMessages.length]);
+
+  useEffect(() => {
+    const chatId = chat?.chat_id ?? null;
+    const nextDraft = chatId ? readChatDraft(chatId, chat?.draft ?? "") : "";
+
+    const timeout = window.setTimeout(() => {
+      setDraft(nextDraft);
+      setDraftChatId(chatId);
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [chat?.chat_id, chat?.draft]);
+
+  useEffect(() => {
+    if (!draftChatId) return;
+    writeChatDraft(draftChatId, draft);
+  }, [draft, draftChatId]);
 
   useEffect(() => {
     const scrollArea = scrollAreaRef.current;
