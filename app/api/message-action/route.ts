@@ -3,10 +3,12 @@ import { NextRequest, NextResponse } from "next/server"
 const SEND_MESSAGE_WEBHOOK_URL = process.env.SEND_MESSAGE_WEBHOOK_URL || "https://n8n.srv1150529.hstgr.cloud/webhook/send-message"
 const FORWARD_MESSAGE_WEBHOOK_URL = process.env.FORWARD_MESSAGE_WEBHOOK_URL || SEND_MESSAGE_WEBHOOK_URL
 const DELETE_MESSAGE_WEBHOOK_URL = process.env.DELETE_MESSAGE_WEBHOOK_URL || "https://n8n.srv1150529.hstgr.cloud/webhook/apagar-mensagem"
+const READ_MESSAGE_WEBHOOK_URL = process.env.READ_MESSAGE_WEBHOOK_URL || "https://n8n.srv1150529.hstgr.cloud/webhook/520de9de-1b62-4987-97bf-49ee2ba938d9"
 
 type MessageActionBody = Record<string, unknown>
 type ForwardPayload = ReturnType<typeof buildForwardPayload>
 type DeletePayload = ReturnType<typeof buildDeletePayload>
+type ReadPayload = ReturnType<typeof buildReadPayload>
 
 function isMessageActionBody(value: unknown): value is MessageActionBody {
   return !!value && typeof value === "object" && !Array.isArray(value)
@@ -70,6 +72,28 @@ function buildDeletePayload(message: MessageActionBody, fallbackChatId: string) 
   }
 }
 
+function buildReadPayload(chatId: string, messages: MessageActionBody[]) {
+  const readMessages = messages
+    .map((message) => ({
+      remoteJid: getString(message.chat_id) || getString(message.remoteJid) || chatId,
+      messageId: getString(message.message_id) || getString(message.messageId) || getString(message.id),
+      fromMe: Boolean(message.from_me ?? message.fromMe),
+      participant: getString(message.participant) || null,
+    }))
+    .filter((message) => message.messageId)
+
+  return {
+    type: "read",
+    action: "read",
+    chat_id: chatId,
+    number: chatId,
+    remoteJid: chatId,
+    message_ids: readMessages.map((message) => message.messageId),
+    read_messages: readMessages,
+    messages: readMessages,
+  }
+}
+
 async function postWebhook(webhookUrl: string, payload: unknown) {
   const webhookResponse = await fetch(webhookUrl, {
     method: "POST",
@@ -103,7 +127,7 @@ export async function POST(request: NextRequest) {
     const body = isMessageActionBody(parsedBody) ? parsedBody : {}
     const action = String(body.action || "").trim()
 
-    if (action !== "forward" && action !== "delete") {
+    if (action !== "forward" && action !== "delete" && action !== "read") {
       return NextResponse.json({ message: "Acao de mensagem invalida." }, { status: 400 })
     }
 
@@ -142,6 +166,31 @@ export async function POST(request: NextRequest) {
       }
 
       return NextResponse.json({ ok: true, count: results.length, results })
+    }
+
+    if (action === "read") {
+      const chatId = getString(body.chat_id) || getString(body.remoteJid)
+      const messages: MessageActionBody[] = Array.isArray(body.messages) ? body.messages.filter(isMessageActionBody) : []
+      const payload: ReadPayload = buildReadPayload(chatId, messages)
+
+      if (!chatId) {
+        return NextResponse.json({ message: "chat_id e obrigatorio." }, { status: 400 })
+      }
+
+      const result = await postWebhook(READ_MESSAGE_WEBHOOK_URL, payload)
+
+      if (!result.ok) {
+        return NextResponse.json(
+          {
+            message: "Webhook recusou a confirmacao de leitura.",
+            details: result.body,
+            payload,
+          },
+          { status: result.status },
+        )
+      }
+
+      return NextResponse.json({ ok: true, count: payload.read_messages.length, payload, webhook: result.body })
     }
 
     const fallbackChatId = getString(body.chat_id) || getString(body.remoteJid)

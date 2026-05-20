@@ -98,6 +98,11 @@ export interface DeleteMessagesInput {
   messages: MessageRecord[]
 }
 
+export interface MarkChatAsReadInput {
+  chatId: string
+  messages?: MessageRecord[]
+}
+
 export interface UpdateChatDetailsInput {
   id: string
   nome_contato?: string | null
@@ -411,6 +416,37 @@ export async function deleteMessages({ chatId, messages }: DeleteMessagesInput) 
 
 export function deleteMessage({ chatId, message }: DeleteMessageInput) {
   return deleteMessages({ chatId, messages: [message] })
+}
+
+function getReadMessagePayload(message: MessageRecord) {
+  return {
+    id: message.id,
+    chat_id: message.chat_id,
+    message_id: message.message_id || message.id,
+    from_me: !!message.from_me,
+    participant: message.participant,
+  }
+}
+
+export async function markChatAsRead({ chatId, messages = [] }: MarkChatAsReadInput) {
+  const response = await fetch("/api/message-action", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      action: "read",
+      chat_id: chatId,
+      messages: messages.filter((message) => !message.from_me).map(getReadMessagePayload),
+    }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || `Nao foi possivel confirmar a leitura (${response.status}).`)
+  }
+
+  return response.json()
 }
 
 export async function updateChatDetails({ id, ...payload }: UpdateChatDetailsInput) {

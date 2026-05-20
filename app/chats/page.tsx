@@ -6,7 +6,7 @@ import { ChatWindow } from "@/components/chat/chat-window";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { getChatTags, type ChatTag } from "@/lib/chat-tags";
 import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
-import { ChatRecord, LatestChatMessage, LatestMessageStatus, MessageRecord, fetchChats, fetchLatestMessagesForChats, fetchLatestMessageStatuses, fetchMessages, deleteMessage, deleteMessages, forwardMessage, forwardMessages, sendMessage, updateChatDetails } from "@/lib/supabase-rest";
+import { ChatRecord, LatestChatMessage, LatestMessageStatus, MessageRecord, fetchChats, fetchLatestMessagesForChats, fetchLatestMessageStatuses, fetchMessages, deleteMessage, deleteMessages, forwardMessage, forwardMessages, markChatAsRead, sendMessage, updateChatDetails } from "@/lib/supabase-rest";
 import { createSupabaseRealtimeSubscription, type SupabasePostgresChangePayload } from "@/lib/supabase-realtime";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { ContactDetails } from "@/components/contact-details/contact-details";
@@ -16,6 +16,7 @@ const MESSAGE_PAGE_SIZE = 50;
 const CHAT_SYNC_INTERVAL_MS = 5000;
 const MESSAGE_SYNC_INTERVAL_MS = 2500;
 const MEDIA_PREVIEW_LABELS = new Set(["Foto", "Video", "Audio", "Figurinha", "Documento"]);
+const EMPTY_MESSAGES: MessageRecord[] = [];
 
 type ChatPreviewMessage = Pick<LatestChatMessage, "content" | "media_mime_type" | "message_type" | "timestamp_msg" | "from_me">;
 
@@ -86,6 +87,21 @@ function mergeMessages(currentMessages: MessageRecord[], incomingMessages: Messa
 
 function getMessageKeys(message: MessageRecord) {
   return [message.id, message.message_id].filter(Boolean) as string[];
+}
+
+function getIncomingReadMessages(messageList: MessageRecord[]) {
+  return messageList.filter((message) => !message.from_me && !message.id.startsWith("optimistic-") && (message.message_id || message.id));
+}
+
+function getLatestIncomingMessageKey(messageList: MessageRecord[]) {
+  for (let index = messageList.length - 1; index >= 0; index--) {
+    const message = messageList[index];
+    if (!message.from_me && (message.message_id || message.id)) {
+      return message.message_id || message.id;
+    }
+  }
+
+  return "";
 }
 
 function countNewIncomingMessages(currentMessages: MessageRecord[], incomingMessages: MessageRecord[]) {
@@ -315,13 +331,14 @@ export default function ChatsPage() {
   const contactStatusOptions = statusOptions.length > 0 ? statusOptions : fallbackStatusOptions;
   const contactTagOptions = tagOptions.length > 0 ? tagOptions : fallbackTagOptions;
   const selectedChatRemoteId = selectedChat?.chat_id;
-  const messages = selectedChatRemoteId ? (messagesByChatId[selectedChatRemoteId] ?? []) : [];
+  const messages = selectedChatRemoteId ? (messagesByChatId[selectedChatRemoteId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES;
   const hasMoreMessages = selectedChatRemoteId ? (hasMoreMessagesByChatId[selectedChatRemoteId] ?? false) : false;
   const hasLoadedSelectedMessages = !!selectedChatRemoteId && selectedChatRemoteId in messagesByChatId;
   const isLoadingSelectedMessages = !!selectedChatRemoteId && !hasLoadedSelectedMessages;
   const selectedChatRemoteIdRef = useRef<string | undefined>(undefined);
   const isGhostModeRef = useRef(isGhostMode);
   const messagesByChatIdRef = useRef(messagesByChatId);
+  const readReceiptKeyByChatIdRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     selectedChatRemoteIdRef.current = selectedChatRemoteId;
@@ -1100,11 +1117,37 @@ export default function ChatsPage() {
     updateSelectedChatUnreadCount(0);
   }, [updateSelectedChatUnreadCount]);
 
+  const sendReadReceiptForChat = useCallback(async (chatId: string, messageList: MessageRecord[]) => {
+    const incomingMessages = getIncomingReadMessages(messageList);
+    const latestIncomingMessageKey = getLatestIncomingMessageKey(incomingMessages);
+
+    if (!latestIncomingMessageKey) return;
+
+    const receiptKey = `${chatId}:${latestIncomingMessageKey}`;
+    if (readReceiptKeyByChatIdRef.current[chatId] === receiptKey) return;
+
+    readReceiptKeyByChatIdRef.current[chatId] = receiptKey;
+
+    try {
+      await markChatAsRead({ chatId, messages: incomingMessages });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Nao foi possivel confirmar a leitura.");
+    }
+  }, []);
+
   useEffect(() => {
     if (selectedChatId && !isGhostMode) {
       window.queueMicrotask(handleMarkAsRead);
     }
   }, [selectedChatId, isGhostMode, handleMarkAsRead]);
+
+  useEffect(() => {
+    if (!selectedChatRemoteId || isGhostMode || !hasLoadedSelectedMessages) return;
+
+    window.queueMicrotask(() => {
+      void sendReadReceiptForChat(selectedChatRemoteId, messages);
+    });
+  }, [hasLoadedSelectedMessages, isGhostMode, messages, selectedChatRemoteId, sendReadReceiptForChat]);
 
   const handleMarkAsUnread = useCallback(() => {
     updateSelectedChatUnreadCount(Math.max(selectedChat?.unread_count || 0, 1));
