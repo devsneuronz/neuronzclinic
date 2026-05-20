@@ -12,7 +12,7 @@ import { getChatStatusColor, type ChatStatusOption } from "@/lib/chat-status";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { IATrainingView } from "./ia-training-view";
-import { ProfileView } from "./profile-view";
+import { ProfileView, type ContactInfoValues } from "./profile-view";
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
 
@@ -26,6 +26,7 @@ interface ContactDetailsProps {
   onChangeStatus?: (status: ChatStatusOption) => void;
   onToggleTag?: (tag: ChatTag) => void;
   onChangeName?: (name: string) => Promise<void> | void;
+  onChangeContactInfo?: (info: ContactInfoValues) => Promise<void> | void;
   onMarkAsRead?: () => void;
   onMarkAsUnread?: () => void;
   onReorderTags?: (tags: ChatTag[]) => void;
@@ -43,7 +44,7 @@ function getContactPhone(chat?: ChatRecord) {
   return phone || chat?.phone_contact?.trim() || chat?.chat_id?.replace(/@.+$/, "") || "Sem telefone";
 }
 
-export function ContactDetails({ chat, onClose, onToggleStatus, onToggleIA, statusOptions, tagOptions, onChangeStatus, onToggleTag, onMarkAsRead, onMarkAsUnread, onReorderTags, onCommitTagOrder, onChangeName }: ContactDetailsProps) {
+export function ContactDetails({ chat, onClose, onToggleStatus, onToggleIA, statusOptions, tagOptions, onChangeStatus, onToggleTag, onMarkAsRead, onMarkAsUnread, onReorderTags, onCommitTagOrder, onChangeName, onChangeContactInfo }: ContactDetailsProps) {
   const [view, setView] = useState<"profile" | "training">("profile");
   const contactPhone = getContactPhone(chat);
   const hasUnreadMessages = !!chat?.unread_count;
@@ -208,6 +209,7 @@ export function ContactDetails({ chat, onClose, onToggleStatus, onToggleIA, stat
         <div className="flex-1 overflow-y-auto">
           {activeView === "profile" ? (
             <ProfileView
+              key={chat?.id || "empty-contact"}
               chat={chat}
               contactPhone={contactPhone}
               statusOptions={statusOptions}
@@ -215,6 +217,7 @@ export function ContactDetails({ chat, onClose, onToggleStatus, onToggleIA, stat
               onChangeStatus={onChangeStatus}
               onToggleTag={onToggleTag}
               onChangeName={onChangeName}
+              onChangeContactInfo={onChangeContactInfo}
               onReorderTags={onReorderTags}
               onCommitTagOrder={onCommitTagOrder}
             />

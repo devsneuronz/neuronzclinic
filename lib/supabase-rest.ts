@@ -20,6 +20,9 @@ export interface ChatRecord {
   nome_contato: string | null
   pushname: string | null
   phone_contact: string | null
+  cidade_residencia: string | null
+  cidade_desejada: string | null
+  email_contato: string | null
   url_foto_perfil: string | null
   text_last_message: string | null
   last_message_time: string | null
@@ -106,6 +109,10 @@ export interface MarkChatAsReadInput {
 export interface UpdateChatDetailsInput {
   id: string
   nome_contato?: string | null
+  phone_contact?: string | null
+  cidade_residencia?: string | null
+  cidade_desejada?: string | null
+  email_contato?: string | null
   Status_chat?: string | null
   hex_status?: string | null
   finalizada?: boolean | null
@@ -150,6 +157,21 @@ export interface CreateChatNoteInput {
   linkedMessageId?: string | null
   linkedMessagePreview?: string | null
   linkedMessageFromMe?: boolean | null
+}
+
+export interface ContactNoteRecord {
+  id: string
+  chat_id: string
+  contact_phone: string | null
+  content: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateContactNoteInput {
+  chatId: string
+  contactPhone?: string | null
+  content: string
 }
 
 function getTimestampValue(value?: string | null) {
@@ -216,6 +238,9 @@ export function fetchChats({ limit = 50, offset = 0, search }: ChatQueryOptions 
     "nome_contato",
     "pushname",
     "phone_contact",
+    "cidade_residencia",
+    "cidade_desejada",
+    "email_contato",
     "url_foto_perfil",
     "text_last_message",
     "last_message_time",
@@ -244,6 +269,9 @@ export function fetchChats({ limit = 50, offset = 0, search }: ChatQueryOptions 
         "nome_contato",
         "pushname",
         "phone_contact",
+        "cidade_residencia",
+        "cidade_desejada",
+        "email_contato",
         "chat_id",
         "text_last_message",
         "Status_chat",
@@ -537,6 +565,56 @@ export async function deleteChatNote(noteId: string) {
   if (!response.ok) {
     const error = await response.json().catch(() => null)
     throw new Error(error?.message || `Nao foi possivel apagar a anotacao (${response.status}).`)
+  }
+
+  return response.json() as Promise<{ ok: true }>
+}
+
+export async function fetchContactNotes(chatId: string) {
+  const response = await fetch(`/api/contact-notes?chat_id=${encodeURIComponent(chatId)}`, {
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || `Nao foi possivel carregar as anotacoes do contato (${response.status}).`)
+  }
+
+  const data = (await response.json()) as { notes?: ContactNoteRecord[] }
+  return data.notes ?? []
+}
+
+export async function createContactNote({ chatId, contactPhone = null, content }: CreateContactNoteInput) {
+  const response = await fetch("/api/contact-notes", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      chat_id: chatId,
+      contact_phone: contactPhone,
+      content,
+    }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || `Nao foi possivel salvar a anotacao do contato (${response.status}).`)
+  }
+
+  const data = (await response.json()) as { note?: ContactNoteRecord }
+  if (!data.note) throw new Error("A anotacao foi salva, mas a API nao retornou o registro.")
+  return data.note
+}
+
+export async function deleteContactNote(noteId: string) {
+  const response = await fetch(`/api/contact-notes?id=${encodeURIComponent(noteId)}`, {
+    method: "DELETE",
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || `Nao foi possivel apagar a anotacao do contato (${response.status}).`)
   }
 
   return response.json() as Promise<{ ok: true }>

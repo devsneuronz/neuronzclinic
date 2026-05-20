@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 
-import { AUTH_SESSION_EVENT, getSavedSessionEmail } from "@/lib/auth-session"
+import { AUTH_SESSION_EVENT, getSavedSessionDisplayName, getSavedSessionEmail } from "@/lib/auth-session"
 import { CurrentUser, getDefaultUser } from "@/lib/user-roles"
 
 type CurrentUserState = {
@@ -29,6 +29,7 @@ export function useCurrentUser() {
       }
 
       setState((current) => ({ ...current, isLoading: true }))
+      const sessionDisplayName = getSavedSessionDisplayName()
 
       try {
         const response = await fetch(`/api/airtable/users?email=${encodeURIComponent(email)}`, {
@@ -40,9 +41,14 @@ export function useCurrentUser() {
         }
 
         const user = (await response.json()) as CurrentUser
-        if (isActive) setState({ user, isLoading: false })
+        if (isActive) {
+          setState({
+            user: user.source === "airtable" ? user : getDefaultUser(email, sessionDisplayName),
+            isLoading: false,
+          })
+        }
       } catch {
-        if (isActive) setState({ user: getDefaultUser(email), isLoading: false })
+        if (isActive) setState({ user: getDefaultUser(email, sessionDisplayName), isLoading: false })
       }
     }
 

@@ -8,6 +8,10 @@ type SupabaseSession = {
   user?: {
     email?: string
     id?: string
+    user_metadata?: Record<string, unknown>
+    identities?: Array<{
+      identity_data?: Record<string, unknown>
+    }>
   }
 }
 
@@ -57,6 +61,42 @@ export function getSavedSession() {
 
 export function getSavedSessionEmail() {
   return getSavedSession()?.user?.email ?? null
+}
+
+function getStringMetadataValue(metadata: Record<string, unknown> | undefined, keys: string[]) {
+  if (!metadata) {
+    return null
+  }
+
+  for (const key of keys) {
+    const value = metadata[key]
+
+    if (typeof value === "string" && value.trim()) {
+      return value.trim()
+    }
+  }
+
+  return null
+}
+
+export function getSavedSessionDisplayName() {
+  const user = getSavedSession()?.user
+  const metadataKeys = ["name", "full_name", "display_name", "preferred_username", "user_name"]
+  const directName = getStringMetadataValue(user?.user_metadata, metadataKeys)
+
+  if (directName) {
+    return directName
+  }
+
+  for (const identity of user?.identities ?? []) {
+    const identityName = getStringMetadataValue(identity.identity_data, metadataKeys)
+
+    if (identityName) {
+      return identityName
+    }
+  }
+
+  return null
 }
 
 export function hasValidSession() {

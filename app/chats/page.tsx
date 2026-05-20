@@ -10,6 +10,7 @@ import { ChatRecord, LatestChatMessage, LatestMessageStatus, MessageRecord, fetc
 import { createSupabaseRealtimeSubscription, type SupabasePostgresChangePayload } from "@/lib/supabase-realtime";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { ContactDetails } from "@/components/contact-details/contact-details";
+import type { ContactInfoValues } from "@/components/contact-details/profile-view";
 
 const CHAT_PAGE_SIZE = 50;
 const MESSAGE_PAGE_SIZE = 50;
@@ -1202,6 +1203,32 @@ export default function ChatsPage() {
     [restoreSelectedChat, selectedChat, selectedChatId],
   );
 
+  const handleChangeContactInfo = useCallback(
+    async (info: ContactInfoValues) => {
+      if (!selectedChat || !selectedChatId) return;
+
+      const previousChat = selectedChat;
+      const updateInfo = (list: ChatRecord[]) => list.map((chat) => (chat.id === selectedChatId ? { ...chat, ...info } : chat));
+
+      setChats((current) => updateInfo(current));
+      setSearchChats((current) => updateInfo(current));
+      setError(undefined);
+
+      try {
+        await updateChatDetails({
+          id: selectedChat.id,
+          ...info,
+        });
+      } catch (err) {
+        restoreSelectedChat(previousChat);
+        const message = err instanceof Error ? err.message : "Nao foi possivel salvar as informacoes do contato.";
+        setError(message);
+        throw new Error(message);
+      }
+    },
+    [restoreSelectedChat, selectedChat, selectedChatId],
+  );
+
   const handleChangeContactStatus = useCallback(
     async (status: ChatStatusOption) => {
       if (!selectedChat || !selectedChatId) return;
@@ -1346,6 +1373,7 @@ export default function ChatsPage() {
                 onChangeStatus={handleChangeContactStatus}
                 onToggleTag={handleToggleContactTag}
                 onChangeName={handleChangeContactName}
+                onChangeContactInfo={handleChangeContactInfo}
                 onMarkAsRead={handleMarkAsRead}
                 onMarkAsUnread={handleMarkAsUnread}
                 onReorderTags={handleReorderTags}

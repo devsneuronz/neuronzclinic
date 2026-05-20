@@ -41,13 +41,14 @@ export function isFallbackAdminEmail(email: string) {
   return FALLBACK_ADMIN_EMAILS.includes(email.trim().toLowerCase())
 }
 
-export function getDefaultUser(email: string): CurrentUser {
+export function getDefaultUser(email: string, displayName?: string | null): CurrentUser {
   const normalizedEmail = email.trim().toLowerCase()
   const role = isFallbackAdminEmail(normalizedEmail) ? "admin" : "user"
+  const name = displayName?.trim() || normalizedEmail
 
   return {
     email: normalizedEmail,
-    name: normalizedEmail,
+    name,
     role,
     source: isFallbackAdminEmail(normalizedEmail) ? "fallback" : "session",
   }

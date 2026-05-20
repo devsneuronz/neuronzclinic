@@ -77,6 +77,22 @@ function buildPatch(body: RawChat, currentChat: RawChat) {
     patch.nome_contato = getString(body.nome_contato) || null
   }
 
+  if ("phone_contact" in body) {
+    patch.phone_contact = getString(body.phone_contact) || null
+  }
+
+  if ("cidade_residencia" in body) {
+    patch.cidade_residencia = getString(body.cidade_residencia) || null
+  }
+
+  if ("cidade_desejada" in body) {
+    patch.cidade_desejada = getString(body.cidade_desejada) || null
+  }
+
+  if ("email_contato" in body) {
+    patch.email_contato = getString(body.email_contato) || null
+  }
+
   if ("Status_chat" in body) {
     patch.Status_chat = getString(body.Status_chat) || null
   }
