@@ -1,12 +1,15 @@
 "use client";
 
 import type { FormEvent, RefObject } from "react";
+import { useMemo } from "react";
 import { Camera, Check, FileImage, FileText, MapPin, Mic, Paperclip, Pause, PenLine, Reply, Send, Trash2, UserRound, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { ChatRecord, MessageRecord } from "@/lib/supabase-rest";
+import type { MentionableUser } from "@/lib/user-roles";
+import { getMentionLabel, getMentionSlug } from "@/lib/user-mentions";
 import { getAttachmentLabel } from "./chat-attachment-utils";
 import { formatTime, getDisplayName, getMediaKind, getMessagePreviewText } from "./message-utils";
 
@@ -27,6 +30,7 @@ type ChatComposerProps = {
   isInternalNoteOpen: boolean;
   noteDraft: string;
   noteLinkedMessage: MessageRecord | null;
+  noteMentionUsers: MentionableUser[];
   fileInputRef: RefObject<HTMLInputElement | null>;
   photoInputRef: RefObject<HTMLInputElement | null>;
   videoInputRef: RefObject<HTMLInputElement | null>;
@@ -61,6 +65,7 @@ export function ChatComposer({
   isInternalNoteOpen,
   noteDraft,
   noteLinkedMessage,
+  noteMentionUsers,
   fileInputRef,
   photoInputRef,
   videoInputRef,
@@ -80,30 +85,73 @@ export function ChatComposer({
   onNoteDraftChange,
   onSaveInternalNote,
 }: ChatComposerProps) {
+  const mentionMatch = noteDraft.match(/(^|\s)@([\p{L}\p{N}._-]*)$/u);
+  const mentionQuery = mentionMatch?.[2] ?? "";
+  const mentionSuggestions = useMemo(() => {
+    if (!isInternalNoteOpen || !mentionMatch) return [];
+
+    const normalizedQuery = getMentionSlug(mentionQuery);
+
+    return noteMentionUsers
+      .filter((user) => {
+        const label = getMentionLabel(user);
+        return getMentionSlug(label).startsWith(normalizedQuery) || getMentionSlug(user.name).includes(normalizedQuery) || user.email.toLowerCase().startsWith(normalizedQuery);
+      })
+      .slice(0, 5);
+  }, [isInternalNoteOpen, mentionMatch, mentionQuery, noteMentionUsers]);
+
+  function insertMention(user: MentionableUser) {
+    if (!mentionMatch) return;
+
+    const mentionStart = mentionMatch.index ?? 0;
+    const prefix = noteDraft.slice(0, mentionStart + mentionMatch[1].length);
+    onNoteDraftChange(`${prefix}@${getMentionLabel(user)} `);
+  }
+
   return (
     <form onSubmit={onSubmit} className="border-t border-border bg-card px-4 py-3">
       {isInternalNoteOpen && (
         <div className="mb-4 max-w-5xl">
           <div className="mb-2">
-            <p className="text-sm font-semibold text-foreground">Escrever anotacao interna:</p>
-            <p className="text-xs text-muted-foreground">A anotacao nao e visivel para o cliente.</p>
+            <p className="text-sm font-semibold text-foreground">Escrever anotação interna:</p>
+            <p className="text-xs text-muted-foreground">A anotação não é visível para o cliente.</p>
           </div>
           {noteLinkedMessage && (
             <div className="mb-2 max-w-2xl border-l-4 border-amber-400 bg-yellow-100/85 px-3 py-2 text-xs text-yellow-950">
-              <p className="font-semibold">Anotacao vinculada a mensagem</p>
+              <p className="font-semibold">Anotação vinculada à mensagem</p>
               <p className="mt-0.5 line-clamp-2">{getMessagePreviewText(noteLinkedMessage)}</p>
             </div>
           )}
-          <textarea
-            value={noteDraft}
-            onChange={(event) => onNoteDraftChange(event.target.value)}
-            className="min-h-20 w-full resize-y border-0 bg-yellow-100 px-3 py-2 text-sm text-yellow-950 outline-none ring-1 ring-yellow-200 placeholder:text-yellow-950/45 focus:ring-2 focus:ring-amber-400"
-            placeholder="Digite uma anotacao interna"
-          />
+          <div className="relative">
+            <textarea
+              value={noteDraft}
+              onChange={(event) => onNoteDraftChange(event.target.value)}
+              className="min-h-20 w-full resize-y border-0 bg-yellow-100 px-3 py-2 text-sm text-yellow-950 outline-none ring-1 ring-yellow-200 placeholder:text-yellow-950/45 focus:ring-2 focus:ring-amber-400"
+              placeholder="Digite uma anotacao interna. Use @ para mencionar alguem."
+            />
+            {mentionSuggestions.length > 0 && (
+              <div className="absolute bottom-full left-0 z-20 mb-2 w-72 overflow-hidden rounded-md border border-amber-200 bg-card p-1 text-sm shadow-lg">
+                {mentionSuggestions.map((user) => (
+                  <button
+                    key={user.email}
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-foreground transition hover:bg-amber-100 dark:hover:bg-amber-500/15"
+                    onClick={() => insertMention(user)}
+                  >
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-xs font-semibold text-amber-700">{getMentionLabel(user).charAt(0).toUpperCase()}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">@{getMentionLabel(user)}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="mt-2 flex items-center gap-2">
             <Button type="button" size="sm" className="bg-green-600 text-white hover:bg-green-700" onClick={onSaveInternalNote} disabled={!noteDraft.trim()}>
               <Check className="h-4 w-4" />
-              Salvar anotacao
+              Salvar anotação
             </Button>
             <Button type="button" size="sm" className="bg-red-700 text-white hover:bg-red-800" onClick={onCloseInternalNote}>
               <X className="h-4 w-4" />
@@ -131,7 +179,7 @@ export function ChatComposer({
         <div className="mb-2 flex items-center gap-3 overflow-hidden rounded-lg border-l-4 border-[#00a884] bg-[#f0f2f5] px-3 py-2 text-sm shadow-[inset_0_0_0_1px_rgba(17,27,33,0.05)] dark:bg-[#202c33]">
           <Reply className="h-4 w-4 shrink-0 text-[#00a884]" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold text-[#008069] dark:text-[#06cf9c]">Respondendo {replyTo.from_me ? "voce" : getDisplayName(chat)}</p>
+            <p className="truncate text-xs font-semibold text-[#008069] dark:text-[#06cf9c]">Respondendo {replyTo.from_me ? "você" : getDisplayName(chat)}</p>
             <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted-foreground">
               {getMediaKind(replyTo) === "image" && <FileImage className="h-3.5 w-3.5 shrink-0 opacity-75" />}
               {getMediaKind(replyTo) === "video" && <Video className="h-3.5 w-3.5 shrink-0 opacity-75" />}
@@ -153,7 +201,7 @@ export function ChatComposer({
         <div className="flex items-center gap-3">
           {isRecording ? (
             <div className="flex min-w-0 flex-1 items-center gap-3 rounded-full bg-secondary px-2 py-2 shadow-sm">
-              <Button type="button" variant="ghost" size="icon" className="shrink-0 rounded-full text-muted-foreground hover:text-red-500" onClick={onCancelRecording} disabled={isSending} aria-label="Cancelar gravacao">
+              <Button type="button" variant="ghost" size="icon" className="shrink-0 rounded-full text-muted-foreground hover:text-red-500" onClick={onCancelRecording} disabled={isSending} aria-label="Cancelar gravação">
                 <Trash2 className="h-5 w-5" />
               </Button>
 
@@ -177,20 +225,20 @@ export function ChatComposer({
                 })}
               </div>
 
-              <Button type="button" variant="ghost" size="icon" className="shrink-0 rounded-full text-rose-400 hover:bg-rose-400/10 hover:text-rose-400" onClick={onToggleRecordingPause} disabled={isSending} aria-label={isRecordingPaused ? "Retomar gravacao" : "Pausar gravacao"}>
+              <Button type="button" variant="ghost" size="icon" className="shrink-0 rounded-full text-rose-400 hover:bg-rose-400/10 hover:text-rose-400" onClick={onToggleRecordingPause} disabled={isSending} aria-label={isRecordingPaused ? "Retomar gravação" : "Pausar gravação"}>
                 {isRecordingPaused ? <Mic className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
               </Button>
 
-              <Button type="button" disabled={isSending} size="icon" className="shrink-0 rounded-full bg-teal-500 text-white hover:bg-teal-600" onClick={onSendRecording} aria-label="Enviar audio gravado">
+              <Button type="button" disabled={isSending} size="icon" className="shrink-0 rounded-full bg-teal-500 text-white hover:bg-teal-600" onClick={onSendRecording} aria-label="Enviar áudio gravado">
                 <Send className="h-5 w-5" />
               </Button>
             </div>
           ) : (
             <>
-              <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-foreground" onClick={onOpenInternalNote} aria-label="Criar anotacao interna">
+              <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-foreground" onClick={onOpenInternalNote} aria-label="Criar anotação interna">
                 <PenLine className="h-5 w-5" />
               </Button>
-              <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-foreground" onClick={onStartRecording} disabled={isSending || !!attachment} aria-label="Gravar audio">
+              <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-foreground" onClick={onStartRecording} disabled={isSending || !!attachment} aria-label="Gravar áudio">
                 <Mic className="h-5 w-5" />
               </Button>
             </>
@@ -225,7 +273,7 @@ export function ChatComposer({
                       <span className="flex h-9 w-9 items-center justify-center rounded-full bg-rose-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
                         <Video className="h-5 w-5 text-current" />
                       </span>
-                      Videos
+                      Vídeos
                     </DropdownMenuItem>
                     <DropdownMenuItem className={attachmentMenuItemClass} onSelect={() => fileInputRef.current?.click()}>
                       <span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
@@ -237,13 +285,13 @@ export function ChatComposer({
                       <span className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
                         <Camera className="h-5 w-5 text-current" />
                       </span>
-                      Camera
+                      Câmera
                     </DropdownMenuItem>
                     <DropdownMenuItem aria-disabled className={disabledAttachmentMenuItemClass} onSelect={(event) => event.preventDefault()}>
                       <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
                         <MapPin className="h-5 w-5 text-current" />
                       </span>
-                      Localizacao
+                      Localização
                     </DropdownMenuItem>
                     <DropdownMenuItem aria-disabled className={disabledAttachmentMenuItemClass} onSelect={(event) => event.preventDefault()}>
                       <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">

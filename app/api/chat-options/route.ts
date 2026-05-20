@@ -144,7 +144,7 @@ function getFirstReadableStringField(fields: Record<string, unknown>) {
 function isInactiveAirtableTag(record: AirtableRecord) {
   const status = getStringField(record.fields ?? {}, ["Status", "status", "Ativo", "ativo"])
 
-  return ["inativo", "inactive", "desativado", "excluido", "excluÃ­do", "false", "nao", "nÃ£o"].includes(status.toLowerCase())
+  return ["inativo", "inactive", "desativado", "excluido", "excluído", "false", "nao", "não"].includes(status.toLowerCase())
 }
 
 async function fetchAirtableRecords(table: string) {
@@ -245,13 +245,13 @@ export async function GET() {
   try {
     chats = await fetchCatalogChats()
   } catch (error) {
-    errors.push(error instanceof Error ? error.message : "Nao foi possivel carregar opcoes do Supabase.")
+    errors.push(error instanceof Error ? error.message : "Não foi possível carregar opções do Supabase.")
   }
 
   try {
     airtableTags = await fetchAirtableTagOptions()
   } catch (error) {
-    errors.push(error instanceof Error ? error.message : "Nao foi possivel carregar tags do Airtable.")
+    errors.push(error instanceof Error ? error.message : "Não foi possível carregar tags do Airtable.")
   }
 
   const fallbackTags = getTagOptions(chats).filter((tag) => /^rec[a-zA-Z0-9]+$/.test(tag.id))

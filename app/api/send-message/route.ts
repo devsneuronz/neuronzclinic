@@ -115,7 +115,7 @@ async function uploadFile(file: File, chatId: string) {
   const baseUrl = getSupabaseBaseUrl()
 
   if (!baseUrl || !SUPABASE_PUBLISHABLE_KEY) {
-    throw new Error("Configuracao do Supabase ausente para upload de anexos.")
+    throw new Error("Configuração do Supabase ausente para upload de anexos.")
   }
 
   const safeChatId = chatId.replace(/[^a-zA-Z0-9@._-]/g, "-")
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
     const attachment = file instanceof File && file.size > 0 ? file : null
 
     if (!chatId) {
-      return NextResponse.json({ message: "chat_id e obrigatorio." }, { status: 400 })
+      return NextResponse.json({ message: "chat_id e obrigatório." }, { status: 400 })
     }
 
     if (!text && !attachment) {
@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return NextResponse.json(
       {
-        message: error instanceof Error ? error.message : "Nao foi possivel enviar a mensagem.",
+        message: error instanceof Error ? error.message : "Não foi possível enviar a mensagem.",
       },
       { status: 500 },
     )

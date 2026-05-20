@@ -82,7 +82,7 @@ export const MessageBubble = memo(
               <Button type="button" variant="ghost" size="icon-sm" className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground" onClick={() => onToggleSelection(message)} aria-label="Selecionar mensagem">
                 <CheckSquare className="h-4 w-4" />
               </Button>
-              <Button type="button" variant="ghost" size="icon-sm" className="h-7 w-7 rounded-full text-muted-foreground hover:text-amber-600" onClick={() => onCreateNote(message)} aria-label="Criar anotacao vinculada">
+              <Button type="button" variant="ghost" size="icon-sm" className="h-7 w-7 rounded-full text-muted-foreground hover:text-amber-600" onClick={() => onCreateNote(message)} aria-label="Criar anotação vinculada">
                 <PenLine className="h-4 w-4" />
               </Button>
               {fromMe && (
@@ -119,7 +119,7 @@ export const MessageBubble = memo(
                 )}
               >
                 <div className="mb-0.5 flex min-w-0 items-center gap-1.5">
-                  <p className={cn("truncate text-[12px] font-semibold", quotedMessage.fromMe ? "text-[#008069] dark:text-[#06cf9c]" : "text-[#3b82c4] dark:text-[#53bdeb]")}>{quotedMessage.fromMe ? "Voce" : getDisplayName(chat)}</p>
+                  <p className={cn("truncate text-[12px] font-semibold", quotedMessage.fromMe ? "text-[#008069] dark:text-[#06cf9c]" : "text-[#3b82c4] dark:text-[#53bdeb]")}>{quotedMessage.fromMe ? "Você" : getDisplayName(chat)}</p>
                 </div>
                 <div className="flex min-w-0 items-center gap-1.5 text-(--chat-muted-foreground)">
                   {quotedKind === "image" && <FileImage className="h-3.5 w-3.5 shrink-0 opacity-75" />}

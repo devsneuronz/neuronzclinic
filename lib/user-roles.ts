@@ -7,6 +7,8 @@ export type CurrentUser = {
   source: "airtable" | "fallback" | "session"
 }
 
+export type MentionableUser = Pick<CurrentUser, "email" | "name" | "role">
+
 export const FALLBACK_ADMIN_EMAILS = ["p.augustocardoso@gmail.com"]
 
 export function normalizeUserRole(value: unknown): UserRole {

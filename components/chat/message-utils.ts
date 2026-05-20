@@ -36,8 +36,8 @@ export function getMessagePreviewText(message: MessageRecord) {
   if (message.content?.trim()) return message.content.trim();
   const kind = getMediaKind(message);
   if (kind === "image") return "Foto";
-  if (kind === "video") return "Video";
-  if (kind === "audio") return "Audio";
+  if (kind === "video") return "Vídeo";
+  if (kind === "audio") return "Áudio";
   if (kind === "sticker") return "Figurinha";
   if (kind === "file") return "Arquivo";
   return "Mensagem";

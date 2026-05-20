@@ -173,7 +173,7 @@ export async function GET() {
     try {
       professionals = await getProfessionals(professionalTable.name)
     } catch (error) {
-      errors.push(error instanceof Error ? error.message : "Nao foi possivel carregar profissionais do Airtable.")
+      errors.push(error instanceof Error ? error.message : "Não foi possível carregar profissionais do Airtable.")
     }
   }
 
@@ -188,7 +188,7 @@ export async function GET() {
         ),
       ).sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }))
     } catch (error) {
-      errors.push(error instanceof Error ? error.message : "Nao foi possivel carregar tipos do Airtable.")
+      errors.push(error instanceof Error ? error.message : "Não foi possível carregar tipos do Airtable.")
     }
   }
 

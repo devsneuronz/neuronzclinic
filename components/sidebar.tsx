@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { getRoleLabel, UserRole } from "@/lib/user-roles";
 import { Button } from "./ui/button";
 import { Logo } from "./ui/logo";
+import { NoteMentionNotifications } from "./chat/note-mention-notifications";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/", roles: ["admin", "manager", "user"] },
@@ -66,6 +67,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
             </Link>
           );
         })}
+        <NoteMentionNotifications user={user} isCollapsed={isCollapsed} />
       </nav>
 
       <div className="border-t p-4">

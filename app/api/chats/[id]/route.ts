@@ -164,17 +164,17 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const chatId = decodeURIComponent(id || "").trim()
 
     if (!chatId) {
-      return NextResponse.json({ message: "ID do chat e obrigatorio." }, { status: 400 })
+      return NextResponse.json({ message: "ID do chat e obrigatório." }, { status: 400 })
     }
 
     const body = await request.json().catch(() => null)
     if (!body || typeof body !== "object" || Array.isArray(body)) {
-      return NextResponse.json({ message: "Payload invalido." }, { status: 400 })
+      return NextResponse.json({ message: "Payload inválido." }, { status: 400 })
     }
 
     const currentChat = await fetchCurrentChat(chatId)
     if (!currentChat) {
-      return NextResponse.json({ message: "Contato nao encontrado." }, { status: 404 })
+      return NextResponse.json({ message: "Contato não encontrado." }, { status: 404 })
     }
 
     const patch = buildPatch(body as RawChat, currentChat)
@@ -201,7 +201,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     })
   } catch (error) {
     return NextResponse.json(
-      { message: error instanceof Error ? error.message : "Nao foi possivel atualizar o contato." },
+      { message: error instanceof Error ? error.message : "Não foi possível atualizar o contato." },
       { status: 500 },
     )
   }

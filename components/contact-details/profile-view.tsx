@@ -246,7 +246,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
       setContactInfo(getContactInfoValues(chat));
       setContactInfoFeedback({
         type: "error",
-        message: error instanceof Error ? error.message : "Nao foi possivel salvar as informacoes do contato.",
+        message: error instanceof Error ? error.message : "Não foi possível salvar as informações do contato.",
       });
     } finally {
       setIsSavingContactInfo(false);
@@ -367,7 +367,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
           setContactNotes([]);
           setContactNoteFeedback({
             type: "error",
-            message: error instanceof Error ? error.message : "Nao foi possivel carregar as anotacoes do contato.",
+            message: error instanceof Error ? error.message : "Não foi possível carregar as anotações do contato.",
           });
         })
         .finally(() => {
@@ -408,7 +408,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
       const data = (await response.json()) as { id?: string; message?: string };
 
       if (!response.ok) {
-        throw new Error(data.message || "Nao foi possivel criar o agendamento.");
+        throw new Error(data.message || "Não foi possível criar o agendamento.");
       }
 
       setAppointmentFeedback({ type: "success", message: data.message || "Agendamento criado com sucesso." });
@@ -428,7 +428,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
     } catch (error) {
       setAppointmentFeedback({
         type: "error",
-        message: error instanceof Error ? error.message : "Nao foi possivel criar o agendamento.",
+        message: error instanceof Error ? error.message : "Não foi possível criar o agendamento.",
       });
     } finally {
       setIsCreatingAppointment(false);
@@ -471,7 +471,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
       const data = (await response.json()) as { message?: string };
 
       if (!response.ok) {
-        throw new Error(data.message || "Nao foi possivel criar o aviso/tarefa.");
+        throw new Error(data.message || "Não foi possível criar o aviso/tarefa.");
       }
 
       setTaskFeedback({ type: "success", message: data.message || "Aviso/tarefa criado com sucesso." });
@@ -486,7 +486,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
     } catch (error) {
       setTaskFeedback({
         type: "error",
-        message: error instanceof Error ? error.message : "Nao foi possivel criar o aviso/tarefa.",
+        message: error instanceof Error ? error.message : "Não foi possível criar o aviso/tarefa.",
       });
     } finally {
       setIsCreatingTask(false);
@@ -546,11 +546,11 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
 
       setContactNotes((current) => [note, ...current.filter((currentNote) => currentNote.id !== note.id)]);
       setContactNoteDraft("");
-      setContactNoteFeedback({ type: "success", message: "Anotacao salva." });
+      setContactNoteFeedback({ type: "success", message: "Anotação salva." });
     } catch (error) {
       setContactNoteFeedback({
         type: "error",
-        message: error instanceof Error ? error.message : "Nao foi possivel salvar a anotacao do contato.",
+        message: error instanceof Error ? error.message : "Não foi possível salvar a anotação do contato.",
       });
     } finally {
       setIsSavingContactNote(false);
@@ -569,7 +569,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
       setContactNotes(previousNotes);
       setContactNoteFeedback({
         type: "error",
-        message: error instanceof Error ? error.message : "Nao foi possivel apagar a anotacao do contato.",
+        message: error instanceof Error ? error.message : "Não foi possível apagar a anotação do contato.",
       });
     }
   }
@@ -904,7 +904,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                 </div>
                 <div className="mx-1 mt-3 flex items-center justify-between gap-3">
                   <p className={cn("text-xs", contactInfoFeedback?.type === "error" ? "text-destructive" : "text-muted-foreground")}>
-                    {isSavingContactInfo ? "Salvando informacoes..." : contactInfoFeedback?.message || (hasUnsavedContactInfo ? "Alteracoes pendentes." : "Tudo salvo.")}
+                    {isSavingContactInfo ? "Salvando informações..." : contactInfoFeedback?.message || (hasUnsavedContactInfo ? "Alterações pendentes." : "Tudo salvo.")}
                   </p>
                   <Button type="button" size="sm" disabled={!hasUnsavedContactInfo || isSavingContactInfo || !chat?.id} onClick={() => void handleSaveContactInfo()}>
                     {isSavingContactInfo ? "Salvando..." : "Salvar"}
@@ -1049,17 +1049,17 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
               className="max-h-48 min-h-24 resize-y"
               value={contactNoteDraft}
               onChange={(event) => setContactNoteDraft(event.target.value)}
-              placeholder="Digite uma nova anotacao"
+              placeholder="Digite uma nova anotação"
               disabled={!chat?.chat_id || isSavingContactNote}
             />
           </Field>
 
           <div className="mt-3 flex items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">
-              {isLoadingContactNotes ? "Carregando anotacoes..." : `${contactNotes.length} anotacao${contactNotes.length === 1 ? "" : "es"}`}
+              {isLoadingContactNotes ? "Carregando anotações..." : `${contactNotes.length} anotação${contactNotes.length === 1 ? "" : "es"}`}
             </p>
             <Button type="button" size="sm" disabled={!chat?.chat_id || !contactNoteDraft.trim() || isSavingContactNote} onClick={() => void handleCreateContactNote()}>
-              {isSavingContactNote ? "Salvando..." : "Salvar anotacao"}
+              {isSavingContactNote ? "Salvando..." : "Salvar anotação"}
             </Button>
           </div>
 
@@ -1071,13 +1071,13 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
 
           <div className="mt-3 space-y-2">
             {!isLoadingContactNotes && contactNotes.length === 0 ? (
-              <p className="rounded-md border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">Nenhuma anotacao registrada.</p>
+              <p className="rounded-md border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">Nenhuma anotação registrada.</p>
             ) : (
               contactNotes.map((note) => (
                 <div key={note.id} className="rounded-md border border-border bg-card px-3 py-2">
                   <div className="mb-1 flex items-center justify-between gap-2">
                     <span className="truncate text-[11px] text-muted-foreground">{getReadableDateTime(note.updated_at || note.created_at)}</span>
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => void handleDeleteContactNote(note.id)} aria-label="Apagar anotacao">
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => void handleDeleteContactNote(note.id)} aria-label="Apagar anotação">
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>

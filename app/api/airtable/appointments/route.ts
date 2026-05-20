@@ -222,7 +222,7 @@ export async function GET(request: Request) {
     })
   } catch (error) {
     return NextResponse.json(
-      { latestAppointment: null, message: error instanceof Error ? error.message : "Nao foi possivel carregar o ultimo agendamento." },
+      { latestAppointment: null, message: error instanceof Error ? error.message : "Não foi possível carregar o último agendamento." },
       { status: 200 },
     )
   }
@@ -249,7 +249,7 @@ export async function POST(request: Request) {
   }
 
   if (!isAirtableRecordId(professionalId)) {
-    return NextResponse.json({ message: "Profissional invalido." }, { status: 400 })
+    return NextResponse.json({ message: "Profissional inválido." }, { status: 400 })
   }
 
   const startDate = new Date(startDateTime)
@@ -260,7 +260,7 @@ export async function POST(request: Request) {
   try {
     const contactId = await findContactId({ chatId, contactPhone })
     if (!contactId) {
-      return NextResponse.json({ message: "Contato nao encontrado no Airtable para vincular como paciente." }, { status: 404 })
+      return NextResponse.json({ message: "Contato não encontrado no Airtable para vincular como paciente." }, { status: 404 })
     }
 
     const fields: Record<string, unknown> = {
@@ -283,7 +283,7 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     return NextResponse.json(
-      { message: error instanceof Error ? error.message : "Nao foi possivel criar o agendamento no Airtable." },
+      { message: error instanceof Error ? error.message : "Não foi possível criar o agendamento no Airtable." },
       { status: 500 },
     )
   }

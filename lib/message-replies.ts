@@ -87,8 +87,8 @@ function getQuotedMessagePreview(quotedMessage: Record<string, unknown>) {
   return (
     firstString(quotedMessage.conversation, extendedText?.text, image?.caption, video?.caption, document?.caption) ||
     (image ? "Foto" : "") ||
-    (video ? "Video" : "") ||
-    (audio ? "Audio" : "") ||
+    (video ? "Vídeo" : "") ||
+    (audio ? "Áudio" : "") ||
     (document ? "Documento" : "") ||
     (sticker ? "Figurinha" : "") ||
     "Mensagem"
@@ -100,8 +100,8 @@ function getMessagePreview(message: MessageRecord) {
 
   const type = `${message.media_mime_type || ""} ${message.message_type || ""}`.toLowerCase()
   if (type.includes("image")) return "Foto"
-  if (type.includes("video")) return "Video"
-  if (type.includes("audio")) return "Audio"
+  if (type.includes("video")) return "Vídeo"
+  if (type.includes("audio")) return "Áudio"
   if (type.includes("sticker")) return "Figurinha"
   if (type.includes("document")) return "Documento"
 

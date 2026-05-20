@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
       const payloads: ForwardPayload[] = messages.map((message) => buildForwardPayload(message, targetChatId))
 
       if (!targetChatId || payloads.length === 0) {
-        return NextResponse.json({ message: "target_chat_id e mensagens sao obrigatorios." }, { status: 400 })
+        return NextResponse.json({ message: "target_chat_id e mensagens sao obrigatórios." }, { status: 400 })
       }
 
       const invalidMediaPayload = payloads.find((payload: ForwardPayload) => payload.type !== "text" && !("media_url" in payload && payload.media_url))
@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
       const payload: ReadPayload = buildReadPayload(chatId, messages)
 
       if (!chatId) {
-        return NextResponse.json({ message: "chat_id e obrigatorio." }, { status: 400 })
+        return NextResponse.json({ message: "chat_id e obrigatório." }, { status: 400 })
       }
 
       const result = await postWebhook(READ_MESSAGE_WEBHOOK_URL, payload)
@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
       if (!result.ok) {
         return NextResponse.json(
           {
-            message: "Webhook recusou a confirmacao de leitura.",
+            message: "Webhook recusou a confirmação de leitura.",
             details: result.body,
             payload,
           },
@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
     const payloads: DeletePayload[] = messages.map((message) => buildDeletePayload(message, fallbackChatId))
 
     if (payloads.some((payload: DeletePayload) => !payload.remoteJid || !payload.messageId)) {
-      return NextResponse.json({ message: "remoteJid e messageId sao obrigatorios." }, { status: 400 })
+      return NextResponse.json({ message: "remoteJid e messageId sao obrigatórios." }, { status: 400 })
     }
 
     const results: Array<{ payload: DeletePayload; webhook: unknown; status: number }> = []
@@ -223,7 +223,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return NextResponse.json(
       {
-        message: error instanceof Error ? error.message : "Nao foi possivel executar a acao da mensagem.",
+        message: error instanceof Error ? error.message : "Não foi possível executar a ação da mensagem.",
       },
       { status: 500 },
     )

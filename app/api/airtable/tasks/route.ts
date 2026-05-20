@@ -149,11 +149,11 @@ export async function POST(request: Request) {
   const observations = getString(body.observations)
 
   if (!type || !status || !createdAt || !dueDate || !responsibleUserId || !subject) {
-    return NextResponse.json({ message: "Preencha tipo, status, prazo, responsavel e assunto." }, { status: 400 })
+    return NextResponse.json({ message: "Preencha tipo, status, prazo, responsável e assunto." }, { status: 400 })
   }
 
   if (!isAirtableRecordId(responsibleUserId)) {
-    return NextResponse.json({ message: "Usuario responsavel invalido." }, { status: 400 })
+    return NextResponse.json({ message: "Usuário responsável inválido." }, { status: 400 })
   }
 
   const createdAtDate = new Date(createdAt)
@@ -165,7 +165,7 @@ export async function POST(request: Request) {
   try {
     const contactId = await findContactId({ chatId, contactPhone })
     if (!contactId) {
-      return NextResponse.json({ message: "Contato nao encontrado no Airtable para vincular ao aviso/tarefa." }, { status: 404 })
+      return NextResponse.json({ message: "Contato não encontrado no Airtable para vincular ao aviso/tarefa." }, { status: 404 })
     }
 
     const fields: Record<string, unknown> = {
@@ -189,7 +189,7 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     return NextResponse.json(
-      { message: error instanceof Error ? error.message : "Nao foi possivel criar o aviso/tarefa no Airtable." },
+      { message: error instanceof Error ? error.message : "Não foi possível criar o aviso/tarefa no Airtable." },
       { status: 500 },
     )
   }

@@ -387,7 +387,7 @@ export async function sendMessage({ chatId, text, file, replyTo }: SendMessageIn
 
   if (!response.ok) {
     const error = await response.json().catch(() => null)
-    throw new Error(error?.message || `Nao foi possivel enviar a mensagem (${response.status}).`)
+    throw new Error(error?.message || `Não foi possível enviar a mensagem (${response.status}).`)
   }
 
   return response.json()
@@ -420,7 +420,7 @@ export async function forwardMessages({ targetChatId, messages }: ForwardMessage
 
   if (!response.ok) {
     const error = await response.json().catch(() => null)
-    throw new Error(error?.message || `Nao foi possivel encaminhar a mensagem (${response.status}).`)
+    throw new Error(error?.message || `Não foi possível encaminhar a mensagem (${response.status}).`)
   }
 
   return response.json()
@@ -454,7 +454,7 @@ export async function deleteMessages({ chatId, messages }: DeleteMessagesInput) 
 
   if (!response.ok) {
     const error = await response.json().catch(() => null)
-    throw new Error(error?.message || `Nao foi possivel apagar a mensagem (${response.status}).`)
+    throw new Error(error?.message || `Não foi possível apagar a mensagem (${response.status}).`)
   }
 
   return response.json()
@@ -489,7 +489,7 @@ export async function markChatAsRead({ chatId, messages = [] }: MarkChatAsReadIn
 
   if (!response.ok) {
     const error = await response.json().catch(() => null)
-    throw new Error(error?.message || `Nao foi possivel confirmar a leitura (${response.status}).`)
+    throw new Error(error?.message || `Não foi possível confirmar a leitura (${response.status}).`)
   }
 
   return response.json()
@@ -506,7 +506,7 @@ export async function updateChatDetails({ id, ...payload }: UpdateChatDetailsInp
 
   if (!response.ok) {
     const error = await response.json().catch(() => null)
-    throw new Error(error?.message || `Nao foi possivel atualizar o contato (${response.status}).`)
+    throw new Error(error?.message || `Não foi possível atualizar o contato (${response.status}).`)
   }
 
   return response.json() as Promise<{ chat: ChatRecord }>
@@ -519,7 +519,7 @@ export async function fetchChatNotes(chatId: string) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => null)
-    throw new Error(error?.message || `Nao foi possivel carregar as anotacoes (${response.status}).`)
+    throw new Error(error?.message || `Não foi possível carregar as anotações (${response.status}).`)
   }
 
   const data = (await response.json()) as { notes?: ChatNoteRecord[] }
@@ -549,11 +549,11 @@ export async function createChatNote({
 
   if (!response.ok) {
     const error = await response.json().catch(() => null)
-    throw new Error(error?.message || `Nao foi possivel salvar a anotacao (${response.status}).`)
+    throw new Error(error?.message || `Não foi possível salvar a anotação (${response.status}).`)
   }
 
   const data = (await response.json()) as { note?: ChatNoteRecord }
-  if (!data.note) throw new Error("A anotacao foi salva, mas a API nao retornou o registro.")
+  if (!data.note) throw new Error("A anotação foi salva, mas a API não retornou o registro.")
   return data.note
 }
 
@@ -564,7 +564,7 @@ export async function deleteChatNote(noteId: string) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => null)
-    throw new Error(error?.message || `Nao foi possivel apagar a anotacao (${response.status}).`)
+    throw new Error(error?.message || `Não foi possível apagar a anotação (${response.status}).`)
   }
 
   return response.json() as Promise<{ ok: true }>
@@ -577,7 +577,7 @@ export async function fetchContactNotes(chatId: string) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => null)
-    throw new Error(error?.message || `Nao foi possivel carregar as anotacoes do contato (${response.status}).`)
+    throw new Error(error?.message || `Não foi possível carregar as anotações do contato (${response.status}).`)
   }
 
   const data = (await response.json()) as { notes?: ContactNoteRecord[] }
@@ -599,11 +599,11 @@ export async function createContactNote({ chatId, contactPhone = null, content }
 
   if (!response.ok) {
     const error = await response.json().catch(() => null)
-    throw new Error(error?.message || `Nao foi possivel salvar a anotacao do contato (${response.status}).`)
+    throw new Error(error?.message || `Não foi possível salvar a anotação do contato (${response.status}).`)
   }
 
   const data = (await response.json()) as { note?: ContactNoteRecord }
-  if (!data.note) throw new Error("A anotacao foi salva, mas a API nao retornou o registro.")
+  if (!data.note) throw new Error("A anotação foi salva, mas a API não retornou o registro.")
   return data.note
 }
 
@@ -614,7 +614,7 @@ export async function deleteContactNote(noteId: string) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => null)
-    throw new Error(error?.message || `Nao foi possivel apagar a anotacao do contato (${response.status}).`)
+    throw new Error(error?.message || `Não foi possível apagar a anotação do contato (${response.status}).`)
   }
 
   return response.json() as Promise<{ ok: true }>

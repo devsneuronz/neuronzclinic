@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { getDefaultUser, isFallbackAdminEmail, normalizeUserRole } from "@/lib/user-roles"
+import { FALLBACK_ADMIN_EMAILS, getDefaultUser, isFallbackAdminEmail, normalizeUserRole } from "@/lib/user-roles"
 
 const AIRTABLE_BASE_ID = "app03ti52QQD3W9L2"
 const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY
@@ -119,12 +119,61 @@ async function findUserByEmail(email: string) {
   return null
 }
 
+async function listActiveUsers() {
+  const indexedUsers = new Map<string, { email: string; name: string; role: ReturnType<typeof normalizeUserRole> }>()
+
+  for (const table of TABLE_CANDIDATES) {
+    const records = await fetchAllRecords(table)
+
+    for (const record of records) {
+      const fields = record.fields ?? {}
+      const email = getEmail(fields)?.toLowerCase()
+
+      if (!email || isInactive(fields) || indexedUsers.has(email)) {
+        continue
+      }
+
+      indexedUsers.set(email, {
+        email,
+        name: getName(fields, email),
+        role: getRole(fields),
+      })
+    }
+
+    if (indexedUsers.size > 0) {
+      break
+    }
+  }
+
+  for (const email of FALLBACK_ADMIN_EMAILS) {
+    if (!indexedUsers.has(email)) {
+      const user = getDefaultUser(email)
+      indexedUsers.set(email, {
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      })
+    }
+  }
+
+  return Array.from(indexedUsers.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const email = searchParams.get("email")?.trim().toLowerCase()
 
   if (!email) {
-    return NextResponse.json({ error: "Missing email" }, { status: 400 })
+    if (!AIRTABLE_TOKEN) {
+      return NextResponse.json({
+        users: FALLBACK_ADMIN_EMAILS.map((fallbackEmail) => {
+          const user = getDefaultUser(fallbackEmail)
+          return { email: user.email, name: user.name, role: user.role }
+        }),
+      })
+    }
+
+    return NextResponse.json({ users: await listActiveUsers() })
   }
 
   if (isFallbackAdminEmail(email) || !AIRTABLE_TOKEN) {

@@ -12,7 +12,7 @@ export function getAttachmentLabel(file: File) {
   const kind = getAttachmentType(file);
 
   if (kind === "image") return "Foto";
-  if (kind === "video") return "Video";
-  if (kind === "audio") return "Audio";
+  if (kind === "video") return "Vídeo";
+  if (kind === "audio") return "Áudio";
   return "Documento";
 }

@@ -6,6 +6,8 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { readChatDraft, writeChatDraft } from "@/lib/chat-drafts";
 import { createSupabaseRealtimeSubscription } from "@/lib/supabase-realtime";
 import { ChatRecord, MessageRecord, createChatNote, deleteChatNote, fetchChatNotes, fetchChats, type ChatNoteRecord } from "@/lib/supabase-rest";
+import { fetchMentionableUsers } from "@/lib/user-mentions";
+import type { MentionableUser } from "@/lib/user-roles";
 import { AttachmentPreviewModal } from "./attachment-preview-modal";
 import { ChatComposer } from "./chat-composer";
 import { getAttachmentType } from "./chat-attachment-utils";
@@ -125,6 +127,7 @@ export function ChatWindow({
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [internalNotes, setInternalNotes] = useState<InternalNote[]>([]);
+  const [noteMentionUsers, setNoteMentionUsers] = useState<MentionableUser[]>([]);
   const [isInternalNoteOpen, setIsInternalNoteOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteLinkedMessage, setNoteLinkedMessage] = useState<MessageRecord | null>(null);
@@ -289,7 +292,7 @@ export function ChatWindow({
         if (!isMounted || requestId !== forwardSearchRequestIdRef.current) return;
         setForwardTargetResults([]);
         setHasMoreForwardTargets(false);
-        setMessageActionError(error instanceof Error ? error.message : "Nao foi possivel buscar os chats.");
+        setMessageActionError(error instanceof Error ? error.message : "Não foi possível buscar os chats.");
       } finally {
         if (isMounted && requestId === forwardSearchRequestIdRef.current) setIsLoadingForwardTargets(false);
       }
@@ -397,7 +400,7 @@ export function ChatWindow({
       .catch((error) => {
         if (!isMounted) return;
         setInternalNotes([]);
-        setMessageActionError(error instanceof Error ? error.message : "Nao foi possivel carregar as anotacoes.");
+        setMessageActionError(error instanceof Error ? error.message : "Não foi possível carregar as anotações.");
       });
 
     return () => {
@@ -426,6 +429,22 @@ export function ChatWindow({
       unsubscribe?.();
     };
   }, [chat?.chat_id]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetchMentionableUsers()
+      .then((users) => {
+        if (isMounted) setNoteMentionUsers(users);
+      })
+      .catch(() => {
+        if (isMounted) setNoteMentionUsers([]);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -546,7 +565,7 @@ export function ChatWindow({
     if (!content) return;
 
     const linkedKind = noteLinkedMessage ? getMediaKind(noteLinkedMessage) : null;
-    const linkedPrefix = linkedKind === "image" ? "Foto" : linkedKind === "video" ? "Video" : linkedKind === "audio" ? "Audio" : linkedKind === "file" ? "Arquivo" : null;
+    const linkedPrefix = linkedKind === "image" ? "Foto" : linkedKind === "video" ? "Vídeo" : linkedKind === "audio" ? "Áudio" : linkedKind === "file" ? "Arquivo" : null;
 
     const optimisticNote: InternalNote = {
       id: `optimistic-note-${crypto.randomUUID()}`,
@@ -576,7 +595,7 @@ export function ChatWindow({
     } catch (error) {
       if (currentChatIdRef.current !== optimisticNote.chatId) return;
       setInternalNotes((current) => current.filter((note) => note.id !== optimisticNote.id));
-      setMessageActionError(error instanceof Error ? error.message : "Nao foi possivel salvar a anotacao.");
+      setMessageActionError(error instanceof Error ? error.message : "Não foi possível salvar a anotação.");
       setIsInternalNoteOpen(true);
       setNoteDraft(content);
       setNoteLinkedMessage(noteLinkedMessage);
@@ -594,7 +613,7 @@ export function ChatWindow({
     } catch (error) {
       if (currentChatIdRef.current !== deleteChatId) return;
       setInternalNotes(previousNotes);
-      setMessageActionError(error instanceof Error ? error.message : "Nao foi possivel apagar a anotacao.");
+      setMessageActionError(error instanceof Error ? error.message : "Não foi possível apagar a anotação.");
     }
   }
 
@@ -657,7 +676,7 @@ export function ChatWindow({
       });
       setHasMoreForwardTargets(data.length === FORWARD_TARGET_PAGE_SIZE);
     } catch (error) {
-      setMessageActionError(error instanceof Error ? error.message : "Nao foi possivel carregar mais chats.");
+      setMessageActionError(error instanceof Error ? error.message : "Não foi possível carregar mais chats.");
     } finally {
       setIsLoadingMoreForwardTargets(false);
     }
@@ -684,7 +703,7 @@ export function ChatWindow({
       setSelectedForwardTarget("");
       clearSelectedMessages();
     } catch (error) {
-      setMessageActionError(error instanceof Error ? error.message : "Nao foi possivel encaminhar a mensagem.");
+      setMessageActionError(error instanceof Error ? error.message : "Não foi possível encaminhar a mensagem.");
     } finally {
       setIsForwarding(false);
     }
@@ -724,7 +743,7 @@ export function ChatWindow({
       setDeleteConfirmationMessages([]);
       clearSelectedMessages();
     } catch (error) {
-      setMessageActionError(error instanceof Error ? error.message : "Nao foi possivel apagar as mensagens.");
+      setMessageActionError(error instanceof Error ? error.message : "Não foi possível apagar as mensagens.");
     }
   }
 
@@ -746,7 +765,7 @@ export function ChatWindow({
     setRecordingError(null);
 
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      setRecordingError("Seu navegador nao oferece suporte a gravacao de audio.");
+      setRecordingError("Seu navegador não oferece suporte à gravação de áudio.");
       return;
     }
 
@@ -797,14 +816,14 @@ export function ChatWindow({
         try {
           await onSendMessage({ text: "", file });
         } catch (error) {
-          setRecordingError(error instanceof Error ? error.message : "Nao foi possivel enviar o audio gravado.");
+          setRecordingError(error instanceof Error ? error.message : "Não foi possível enviar o áudio gravado.");
         } finally {
           setIsSending(false);
         }
       };
 
       recorder.onerror = () => {
-        setRecordingError("Nao foi possivel concluir a gravacao.");
+        setRecordingError("Não foi possível concluir a gravação.");
         shouldSendRecordingRef.current = false;
         stopRecording();
       };
@@ -824,7 +843,7 @@ export function ChatWindow({
       stopRecordingStream();
       setIsRecording(false);
       setIsRecordingPaused(false);
-      setRecordingError("Permita o acesso ao microfone para gravar audio.");
+      setRecordingError("Permita o acesso ao microfone para gravar áudio.");
     }
   }
 
@@ -939,6 +958,7 @@ export function ChatWindow({
           isInternalNoteOpen={isInternalNoteOpen}
           noteDraft={noteDraft}
           noteLinkedMessage={noteLinkedMessage}
+          noteMentionUsers={noteMentionUsers}
           fileInputRef={fileInputRef}
           photoInputRef={photoInputRef}
           videoInputRef={videoInputRef}

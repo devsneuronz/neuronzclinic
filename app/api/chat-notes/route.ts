@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     const chatId = getString(request.nextUrl.searchParams.get("chat_id"))
 
     if (!chatId) {
-      return NextResponse.json({ message: "chat_id e obrigatorio." }, { status: 400 })
+      return NextResponse.json({ message: "chat_id e obrigatório." }, { status: 400 })
     }
 
     const select = ["id", "chat_id", "content", "created_at", "linked_message_id", "linked_message_preview", "linked_message_from_me"].join(",")
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ notes: (await response.json()) as RawNote[] })
   } catch (error) {
     return NextResponse.json(
-      { message: error instanceof Error ? error.message : "Nao foi possivel carregar as anotacoes." },
+      { message: error instanceof Error ? error.message : "Não foi possível carregar as anotações." },
       { status: 500 },
     )
   }
@@ -64,14 +64,14 @@ export async function POST(request: NextRequest) {
     const body = (await request.json().catch(() => null)) as RawNote | null
 
     if (!body || typeof body !== "object" || Array.isArray(body)) {
-      return NextResponse.json({ message: "Payload invalido." }, { status: 400 })
+      return NextResponse.json({ message: "Payload inválido." }, { status: 400 })
     }
 
     const chatId = getString(body.chat_id)
     const content = getString(body.content)
 
     if (!chatId || !content) {
-      return NextResponse.json({ message: "chat_id e content sao obrigatorios." }, { status: 400 })
+      return NextResponse.json({ message: "chat_id e content sao obrigatórios." }, { status: 400 })
     }
 
     const note = {
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ note: data[0] ?? note })
   } catch (error) {
     return NextResponse.json(
-      { message: error instanceof Error ? error.message : "Nao foi possivel salvar a anotacao." },
+      { message: error instanceof Error ? error.message : "Não foi possível salvar a anotação." },
       { status: 500 },
     )
   }
@@ -109,7 +109,7 @@ export async function DELETE(request: NextRequest) {
     const id = getString(request.nextUrl.searchParams.get("id"))
 
     if (!id) {
-      return NextResponse.json({ message: "ID da anotacao e obrigatorio." }, { status: 400 })
+      return NextResponse.json({ message: "ID da anotação e obrigatório." }, { status: 400 })
     }
 
     const response = await supabaseRequest(`chat_notes?id=eq.${encodeURIComponent(id)}`, {
@@ -126,7 +126,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ ok: true })
   } catch (error) {
     return NextResponse.json(
-      { message: error instanceof Error ? error.message : "Nao foi possivel apagar a anotacao." },
+      { message: error instanceof Error ? error.message : "Não foi possível apagar a anotação." },
       { status: 500 },
     )
   }

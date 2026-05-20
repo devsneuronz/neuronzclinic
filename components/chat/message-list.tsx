@@ -60,12 +60,12 @@ function InternalNoteBubble({ chat, note, onScrollToMessage, onDeleteNote }: { c
             <MessageSquareText className="h-3.5 w-3.5" />
           </span>
           <span className="font-semibold text-red-600">Pedro</span>
-          <span className="text-yellow-950/55">anotacao interna</span>
+          <span className="text-yellow-950/55">anotação interna</span>
           <button
             type="button"
             className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-yellow-950/45 opacity-0 transition hover:bg-red-500/10 hover:text-red-600 group-hover:opacity-100"
             onClick={() => onDeleteNote(note.id)}
-            aria-label="Apagar anotacao"
+            aria-label="Apagar anotação"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -78,7 +78,7 @@ function InternalNoteBubble({ chat, note, onScrollToMessage, onDeleteNote }: { c
               className="mb-2 w-full rounded border-l-4 border-amber-500 bg-white/55 px-2.5 py-2 text-left text-xs text-yellow-950 transition-colors hover:bg-white/85"
               onClick={() => onScrollToMessage(note.linkedMessageId!)}
             >
-              <span className="block truncate font-semibold">{note.linkedMessageFromMe ? "Voce" : getDisplayName(chat)}</span>
+              <span className="block truncate font-semibold">{note.linkedMessageFromMe ? "Você" : getDisplayName(chat)}</span>
               <span className="mt-0.5 line-clamp-2 text-yellow-950/70">{note.linkedMessagePreview}</span>
             </button>
           )}
@@ -137,7 +137,7 @@ export function MessageList({
           ) : error ? (
             <div className="m-auto max-w-md rounded bg-red-400/30 px-4 py-3 text-sm text-red-500 shadow-sm">{error}</div>
           ) : groupedMessages.length === 0 ? (
-            <div className="shadow-x m-auto rounded border border-input bg-input/30 px-4 py-2 text-sm text-foreground/75 shadow-sm">Esta conversa ainda nao tem mensagens visiveis.</div>
+            <div className="shadow-x m-auto rounded border border-input bg-input/30 px-4 py-2 text-sm text-foreground/75 shadow-sm">Esta conversa ainda não tem mensagens visíveis.</div>
           ) : (
             <>
               <div className="mb-2 flex justify-center">

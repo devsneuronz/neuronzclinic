@@ -16,7 +16,7 @@ const CHAT_PAGE_SIZE = 50;
 const MESSAGE_PAGE_SIZE = 50;
 const CHAT_SYNC_INTERVAL_MS = 5000;
 const MESSAGE_SYNC_INTERVAL_MS = 2500;
-const MEDIA_PREVIEW_LABELS = new Set(["Foto", "Video", "Audio", "Figurinha", "Documento"]);
+const MEDIA_PREVIEW_LABELS = new Set(["Foto", "Vídeo", "Áudio", "Figurinha", "Documento"]);
 const EMPTY_MESSAGES: MessageRecord[] = [];
 
 type ChatPreviewMessage = Pick<LatestChatMessage, "content" | "media_mime_type" | "message_type" | "timestamp_msg" | "from_me">;
@@ -32,8 +32,8 @@ function getOptimisticMessageType(file: File | null) {
 function getMediaPreviewLabel(message: Pick<LatestChatMessage, "media_mime_type" | "message_type">) {
   const type = `${message.media_mime_type || ""} ${message.message_type || ""}`.toLowerCase();
   if (type.includes("image")) return "Foto";
-  if (type.includes("video")) return "Video";
-  if (type.includes("audio")) return "Audio";
+  if (type.includes("video")) return "Vídeo";
+  if (type.includes("audio")) return "Áudio";
   if (type.includes("sticker")) return "Figurinha";
   if (type.includes("document")) return "Documento";
   if (type.includes("file") || type.includes("application/")) return "Documento";
@@ -371,7 +371,7 @@ export default function ChatsPage() {
         });
         setHasMoreSearchChats(data.length === CHAT_PAGE_SIZE);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Nao foi possivel carregar mais resultados.");
+        setError(err instanceof Error ? err.message : "Não foi possível carregar mais resultados.");
       } finally {
         setIsLoadingMoreSearchChats(false);
       }
@@ -390,7 +390,7 @@ export default function ChatsPage() {
       });
       setHasMoreChats(data.length === CHAT_PAGE_SIZE);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Nao foi possivel carregar mais chats.");
+      setError(err instanceof Error ? err.message : "Não foi possível carregar mais chats.");
     } finally {
       setIsLoadingMoreChats(false);
     }
@@ -440,7 +440,7 @@ export default function ChatsPage() {
       setChatHasMoreMessages(selectedChatRemoteId, data.length === MESSAGE_PAGE_SIZE);
       return newMessages.length;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Nao foi possivel carregar mensagens antigas.");
+      setError(err instanceof Error ? err.message : "Não foi possível carregar mensagens antigas.");
       return 0;
     } finally {
       setIsLoadingOlderMessages(false);
@@ -633,7 +633,7 @@ export default function ChatsPage() {
         window.setTimeout(() => void refreshMessagesAfterSend(selectedChatRemoteId, optimisticId), 7000);
       } catch (err) {
         updateChatMessages(selectedChatRemoteId, (current) => current.map((message) => (message.id === optimisticId ? { ...message, status: "error" } : message)));
-        setError(err instanceof Error ? err.message : "Nao foi possivel enviar a mensagem.");
+        setError(err instanceof Error ? err.message : "Não foi possível enviar a mensagem.");
         throw err;
       } finally {
         if (localMediaUrl) {
@@ -683,7 +683,7 @@ export default function ChatsPage() {
         window.setTimeout(() => void refreshMessagesAfterSend(selectedChatRemoteId, optimisticId), 7000);
       } catch (err) {
         updateChatMessages(selectedChatRemoteId, (current) => current.map((message) => (message.id === optimisticId ? { ...message, status: "error" } : message)));
-        setError(err instanceof Error ? err.message : "Nao foi possivel responder a mensagem.");
+        setError(err instanceof Error ? err.message : "Não foi possível responder a mensagem.");
         throw err;
       } finally {
         if (localMediaUrl) {
@@ -737,7 +737,7 @@ export default function ChatsPage() {
         await deleteMessage({ chatId: selectedChatRemoteId, message });
       } catch (err) {
         replaceChatMessages(selectedChatRemoteId, previousMessages);
-        setError(err instanceof Error ? err.message : "Nao foi possivel apagar a mensagem.");
+        setError(err instanceof Error ? err.message : "Não foi possível apagar a mensagem.");
         throw err;
       }
     },
@@ -766,7 +766,7 @@ export default function ChatsPage() {
         await deleteMessages({ chatId: selectedChatRemoteId, messages: messagesToDelete });
       } catch (err) {
         replaceChatMessages(selectedChatRemoteId, previousMessages);
-        setError(err instanceof Error ? err.message : "Nao foi possivel apagar as mensagens.");
+        setError(err instanceof Error ? err.message : "Não foi possível apagar as mensagens.");
         throw err;
       }
     },
@@ -778,7 +778,7 @@ export default function ChatsPage() {
 
     fetch("/api/chat-options")
       .then((response) => {
-        if (!response.ok) throw new Error(`Nao foi possivel carregar opcoes (${response.status}).`);
+        if (!response.ok) throw new Error(`Não foi possível carregar opções (${response.status}).`);
         return response.json() as Promise<{ statuses?: ChatStatusOption[]; tags?: ChatTag[]; errors?: string[] }>;
       })
       .then((data) => {
@@ -791,7 +791,7 @@ export default function ChatsPage() {
         if (!isMounted) return;
         setStatusOptions([]);
         setTagOptions([]);
-        setError(err instanceof Error ? err.message : "Nao foi possivel carregar tags e status.");
+        setError(err instanceof Error ? err.message : "Não foi possível carregar tags e status.");
       });
 
     return () => {
@@ -810,7 +810,7 @@ export default function ChatsPage() {
       })
       .catch((err) => {
         if (!isMounted) return;
-        setError(err instanceof Error ? err.message : "Nao foi possivel carregar os chats.");
+        setError(err instanceof Error ? err.message : "Não foi possível carregar os chats.");
       })
       .finally(() => {
         if (isMounted) setIsLoadingChats(false);
@@ -860,7 +860,7 @@ export default function ChatsPage() {
         setHasMoreChats((current) => current || data.length === CHAT_PAGE_SIZE);
       } catch (err) {
         if (!isMounted) return;
-        setError(err instanceof Error ? err.message : "Nao foi possivel sincronizar os chats.");
+        setError(err instanceof Error ? err.message : "Não foi possível sincronizar os chats.");
       } finally {
         isRefreshing = false;
       }
@@ -896,7 +896,7 @@ export default function ChatsPage() {
         setSearchChats([]);
         setSearchChatsTerm(term);
         setHasMoreSearchChats(false);
-        setError(err instanceof Error ? err.message : "Nao foi possivel buscar os chats.");
+        setError(err instanceof Error ? err.message : "Não foi possível buscar os chats.");
       });
 
     return () => {
@@ -924,7 +924,7 @@ export default function ChatsPage() {
         if (!isMounted) return;
         replaceChatMessages(selectedChatRemoteId, []);
         setChatHasMoreMessages(selectedChatRemoteId, false);
-        setError(err instanceof Error ? err.message : "Nao foi possivel carregar as mensagens.");
+        setError(err instanceof Error ? err.message : "Não foi possível carregar as mensagens.");
       });
 
     return () => {
@@ -950,7 +950,7 @@ export default function ChatsPage() {
         setChatHasMoreMessages(selectedChatRemoteId, data.length === MESSAGE_PAGE_SIZE);
       } catch (err) {
         if (!isMounted) return;
-        setError(err instanceof Error ? err.message : "Nao foi possivel sincronizar as mensagens.");
+        setError(err instanceof Error ? err.message : "Não foi possível sincronizar as mensagens.");
       } finally {
         isRefreshing = false;
       }
@@ -991,7 +991,7 @@ export default function ChatsPage() {
       })
       .catch((err) => {
         if (!isMounted) return;
-        setError(err instanceof Error ? err.message : "Nao foi possivel carregar os status das mensagens.");
+        setError(err instanceof Error ? err.message : "Não foi possível carregar os status das mensagens.");
       });
 
     return () => {
@@ -1038,7 +1038,7 @@ export default function ChatsPage() {
       })
       .catch((err) => {
         if (!isMounted) return;
-        setError(err instanceof Error ? err.message : "Nao foi possivel carregar as ultimas mensagens.");
+        setError(err instanceof Error ? err.message : "Não foi possível carregar as últimas mensagens.");
       });
 
     return () => {
@@ -1076,7 +1076,7 @@ export default function ChatsPage() {
       });
     } catch (err) {
       restoreSelectedChat(previousChat);
-      setError(err instanceof Error ? err.message : "Nao foi possivel salvar o status da conversa.");
+      setError(err instanceof Error ? err.message : "Não foi possível salvar o status da conversa.");
     }
   }, [restoreSelectedChat, selectedChat, selectedChatId]);
 
@@ -1098,7 +1098,7 @@ export default function ChatsPage() {
       });
     } catch (err) {
       restoreSelectedChat(previousChat);
-      setError(err instanceof Error ? err.message : "Nao foi possivel salvar o status da IA.");
+      setError(err instanceof Error ? err.message : "Não foi possível salvar o status da IA.");
     }
   }, [restoreSelectedChat, selectedChat, selectedChatId]);
 
@@ -1132,7 +1132,7 @@ export default function ChatsPage() {
     try {
       await markChatAsRead({ chatId, messages: incomingMessages });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Nao foi possivel confirmar a leitura.");
+      setError(err instanceof Error ? err.message : "Não foi possível confirmar a leitura.");
     }
   }, []);
 
@@ -1195,7 +1195,7 @@ export default function ChatsPage() {
         });
       } catch (err) {
         restoreSelectedChat(previousChat);
-        const message = err instanceof Error ? err.message : "Nao foi possivel salvar o nome do contato.";
+        const message = err instanceof Error ? err.message : "Não foi possível salvar o nome do contato.";
         setError(message);
         throw new Error(message);
       }
@@ -1221,7 +1221,7 @@ export default function ChatsPage() {
         });
       } catch (err) {
         restoreSelectedChat(previousChat);
-        const message = err instanceof Error ? err.message : "Nao foi possivel salvar as informacoes do contato.";
+        const message = err instanceof Error ? err.message : "Não foi possível salvar as informações do contato.";
         setError(message);
         throw new Error(message);
       }
@@ -1256,7 +1256,7 @@ export default function ChatsPage() {
         });
       } catch (err) {
         restoreSelectedChat(previousChat);
-        setError(err instanceof Error ? err.message : "Nao foi possivel salvar o status do contato.");
+        setError(err instanceof Error ? err.message : "Não foi possível salvar o status do contato.");
       }
     },
     [restoreSelectedChat, selectedChat, selectedChatId],
@@ -1282,7 +1282,7 @@ export default function ChatsPage() {
         });
       } catch (err) {
         restoreSelectedChat(previousChat);
-        setError(err instanceof Error ? err.message : "Nao foi possivel salvar as tags do contato.");
+        setError(err instanceof Error ? err.message : "Não foi possível salvar as tags do contato.");
       }
     },
     [restoreSelectedChat, selectedChat, updateSelectedChatTags],
@@ -1309,7 +1309,7 @@ export default function ChatsPage() {
         });
       } catch (err) {
         restoreSelectedChat(previousChat);
-        setError(err instanceof Error ? err.message : "Nao foi possivel salvar a ordem das tags.");
+        setError(err instanceof Error ? err.message : "Não foi possível salvar a ordem das tags.");
       }
     },
     [restoreSelectedChat, selectedChat],

@@ -109,7 +109,7 @@ export function ForwardMessageDialog({
           <div className="max-h-32 space-y-2 overflow-y-auto rounded-md border-l-4 border-teal-500 bg-secondary px-3 py-2">
             {messages.map((message) => (
               <div key={message.id} className="min-w-0">
-                <p className="text-xs font-semibold text-teal-600 dark:text-teal-300">{message.from_me ? "Voce" : getDisplayName(chat)}</p>
+                <p className="text-xs font-semibold text-teal-600 dark:text-teal-300">{message.from_me ? "Você" : getDisplayName(chat)}</p>
                 <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{getMessagePreviewText(message)}</p>
               </div>
             ))}

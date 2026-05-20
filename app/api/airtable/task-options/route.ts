@@ -151,7 +151,7 @@ export async function GET() {
     try {
       users = await getUsers(usersTable.name)
     } catch (error) {
-      errors.push(error instanceof Error ? error.message : "Nao foi possivel carregar usuarios do Airtable.")
+      errors.push(error instanceof Error ? error.message : "Não foi possível carregar usuários do Airtable.")
     }
   }
 
