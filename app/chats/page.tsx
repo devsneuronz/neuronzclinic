@@ -1,17 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ContactList } from "@/components/chat/contact-list";
 import { ChatWindow } from "@/components/chat/chat-window";
-import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { ChevronLeft } from "lucide-react";
-import { getChatTags, type ChatTag } from "@/lib/chat-tags";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { ChatRecord, LatestMessageStatus, MessageRecord, fetchChats, fetchLatestMessageStatuses, fetchMessages, deleteMessage, deleteMessages, forwardMessage, forwardMessages, sendMessage, updateChatDetails } from "@/lib/supabase-rest";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { ContactList } from "@/components/chat/contact-list";
 import { ContactDetails } from "@/components/contact-details/contact-details";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { ChatStatusOption, getChatStatusColor, getChatStatusLabel } from "@/lib/chat-status";
+import { getChatTags, type ChatTag } from "@/lib/chat-tags";
+import { ChatRecord, LatestMessageStatus, MessageRecord, deleteMessage, deleteMessages, fetchChats, fetchLatestMessageStatuses, fetchMessages, forwardMessage, forwardMessages, sendMessage, updateChatDetails } from "@/lib/supabase-rest";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
 const CHAT_PAGE_SIZE = 50;
 const MESSAGE_PAGE_SIZE = 50;

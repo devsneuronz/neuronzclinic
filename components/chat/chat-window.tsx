@@ -1,12 +1,12 @@
 "use client";
 
-import type { FormEvent, UIEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { ChatRecord, MessageRecord, fetchChats } from "@/lib/supabase-rest";
+import type { FormEvent, UIEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AttachmentPreviewModal } from "./attachment-preview-modal";
-import { ChatComposer } from "./chat-composer";
 import { getAttachmentType } from "./chat-attachment-utils";
+import { ChatComposer } from "./chat-composer";
 import { ChatHeader } from "./chat-header";
 import { DeleteMessageDialog } from "./delete-message-dialog";
 import { ExpandedImageModal } from "./expanded-image-modal";
