@@ -134,6 +134,24 @@ export interface LatestChatMessage {
   status: string | null
 }
 
+export interface ChatNoteRecord {
+  id: string
+  chat_id: string
+  content: string
+  created_at: string
+  linked_message_id: string | null
+  linked_message_preview: string | null
+  linked_message_from_me: boolean | null
+}
+
+export interface CreateChatNoteInput {
+  chatId: string
+  content: string
+  linkedMessageId?: string | null
+  linkedMessagePreview?: string | null
+  linkedMessageFromMe?: boolean | null
+}
+
 function getTimestampValue(value?: string | null) {
   if (!value) return 0
   const time = Date.parse(value)
@@ -464,4 +482,62 @@ export async function updateChatDetails({ id, ...payload }: UpdateChatDetailsInp
   }
 
   return response.json() as Promise<{ chat: ChatRecord }>
+}
+
+export async function fetchChatNotes(chatId: string) {
+  const response = await fetch(`/api/chat-notes?chat_id=${encodeURIComponent(chatId)}`, {
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || `Nao foi possivel carregar as anotacoes (${response.status}).`)
+  }
+
+  const data = (await response.json()) as { notes?: ChatNoteRecord[] }
+  return data.notes ?? []
+}
+
+export async function createChatNote({
+  chatId,
+  content,
+  linkedMessageId = null,
+  linkedMessagePreview = null,
+  linkedMessageFromMe = null,
+}: CreateChatNoteInput) {
+  const response = await fetch("/api/chat-notes", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      chat_id: chatId,
+      content,
+      linked_message_id: linkedMessageId,
+      linked_message_preview: linkedMessagePreview,
+      linked_message_from_me: linkedMessageFromMe,
+    }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || `Nao foi possivel salvar a anotacao (${response.status}).`)
+  }
+
+  const data = (await response.json()) as { note?: ChatNoteRecord }
+  if (!data.note) throw new Error("A anotacao foi salva, mas a API nao retornou o registro.")
+  return data.note
+}
+
+export async function deleteChatNote(noteId: string) {
+  const response = await fetch(`/api/chat-notes?id=${encodeURIComponent(noteId)}`, {
+    method: "DELETE",
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || `Nao foi possivel apagar a anotacao (${response.status}).`)
+  }
+
+  return response.json() as Promise<{ ok: true }>
 }

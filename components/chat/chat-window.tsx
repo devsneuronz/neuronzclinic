@@ -4,7 +4,8 @@ import type { FormEvent, UIEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { readChatDraft, writeChatDraft } from "@/lib/chat-drafts";
-import { ChatRecord, MessageRecord, fetchChats } from "@/lib/supabase-rest";
+import { createSupabaseRealtimeSubscription } from "@/lib/supabase-realtime";
+import { ChatRecord, MessageRecord, createChatNote, deleteChatNote, fetchChatNotes, fetchChats, type ChatNoteRecord } from "@/lib/supabase-rest";
 import { AttachmentPreviewModal } from "./attachment-preview-modal";
 import { ChatComposer } from "./chat-composer";
 import { getAttachmentType } from "./chat-attachment-utils";
@@ -48,6 +49,36 @@ function getAudioFileExtension(mimeType: string) {
   if (mimeType.includes("mp4")) return "m4a";
   if (mimeType.includes("ogg")) return "ogg";
   return "webm";
+}
+
+function mapChatNoteRecord(note: ChatNoteRecord): InternalNote {
+  return {
+    id: note.id,
+    chatId: note.chat_id,
+    content: note.content,
+    createdAt: note.created_at,
+    linkedMessageId: note.linked_message_id,
+    linkedMessagePreview: note.linked_message_preview,
+    linkedMessageFromMe: note.linked_message_from_me,
+  };
+}
+
+function sortInternalNotes(notes: InternalNote[]) {
+  return [...notes].sort((a, b) => {
+    const aTime = Date.parse(a.createdAt);
+    const bTime = Date.parse(b.createdAt);
+    return (Number.isFinite(aTime) ? aTime : 0) - (Number.isFinite(bTime) ? bTime : 0);
+  });
+}
+
+function mergeInternalNotes(currentNotes: InternalNote[], incomingNotes: InternalNote[]) {
+  const indexedNotes = new Map(currentNotes.map((note) => [note.id, note]));
+
+  for (const note of incomingNotes) {
+    indexedNotes.set(note.id, { ...indexedNotes.get(note.id), ...note });
+  }
+
+  return sortInternalNotes(Array.from(indexedNotes.values()));
 }
 
 export function ChatWindow({
@@ -94,7 +125,6 @@ export function ChatWindow({
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [internalNotes, setInternalNotes] = useState<InternalNote[]>([]);
-  const [internalNotesChatId, setInternalNotesChatId] = useState<string | null>(null);
   const [isInternalNoteOpen, setIsInternalNoteOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteLinkedMessage, setNoteLinkedMessage] = useState<MessageRecord | null>(null);
@@ -118,9 +148,14 @@ export function ChatWindow({
   const [showScrollButton, setShowScrollButton] = useState(false);
 
   const messagesRef = useRef(messages);
+  const currentChatIdRef = useRef(chat?.chat_id ?? null);
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  useEffect(() => {
+    currentChatIdRef.current = chat?.chat_id ?? null;
+  }, [chat?.chat_id]);
 
   const handleScrollToMessage = useCallback(
     async (targetId: string) => {
@@ -342,35 +377,55 @@ export function ChatWindow({
   }, [chat?.id]);
 
   useEffect(() => {
-    let nextNotes: InternalNote[] = [];
+    const chatId = chat?.chat_id ?? null;
 
-    if (!chat?.chat_id) {
-      nextNotes = [];
-    } else {
-      const storedNotes = window.localStorage.getItem(`neuronzclinic.internal-notes.${chat.chat_id}`);
+    if (!chatId) {
+      const timeout = window.setTimeout(() => {
+        setInternalNotes([]);
+      }, 0);
 
-      if (storedNotes) {
-        try {
-          const parsedNotes = JSON.parse(storedNotes) as InternalNote[];
-          nextNotes = Array.isArray(parsedNotes) ? parsedNotes : [];
-        } catch {
-          nextNotes = [];
-        }
-      }
+      return () => window.clearTimeout(timeout);
     }
 
-    const timeout = window.setTimeout(() => {
-      setInternalNotes(nextNotes);
-      setInternalNotesChatId(chat?.chat_id ?? null);
-    }, 0);
-    return () => window.clearTimeout(timeout);
+    let isMounted = true;
+
+    fetchChatNotes(chatId)
+      .then((notes) => {
+        if (!isMounted) return;
+        setInternalNotes(sortInternalNotes(notes.map(mapChatNoteRecord)));
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setInternalNotes([]);
+        setMessageActionError(error instanceof Error ? error.message : "Nao foi possivel carregar as anotacoes.");
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, [chat?.chat_id]);
 
   useEffect(() => {
-    if (!chat?.chat_id) return;
-    if (internalNotesChatId !== chat.chat_id) return;
-    window.localStorage.setItem(`neuronzclinic.internal-notes.${chat.chat_id}`, JSON.stringify(internalNotes));
-  }, [chat?.chat_id, internalNotes, internalNotesChatId]);
+    const unsubscribe = createSupabaseRealtimeSubscription([{ table: "chat_notes" }], (payload) => {
+      if (payload.table !== "chat_notes") return;
+
+      if ((payload.eventType === "INSERT" || payload.eventType === "UPDATE") && payload.record) {
+        const note = mapChatNoteRecord(payload.record as unknown as ChatNoteRecord);
+        if (note.chatId !== chat?.chat_id) return;
+        setInternalNotes((current) => mergeInternalNotes(current, [note]));
+        return;
+      }
+
+      if (payload.eventType === "DELETE" && payload.oldRecord?.id) {
+        const deletedId = String(payload.oldRecord.id);
+        setInternalNotes((current) => current.filter((note) => note.id !== deletedId));
+      }
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [chat?.chat_id]);
 
   useEffect(() => {
     return () => {
@@ -419,7 +474,7 @@ export function ChatWindow({
     event?.preventDefault();
 
     if (isInternalNoteOpen) {
-      saveInternalNote();
+      await saveInternalNote();
       return;
     }
 
@@ -484,7 +539,7 @@ export function ChatWindow({
     setNoteLinkedMessage(null);
   }
 
-  function saveInternalNote() {
+  async function saveInternalNote() {
     if (!chat?.chat_id) return;
 
     const content = noteDraft.trim();
@@ -493,8 +548,8 @@ export function ChatWindow({
     const linkedKind = noteLinkedMessage ? getMediaKind(noteLinkedMessage) : null;
     const linkedPrefix = linkedKind === "image" ? "Foto" : linkedKind === "video" ? "Video" : linkedKind === "audio" ? "Audio" : linkedKind === "file" ? "Arquivo" : null;
 
-    const note: InternalNote = {
-      id: crypto.randomUUID(),
+    const optimisticNote: InternalNote = {
+      id: `optimistic-note-${crypto.randomUUID()}`,
       chatId: chat.chat_id,
       content,
       createdAt: new Date().toISOString(),
@@ -503,12 +558,44 @@ export function ChatWindow({
       linkedMessageFromMe: noteLinkedMessage?.from_me ?? null,
     };
 
-    setInternalNotes((current) => [...current, note]);
+    setInternalNotes((current) => mergeInternalNotes(current, [optimisticNote]));
     closeInternalNote();
+    setMessageActionError(null);
+
+    try {
+      const savedNote = await createChatNote({
+        chatId: optimisticNote.chatId,
+        content: optimisticNote.content,
+        linkedMessageId: optimisticNote.linkedMessageId,
+        linkedMessagePreview: optimisticNote.linkedMessagePreview,
+        linkedMessageFromMe: optimisticNote.linkedMessageFromMe,
+      });
+      if (currentChatIdRef.current !== optimisticNote.chatId) return;
+      const nextNote = mapChatNoteRecord(savedNote);
+      setInternalNotes((current) => mergeInternalNotes(current.filter((note) => note.id !== optimisticNote.id), [nextNote]));
+    } catch (error) {
+      if (currentChatIdRef.current !== optimisticNote.chatId) return;
+      setInternalNotes((current) => current.filter((note) => note.id !== optimisticNote.id));
+      setMessageActionError(error instanceof Error ? error.message : "Nao foi possivel salvar a anotacao.");
+      setIsInternalNoteOpen(true);
+      setNoteDraft(content);
+      setNoteLinkedMessage(noteLinkedMessage);
+    }
   }
 
-  function deleteInternalNote(noteId: string) {
+  async function deleteInternalNote(noteId: string) {
+    const previousNotes = internalNotes;
+    const deleteChatId = chat?.chat_id ?? null;
     setInternalNotes((current) => current.filter((note) => note.id !== noteId));
+    setMessageActionError(null);
+
+    try {
+      await deleteChatNote(noteId);
+    } catch (error) {
+      if (currentChatIdRef.current !== deleteChatId) return;
+      setInternalNotes(previousNotes);
+      setMessageActionError(error instanceof Error ? error.message : "Nao foi possivel apagar a anotacao.");
+    }
   }
 
   function clearSelectedMessages() {
