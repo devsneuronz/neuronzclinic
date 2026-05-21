@@ -6,7 +6,6 @@ import { X, ChevronDown, Phone, CheckCheck, MessageSquareDashed, Bot, Check, Pen
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ChatRecord } from "@/lib/supabase-rest";
-import { getAvatarInitials } from "@/lib/avatar-initials";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getChatStatusColor, type ChatStatusOption } from "@/lib/chat-status";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
@@ -44,10 +43,24 @@ function getContactPhone(chat?: ChatRecord) {
   return phone || chat?.phone_contact?.trim() || chat?.chat_id?.replace(/@.+$/, "") || "Sem telefone";
 }
 
-export function ContactDetails({ chat, onClose, onToggleStatus, onToggleIA, statusOptions, tagOptions, onChangeStatus, onToggleTag, onMarkAsRead, onMarkAsUnread, onReorderTags, onCommitTagOrder, onChangeName, onChangeContactInfo }: ContactDetailsProps) {
+export function ContactDetails({
+  chat,
+  onClose,
+  onToggleStatus,
+  onToggleIA,
+  statusOptions,
+  tagOptions,
+  onChangeStatus,
+  onToggleTag,
+  onMarkAsRead,
+  onMarkAsUnread,
+  onReorderTags,
+  onCommitTagOrder,
+  onChangeName,
+  onChangeContactInfo,
+}: ContactDetailsProps) {
   const [view, setView] = useState<"profile" | "training">("profile");
   const contactPhone = getContactPhone(chat);
-  const hasUnreadMessages = !!chat?.unread_count;
   const activeView = chat?.ia_responde === false ? "profile" : view;
 
   const [isSavingName, setIsSavingName] = useState(false);

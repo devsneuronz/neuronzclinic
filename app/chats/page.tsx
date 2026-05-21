@@ -11,6 +11,7 @@ import { createSupabaseRealtimeSubscription, type SupabasePostgresChangePayload 
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { ContactDetails } from "@/components/contact-details/contact-details";
 import type { ContactInfoValues } from "@/components/contact-details/profile-view";
+import { useSearchParams } from "next/navigation";
 
 const CHAT_PAGE_SIZE = 50;
 const MESSAGE_PAGE_SIZE = 50;
@@ -293,6 +294,7 @@ function getFallbackTagOptions(chats: ChatRecord[]) {
 
 export default function ChatsPage() {
   const [showDetails, setShowDetails] = useState(false);
+  const searchParams = useSearchParams();
 
   const [chats, setChats] = useState<ChatRecord[]>([]);
   const [searchChats, setSearchChats] = useState<ChatRecord[]>([]);
@@ -340,6 +342,7 @@ export default function ChatsPage() {
   const isGhostModeRef = useRef(isGhostMode);
   const messagesByChatIdRef = useRef(messagesByChatId);
   const readReceiptKeyByChatIdRef = useRef<Record<string, string>>({});
+  const targetChatId = searchParams.get("chatId") || "";
 
   useEffect(() => {
     selectedChatRemoteIdRef.current = selectedChatRemoteId;
@@ -492,6 +495,35 @@ export default function ChatsPage() {
       );
     });
   }, []);
+
+  useEffect(() => {
+    if (!targetChatId) return;
+
+    const knownTarget = knownChats.find((chat) => chat.chat_id === targetChatId || chat.id === targetChatId);
+    if (knownTarget) {
+      window.queueMicrotask(() => setSelectedChatId(knownTarget.id));
+      return;
+    }
+
+    let isMounted = true;
+
+    fetchChats({ limit: 1, offset: 0, search: targetChatId })
+      .then((data) => {
+        if (!isMounted) return;
+        const target = data.find((chat) => chat.chat_id === targetChatId || chat.id === targetChatId) || data[0];
+        if (!target) return;
+        mergeFreshChats([target]);
+        setSelectedChatId(target.id);
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        setError(err instanceof Error ? err.message : "NÃ£o foi possÃ­vel abrir o chat selecionado.");
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [knownChats, mergeFreshChats, targetChatId]);
 
   const updateChatPreviewForMessages = useCallback((chatId: string, freshMessages: MessageRecord[]) => {
     if (freshMessages.length === 0) return;

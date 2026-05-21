@@ -43,6 +43,23 @@ type LatestAppointmentResult = {
   appointments: LatestAppointment[];
 };
 
+type ContactTask = {
+  id: string;
+  subject: string;
+  description?: string;
+  status: "aguardando" | "resolvendo" | "finalizado";
+  statusLabel: string;
+  type?: string;
+  responsible?: string;
+  createdAt?: string;
+  dueDate?: string;
+};
+
+type ContactTaskResult = {
+  key: string;
+  tasks: ContactTask[];
+};
+
 interface ProfileViewProps {
   chat?: ChatRecord;
   contactPhone?: string;
@@ -165,6 +182,38 @@ function getAppointmentDateLabel(value?: string) {
   }).format(date);
 }
 
+function getTaskDateLabel(value?: string) {
+  if (!value) return "Sem prazo";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  }).format(date);
+}
+
+function normalizeTaskStatus(value: string): ContactTask["status"] {
+  const normalized = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  if (["finalizado", "finalizada", "concluido", "concluida"].includes(normalized)) return "finalizado";
+  if (["resolvendo", "atendendo", "em atendimento", "em andamento", "andamento", "em resolucao"].includes(normalized)) return "resolvendo";
+
+  return "aguardando";
+}
+
+function getTaskStatusClassName(status: ContactTask["status"]) {
+  if (status === "finalizado") return "bg-teal-500/10 text-teal-700 dark:text-teal-300";
+  if (status === "resolvendo") return "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300";
+
+  return "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+}
+
 export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions = [], onChangeStatus, onToggleTag, onReorderTags, onCommitTagOrder, onChangeContactInfo }: ProfileViewProps) {
   const [bottomTab, setBottomTab] = useState<"consultas" | "avisos">("consultas");
   const [draggedTagId, setDraggedTagId] = useState<string | null>(null);
@@ -173,6 +222,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
   const [appointmentOptions, setAppointmentOptions] = useState<AppointmentOptions>(fallbackAppointmentOptions);
   const [isLoadingAppointmentOptions, setIsLoadingAppointmentOptions] = useState(true);
   const [latestAppointmentResult, setLatestAppointmentResult] = useState<LatestAppointmentResult | null>(null);
+  const [contactTaskResult, setContactTaskResult] = useState<ContactTaskResult | null>(null);
   const [taskOptions, setTaskOptions] = useState<TaskOptions>(fallbackTaskOptions);
   const [isLoadingTaskOptions, setIsLoadingTaskOptions] = useState(true);
   const [appointmentStatus, setAppointmentStatus] = useState("");
@@ -194,6 +244,8 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
   const [taskObservations, setTaskObservations] = useState("");
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [taskFeedback, setTaskFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [selectedContactTask, setSelectedContactTask] = useState<ContactTask | null>(null);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [contactNotes, setContactNotes] = useState<ContactNoteRecord[]>([]);
   const [contactNoteDraft, setContactNoteDraft] = useState("");
   const [isLoadingContactNotes, setIsLoadingContactNotes] = useState(false);
@@ -228,6 +280,8 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
   const appointments = latestAppointmentResult?.key === latestAppointmentKey ? latestAppointmentResult.appointments : [];
   const latestAppointment = appointments[0] ?? null;
   const isLoadingLatestAppointment = Boolean(latestAppointmentKey && latestAppointmentResult?.key !== latestAppointmentKey);
+  const contactTasks = contactTaskResult?.key === latestAppointmentKey ? contactTaskResult.tasks : [];
+  const isLoadingContactTasks = Boolean(latestAppointmentKey && contactTaskResult?.key !== latestAppointmentKey);
   const appointmentStatusLabel = isLoadingLatestAppointment ? "Carregando..." : latestAppointment?.status || "Nenhum";
   const hasUnsavedContactInfo = (Object.keys(contactInfo) as ContactInfoField[]).some(
     (field) => normalizeContactInfoValues(contactInfo)[field] !== normalizeContactInfoValues(getContactInfoValues(chat))[field],
@@ -325,6 +379,36 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
       .catch(() => {
         if (!isMounted) return;
         setLatestAppointmentResult({ key, appointments: [] });
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [chat?.chat_id, chat?.phone_contact, contactPhone]);
+
+  useEffect(() => {
+    const chatId = chat?.chat_id || "";
+    const phone = contactPhone || chat?.phone_contact || "";
+    const key = `${chatId}|${phone}`;
+    if (!chatId && !phone) return;
+
+    let isMounted = true;
+    const params = new URLSearchParams();
+    if (chatId) params.set("chatId", chatId);
+    if (phone) params.set("contactPhone", phone);
+
+    fetch(`/api/airtable/tasks?${params.toString()}`)
+      .then((response) => response.json() as Promise<{ tasks?: ContactTask[] }>)
+      .then((data) => {
+        if (!isMounted) return;
+        setContactTaskResult({
+          key,
+          tasks: Array.isArray(data.tasks) ? data.tasks : [],
+        });
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setContactTaskResult({ key, tasks: [] });
       });
 
     return () => {
@@ -505,7 +589,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
           observations: taskObservations,
         }),
       });
-      const data = (await response.json()) as { message?: string };
+      const data = (await response.json()) as { id?: string; message?: string };
 
       if (!response.ok) {
         throw new Error(data.message || "Não foi possível criar o aviso/tarefa.");
@@ -517,6 +601,26 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
       setTaskResponsibleUserId("");
       setTaskSubject("");
       setTaskObservations("");
+      if (data.id) {
+        const responsible = taskOptions.users.find((option) => option.id === taskResponsibleUserId)?.label || "";
+        setContactTaskResult((current) => ({
+          key: latestAppointmentKey,
+          tasks: [
+            {
+              id: data.id!,
+              subject: taskSubject,
+              description: taskObservations,
+              status: normalizeTaskStatus(taskStatus),
+              statusLabel: taskStatus,
+              type: taskType,
+              responsible,
+              createdAt: taskCreatedAt,
+              dueDate: taskDueDate,
+            },
+            ...(current?.key === latestAppointmentKey ? current.tasks.filter((task) => task.id !== data.id) : []),
+          ],
+        }));
+      }
       window.setTimeout(() => {
         setIsTaskDialogOpen(false);
       }, 700);
@@ -527,6 +631,38 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
       });
     } finally {
       setIsCreatingTask(false);
+    }
+  }
+
+  async function handleDeleteTask(task: ContactTask) {
+    setDeletingTaskId(task.id);
+
+    try {
+      const response = await fetch(`/api/airtable/tasks?id=${encodeURIComponent(task.id)}`, {
+        method: "DELETE",
+      });
+      const data = (await response.json()) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(data.message || "Não foi possível excluir a tarefa.");
+      }
+
+      setContactTaskResult((current) =>
+        current
+          ? {
+              ...current,
+              tasks: current.tasks.filter((currentTask) => currentTask.id !== task.id),
+            }
+          : current,
+      );
+      setSelectedContactTask((current) => (current?.id === task.id ? null : current));
+    } catch (error) {
+      setTaskFeedback({
+        type: "error",
+        message: error instanceof Error ? error.message : "Não foi possível excluir a tarefa.",
+      });
+    } finally {
+      setDeletingTaskId(null);
     }
   }
 
@@ -1166,10 +1302,132 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
               <p className="text-sm text-muted-foreground">Nenhuma consulta registrada</p>
             )
           ) : (
-            <p className="text-sm text-muted-foreground">Nenhum aviso ou tarefa</p>
+            isLoadingContactTasks ? (
+              <p className="text-sm text-muted-foreground">Carregando avisos e tarefas...</p>
+            ) : contactTasks.length > 0 ? (
+              <div className="space-y-2">
+                {taskFeedback?.type === "error" && (
+                  <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{taskFeedback.message}</p>
+                )}
+                {contactTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    role="button"
+                    tabIndex={0}
+                    className="cursor-pointer rounded-md border border-border bg-card px-3 py-2 text-left transition hover:border-primary/40 hover:bg-muted/40"
+                    onClick={() => setSelectedContactTask(task)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedContactTask(task);
+                      }
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">{task.subject || task.type || "Aviso / tarefa"}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">Prazo: {getTaskDateLabel(task.dueDate)}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <span className={cn("rounded-sm px-2 py-0.5 text-[11px] font-medium", getTaskStatusClassName(task.status))}>
+                          {task.statusLabel || "Sem status"}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          disabled={deletingTaskId === task.id}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleDeleteTask(task);
+                          }}
+                          aria-label="Excluir tarefa"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="mt-2 grid gap-1 text-xs text-muted-foreground">
+                      {task.type && <p className="truncate">Tipo: {task.type}</p>}
+                      {task.responsible && <p className="truncate">Responsável: {task.responsible}</p>}
+                      {task.createdAt && <p className="truncate">Criada em: {getAppointmentDateLabel(task.createdAt)}</p>}
+                      {task.description && <p className="line-clamp-2 break-words">Obs.: {task.description}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nenhum aviso ou tarefa</p>
+            )
           )}
         </div>
       </div>
+
+      <Dialog open={Boolean(selectedContactTask)} onOpenChange={(open) => !open && setSelectedContactTask(null)}>
+        <DialogContent className="z-[110] max-h-[85vh] max-w-2xl overflow-y-auto">
+          {selectedContactTask && (
+            <>
+              <DialogHeader>
+                <div className="flex flex-wrap items-center gap-2">
+                  {selectedContactTask.type && (
+                    <span className="rounded-sm border border-primary/20 bg-primary/5 px-2 py-0.5 text-xs font-medium text-primary">
+                      {selectedContactTask.type}
+                    </span>
+                  )}
+                  <span className={cn("rounded-sm px-2 py-0.5 text-xs font-medium", getTaskStatusClassName(selectedContactTask.status))}>
+                    {selectedContactTask.statusLabel || "Sem status"}
+                  </span>
+                </div>
+                <DialogTitle className="pt-2 text-xl leading-7">{selectedContactTask.subject || "Aviso / tarefa"}</DialogTitle>
+              </DialogHeader>
+
+              <div className="grid gap-4">
+                <div className="grid gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prazo</p>
+                    <p className="mt-1 text-foreground">{getTaskDateLabel(selectedContactTask.dueDate)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Responsável</p>
+                    <p className="mt-1 text-foreground">{selectedContactTask.responsible || "Sem responsável"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Criada em</p>
+                    <p className="mt-1 text-foreground">{getAppointmentDateLabel(selectedContactTask.createdAt)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Registro</p>
+                    <p className="mt-1 truncate text-foreground">{selectedContactTask.id}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Observações</p>
+                  <p className="min-h-24 whitespace-pre-wrap rounded-md border border-border bg-card p-3 text-sm leading-relaxed text-foreground">
+                    {selectedContactTask.description || "Sem observações registradas."}
+                  </p>
+                </div>
+              </div>
+
+              <DialogFooter className="border-t border-border pt-3">
+                <Button type="button" variant="ghost" onClick={() => setSelectedContactTask(null)}>
+                  Fechar
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={deletingTaskId === selectedContactTask.id}
+                  onClick={() => void handleDeleteTask(selectedContactTask)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {deletingTaskId === selectedContactTask.id ? "Excluindo..." : "Excluir tarefa"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

@@ -18,7 +18,7 @@ const navItems = [
   { icon: MessageSquare, label: "Chats", href: "/chats", roles: ["admin", "manager", "user"] },
   { icon: Calendar, label: "Agendas", href: "/agendas", roles: ["admin", "manager", "user"] },
   { icon: CheckSquare, label: "Tarefas", href: "/tarefas", roles: ["admin", "manager", "user"] },
-  { icon: Users, label: "Pacientes", href: "/pacientes", roles: ["admin", "manager", "user"] },
+  { icon: Users, label: "Contatos", href: "/contatos", roles: ["admin", "manager", "user"] },
   { icon: BarChart3, label: "Relatórios", href: "/relatorios", roles: ["admin", "manager"] },
   { icon: Settings, label: "Configurações", href: "/configuracoes", roles: ["admin"] },
 ] satisfies Array<{
