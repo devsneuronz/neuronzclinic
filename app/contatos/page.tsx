@@ -6,7 +6,7 @@ import { ArrowRight, Maximize2, RefreshCw, Search, Users } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ContactDetails } from "@/components/contact-details/contact-details";
@@ -444,6 +444,7 @@ export default function ContatosPage() {
         <DialogContent className="max-h-[92vh] max-w-2xl overflow-hidden p-0" showCloseButton={false}>
           {selectedContact && (
             <div className="flex h-[86vh] flex-col">
+              <DialogTitle className="sr-only">Detalhes do contato {getDisplayName(selectedContact)}</DialogTitle>
               <div className="min-h-0 flex-1">
                 <ContactDetails
                   chat={selectedContact}
