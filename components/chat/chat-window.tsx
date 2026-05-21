@@ -1,16 +1,16 @@
 "use client";
 
-import type { FormEvent, UIEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { readChatDraft, writeChatDraft } from "@/lib/chat-drafts";
 import { createSupabaseRealtimeSubscription } from "@/lib/supabase-realtime";
 import { ChatRecord, MessageRecord, createChatNote, deleteChatNote, fetchChatNotes, fetchChats, type ChatNoteRecord } from "@/lib/supabase-rest";
 import { fetchMentionableUsers } from "@/lib/user-mentions";
 import type { MentionableUser } from "@/lib/user-roles";
+import type { FormEvent, UIEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AttachmentPreviewModal } from "./attachment-preview-modal";
-import { ChatComposer } from "./chat-composer";
 import { getAttachmentType } from "./chat-attachment-utils";
+import { ChatComposer } from "./chat-composer";
 import { ChatHeader } from "./chat-header";
 import { DeleteMessageDialog } from "./delete-message-dialog";
 import { ExpandedImageModal } from "./expanded-image-modal";
@@ -38,6 +38,7 @@ interface ChatWindowProps {
   onToggleDetails: () => void;
   onToggleStatus: () => void;
   isDetailsOpen: boolean;
+  isMobile?: boolean;
 }
 
 function getSupportedAudioMimeType() {
@@ -102,6 +103,7 @@ export function ChatWindow({
   onToggleDetails,
   onToggleStatus,
   isDetailsOpen,
+  isMobile,
 }: ChatWindowProps) {
   const [draft, setDraft] = useState("");
   const [draftChatId, setDraftChatId] = useState<string | null>(null);
@@ -465,13 +467,10 @@ export function ChatWindow({
   }, [chat?.id]);
 
   async function handleMessagesScroll(event: UIEvent<HTMLDivElement>) {
-    // === LÓGICA DO BOTÃO FLUTUANTE (Adicionada aqui) ===
     const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
 
-    // Calcula a distância que falta para chegar ao fundo do chat
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
 
-    // Se o médico subiu mais de 300px, mostra o botão, senão esconde
     if (distanceFromBottom > 300) {
       setShowScrollButton(true);
     } else {
@@ -591,7 +590,12 @@ export function ChatWindow({
       });
       if (currentChatIdRef.current !== optimisticNote.chatId) return;
       const nextNote = mapChatNoteRecord(savedNote);
-      setInternalNotes((current) => mergeInternalNotes(current.filter((note) => note.id !== optimisticNote.id), [nextNote]));
+      setInternalNotes((current) =>
+        mergeInternalNotes(
+          current.filter((note) => note.id !== optimisticNote.id),
+          [nextNote],
+        ),
+      );
     } catch (error) {
       if (currentChatIdRef.current !== optimisticNote.chatId) return;
       setInternalNotes((current) => current.filter((note) => note.id !== optimisticNote.id));
@@ -900,7 +904,7 @@ export function ChatWindow({
 
   return (
     <div className="flex h-full flex-1 overflow-hidden bg-background">
-      <div className="flex flex-1 flex-col border-r border-border relative">
+      <div className="flex flex-1 flex-col border-r border-border relative w-full">
         <ChatHeader
           chat={chat}
           isSelectionMode={isSelectionMode}
@@ -911,6 +915,8 @@ export function ChatWindow({
           onDeleteSelected={beginDeleteSelected}
           onToggleDetails={onToggleDetails}
           onToggleStatus={onToggleStatus}
+          isMobile={isMobile}
+          onCloseChat={onCloseChat}
         />
 
         <MessageList
@@ -1014,13 +1020,7 @@ export function ChatWindow({
         onSubmit={handleForwardSubmit}
       />
 
-      <DeleteMessageDialog
-        chat={chat}
-        messages={deleteConfirmationMessages}
-        messageActionError={messageActionError}
-        onClose={() => setDeleteConfirmationMessages([])}
-        onConfirm={handleDeleteMessage}
-      />
+      <DeleteMessageDialog chat={chat} messages={deleteConfirmationMessages} messageActionError={messageActionError} onClose={() => setDeleteConfirmationMessages([])} onConfirm={handleDeleteMessage} />
     </div>
   );
 }

@@ -1,14 +1,14 @@
 "use client";
 
-import type { ComponentType } from "react";
+import { Avatar } from "@radix-ui/react-avatar";
 import { BarChart3, Calendar, CheckSquare, ChevronLeft, ChevronRight, LayoutDashboard, MessageSquare, Settings, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Avatar } from "@radix-ui/react-avatar";
+import type { ComponentType } from "react";
 
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { cn } from "@/lib/utils";
 import { getRoleLabel, UserRole } from "@/lib/user-roles";
+import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { Logo } from "./ui/logo";
 import { NoteMentionNotifications } from "./chat/note-mention-notifications";
@@ -42,14 +42,27 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const visibleNavItems = navItems.filter((item) => item.roles.includes(role));
 
   return (
-    <aside className={cn("relative flex h-screen flex-col transition-all duration-300 ease-in-out border-r", isCollapsed ? "w-[68px]" : "w-[200px]")}>
-      <Logo isCollapsed={isCollapsed} />
+    <aside
+      className={cn(
+        "relative flex h-screen flex-col transition-all duration-300 ease-in-out",
+        // Aplicando o fundo e a borda lateral baseados no tema ativo da sidebar
+        "bg-[var(--sidebar-custom-bg)] border-r border-border",
+        isCollapsed ? "w-[68px]" : "w-[200px]",
+      )}
+    >
+      <div className="max-w-full overflow-clip">
+        <Logo isCollapsed={isCollapsed} />
+      </div>
 
-      <Button onClick={() => setIsCollapsed(!isCollapsed)} className="absolute top-1/2 right-0 h-14 w-4 translate-x-[50%] translate-y-[-50%] rounded-sm !p-0 shadow-md">
+      {/* Botão de Colapsar: Ajustado para usar as cores da sidebar no hover e borda */}
+      <Button
+        onClick={() => setIsCollapsed(!isCollapsed)}
+        className="absolute top-1/2 right-0 h-14 w-4 translate-x-[50%] translate-y-[50%] rounded-sm p-0! shadow-md z-95 bg-[var(--sidebar-custom-primary)] text-[var(--sidebar-custom-primary-fg)] border border-[var(--sidebar-custom-border)] hover:bg-(--sidebar-custom-primary)/70"
+      >
         {isCollapsed ? <ChevronRight /> : <ChevronLeft />}
       </Button>
 
-      <nav className="flex-1 space-y-1 px-3 py-4 w-full">
+      <nav className="flex-1 space-y-1 px-3 py-4 w-full overflow-clip">
         {visibleNavItems.map((item) => {
           const isActive = pathname === item.href;
           return (
@@ -58,8 +71,12 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
               href={item.href}
               title={isCollapsed ? item.label : ""}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors",
-                isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all",
+                isActive
+                  ? // Quando ativo
+                    "bg-[var(--sidebar-custom-primary)] text-[var(--sidebar-custom-primary-fg)]"
+                  : // Quando inativo, usa a cor de texto e hover customizados da sidebar
+                    "text-[var(--sidebar-custom-fg)] hover:bg-[var(--sidebar-custom-accent)] hover:text-[var(--sidebar-custom-fg)]",
               )}
             >
               <item.icon className="h-5 w-5 shrink-0" />
@@ -70,15 +87,18 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         <NoteMentionNotifications user={user} isCollapsed={isCollapsed} />
       </nav>
 
-      <div className="border-t p-4">
+      {/* Rodapé do Usuário: Divisor de borda customizado */}
+      <div className="border-t border-[var(--sidebar-custom-border)] p-4">
         <div className="flex items-center gap-3">
-          <Avatar className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-primary text-sm font-semibold text-primary-foreground">
-            {isLoading ? "" : userInitial}
-          </Avatar>
+          {/* Avatar do usuário: Segue o padrão de destaque do tema ativo na sidebar */}
+          <Avatar className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-[var(--sidebar-custom-primary)] text-sm font-semibold text-[var(--sidebar-custom-primary-fg)]">{isLoading ? "" : userInitial}</Avatar>
+
           {!isCollapsed && (
             <div className="flex-1 overflow-hidden">
-              <p className="truncate text-sm font-medium">{isLoading ? "Carregando usuário..." : userName}</p>
-              <p className="truncate text-xs text-muted-foreground">{isLoading ? "" : getRoleLabel(role)}</p>
+              {/* Nome do usuário herda o texto principal da sidebar */}
+              <p className="truncate text-sm font-medium text-[var(--sidebar-custom-fg)]">{isLoading ? "Carregando usuário..." : userName}</p>
+              {/* Cargo/Role usa opacidade sobre a cor base para fazer o papel de muted sutil */}
+              <p className="truncate text-xs text-[var(--sidebar-custom-fg)]/70">{isLoading ? "" : getRoleLabel(role)}</p>
             </div>
           )}
         </div>

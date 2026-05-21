@@ -1,19 +1,19 @@
 "use client";
 
-import { useState } from "react";
-import { cn } from "@/lib/utils";
-import { X, ChevronDown, Phone, CheckCheck, MessageSquareDashed, Bot, Check, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { ChatRecord } from "@/lib/supabase-rest";
-import type { ChatTag } from "@/lib/chat-tags";
 import { getChatStatusColor, type ChatStatusOption } from "@/lib/chat-status";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import type { ChatTag } from "@/lib/chat-tags";
+import { ChatRecord } from "@/lib/supabase-rest";
+import { cn } from "@/lib/utils";
+import { Bot, Check, CheckCheck, ChevronDown, ChevronLeft, MessageSquareDashed, Pencil, Phone, X } from "lucide-react";
+import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
-import { IATrainingView } from "./ia-training-view";
-import { ProfileView, type ContactInfoValues } from "./profile-view";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
+import { IATrainingView } from "./ia-training-view";
+import { ProfileView, type ContactInfoValues } from "./profile-view";
 
 interface ContactDetailsProps {
   chat?: ChatRecord;
@@ -30,6 +30,7 @@ interface ContactDetailsProps {
   onMarkAsUnread?: () => void;
   onReorderTags?: (tags: ChatTag[]) => void;
   onCommitTagOrder?: (tags: ChatTag[]) => void;
+  isMobile?: boolean;
 }
 
 function getDisplayName(chat?: ChatRecord) {
@@ -58,6 +59,7 @@ export function ContactDetails({
   onCommitTagOrder,
   onChangeName,
   onChangeContactInfo,
+  isMobile,
 }: ContactDetailsProps) {
   const [view, setView] = useState<"profile" | "training">("profile");
   const contactPhone = getContactPhone(chat);
@@ -95,17 +97,17 @@ export function ContactDetails({
 
   return (
     <div className="flex h-full w-full flex-col border-l border-border bg-card">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+      <div className="flex items-center gap-4 border-b border-border px-4 py-3 h-15.25">
+        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={onClose}>
+          {isMobile ? <ChevronLeft className="h-5 w-5" /> : <X className="h-4 w-4" />}
+        </Button>
         <div className="flex items-center gap-4">
           <label className="text-sm font-medium transition-colors text-foreground">Detalhes do contato</label>
         </div>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </Button>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="w-full h-18 rounded-b-3xl bg-radial-[80%_480%_at_17%_100%] from-transparent to-white/60 dark:to-black/60" style={{ backgroundColor: getChatStatusColor(chat) }}></div>
+        <div className="w-full h-18 rounded-b-3xl bg-radial-[80%_480%_at_17%_100%] from-transparent to-background/60" style={{ backgroundColor: getChatStatusColor(chat) }}></div>
         <div className="flex flex-col p-4">
           <div className="flex flex-col w-full -mt-12">
             {/* Avatar e Status */}
@@ -176,11 +178,7 @@ export function ContactDetails({
               <Button
                 variant="outline"
                 disabled={!chat?.ia_responde}
-                className={cn(
-                  "border-2 shadow-sm transition-all text-xs",
-                  activeView === "profile" ? "bg-(--chat-primary) text-white border-(--chat-primary)" : "border-(--chat-primary) text-(--chat-primary) hover:bg-(--chat-primary)/10",
-                  !chat?.ia_responde && "opacity-50",
-                )}
+                className={cn("border-2 shadow-sm transition-all text-xs text-foreground", activeView !== "profile" && "text-(--chat-primary)", !chat?.ia_responde && "opacity-50")}
                 onClick={() => setView((prev) => (prev === "profile" ? "training" : "profile"))}
               >
                 Treine sua IA
@@ -189,7 +187,7 @@ export function ContactDetails({
 
               <div className="flex flex-row items-center gap-2">
                 <span className="text-[10px] font-medium text-muted-foreground tracking-wider">IA neste contato</span>
-                <Switch checked={!!chat?.ia_responde} onCheckedChange={onToggleIA} className="data-[state=checked]:bg-[#22c55e]" />
+                <Switch checked={!!chat?.ia_responde} onCheckedChange={onToggleIA} />
               </div>
             </div>
           </div>

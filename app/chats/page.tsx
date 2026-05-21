@@ -1,17 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ContactList } from "@/components/chat/contact-list";
 import { ChatWindow } from "@/components/chat/chat-window";
-import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { getChatTags, type ChatTag } from "@/lib/chat-tags";
-import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
-import { ChatRecord, LatestChatMessage, LatestMessageStatus, MessageRecord, fetchChats, fetchLatestMessagesForChats, fetchLatestMessageStatuses, fetchMessages, deleteMessage, deleteMessages, forwardMessage, forwardMessages, markChatAsRead, sendMessage, updateChatDetails } from "@/lib/supabase-rest";
-import { createSupabaseRealtimeSubscription, type SupabasePostgresChangePayload } from "@/lib/supabase-realtime";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { ContactList } from "@/components/chat/contact-list";
 import { ContactDetails } from "@/components/contact-details/contact-details";
 import type { ContactInfoValues } from "@/components/contact-details/profile-view";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
+import { getChatTags, type ChatTag } from "@/lib/chat-tags";
+import { createSupabaseRealtimeSubscription, type SupabasePostgresChangePayload } from "@/lib/supabase-realtime";
+import {
+  ChatRecord,
+  deleteMessage,
+  deleteMessages,
+  fetchChats,
+  fetchLatestMessagesForChats,
+  fetchLatestMessageStatuses,
+  fetchMessages,
+  forwardMessage,
+  forwardMessages,
+  LatestChatMessage,
+  LatestMessageStatus,
+  markChatAsRead,
+  MessageRecord,
+  sendMessage,
+  updateChatDetails,
+} from "@/lib/supabase-rest";
 import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
 const CHAT_PAGE_SIZE = 50;
 const MESSAGE_PAGE_SIZE = 50;
@@ -126,8 +142,7 @@ function mergeChats(currentChats: ChatRecord[], incomingChats: ChatRecord[]) {
     const shouldKeepCurrentLatestMessage =
       !!currentChat &&
       currentLastMessageTime > 0 &&
-      (currentLastMessageTime > incomingLastMessageTime ||
-        (currentLastMessageTime === incomingLastMessageTime && isMediaPreviewText(currentChat.text_last_message) && !isMediaPreviewText(chat.text_last_message)));
+      (currentLastMessageTime > incomingLastMessageTime || (currentLastMessageTime === incomingLastMessageTime && isMediaPreviewText(currentChat.text_last_message) && !isMediaPreviewText(chat.text_last_message)));
 
     if (chat.archived) {
       indexedChats.delete(chat.id);
@@ -344,6 +359,43 @@ export default function ChatsPage() {
   const readReceiptKeyByChatIdRef = useRef<Record<string, string>>({});
   const targetChatId = searchParams.get("chatId") || "";
 
+  const [panelSizes, setPanelSizes] = useState({
+    chatDefault: 70,
+    detailsDefault: 30,
+    detailsMin: 25,
+    detailsMax: 40,
+  });
+
+  useEffect(() => {
+    const calculateSizes = () => {
+      const width = window.innerWidth;
+
+      // 1. Defina quanto você quer que a barra de detalhes meça EM PIXELS fixos ideais
+      const idealDetailsWidthPx = 550;
+      const minDetailsWidthPx = 500;
+      const maxDetailsWidthPx = 700;
+
+      // 2. Transforma esses pixels na porcentagem exata que a tela atual representa
+      const detailsDefaultPercent = (idealDetailsWidthPx / width) * 100;
+      const detailsMinPercent = (minDetailsWidthPx / width) * 100;
+      const detailsMaxPercent = (maxDetailsWidthPx / width) * 100;
+
+      const chatDefaultPercent = 100 - detailsDefaultPercent;
+
+      setPanelSizes({
+        chatDefault: chatDefaultPercent,
+        detailsDefault: detailsDefaultPercent,
+        detailsMin: detailsMinPercent,
+        detailsMax: detailsMaxPercent,
+      });
+    };
+
+    // Roda uma vez ao montar e escuta o redimensionamento da janela
+    calculateSizes();
+    window.addEventListener("resize", calculateSizes);
+    return () => window.removeEventListener("resize", calculateSizes);
+  }, []);
+
   useEffect(() => {
     selectedChatRemoteIdRef.current = selectedChatRemoteId;
   }, [selectedChatRemoteId]);
@@ -534,10 +586,7 @@ export default function ChatsPage() {
         if (chat.chat_id !== chatId) return chat;
 
         const nextChat = updateChatPreviewFromMessages(chat, freshMessages);
-        const hasChanged =
-          nextChat.text_last_message !== chat.text_last_message ||
-          nextChat.last_message_time !== chat.last_message_time ||
-          nextChat.last_message_fromMe !== chat.last_message_fromMe;
+        const hasChanged = nextChat.text_last_message !== chat.text_last_message || nextChat.last_message_time !== chat.last_message_time || nextChat.last_message_fromMe !== chat.last_message_fromMe;
 
         if (hasChanged) didUpdate = true;
         return hasChanged ? nextChat : chat;
@@ -854,21 +903,15 @@ export default function ChatsPage() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = createSupabaseRealtimeSubscription(
-      [
-        { table: "messages" },
-        { table: "chats" },
-      ],
-      (payload: SupabasePostgresChangePayload) => {
-        if (payload.table === "messages" && payload.record) {
-          handleRealtimeMessage(payload.record as unknown as MessageRecord);
-        }
+    const unsubscribe = createSupabaseRealtimeSubscription([{ table: "messages" }, { table: "chats" }], (payload: SupabasePostgresChangePayload) => {
+      if (payload.table === "messages" && payload.record) {
+        handleRealtimeMessage(payload.record as unknown as MessageRecord);
+      }
 
-        if (payload.table === "chats" && payload.record) {
-          handleRealtimeChat(payload.record as unknown as ChatRecord);
-        }
-      },
-    );
+      if (payload.table === "chats" && payload.record) {
+        handleRealtimeChat(payload.record as unknown as ChatRecord);
+      }
+    });
 
     return () => {
       unsubscribe?.();
@@ -1347,6 +1390,88 @@ export default function ChatsPage() {
     [restoreSelectedChat, selectedChat],
   );
 
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 1024);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  if (isMobile) {
+    if (!selectedChat) {
+      return (
+        <ContactList
+          chats={visibleChats}
+          search={search}
+          isLoading={isLoadingChats}
+          isLoadingMore={isSearching ? isLoadingMoreSearchChats : isLoadingMoreChats}
+          isSearching={isSearchingChats}
+          hasMore={isSearching ? hasMoreSearchChats : hasMoreChats}
+          selectedId={selectedChat?.id}
+          latestMessageStatuses={latestMessageStatuses}
+          onSearchChange={setSearch}
+          onSelect={(id) => {
+            setSelectedChatId(id);
+            setShowDetails(false);
+          }}
+          onLoadMore={loadMoreChats}
+          isAssinaturaMode={isAssinaturaMode}
+          onToggleAssinatura={setIsAssinaturaMode}
+          isGhostMode={isGhostMode}
+          onToggleGhost={setIsGhostMode}
+          isMobile={isMobile}
+        />
+      );
+    }
+
+    if (showDetails) {
+      return (
+        <ContactDetails
+          chat={selectedChat}
+          onClose={() => setShowDetails(false)}
+          onToggleStatus={handleToggleStatus}
+          onToggleIA={handleToggleIA}
+          statusOptions={contactStatusOptions}
+          tagOptions={contactTagOptions}
+          onChangeStatus={handleChangeContactStatus}
+          onToggleTag={handleToggleContactTag}
+          onMarkAsRead={handleMarkAsRead}
+          onMarkAsUnread={handleMarkAsUnread}
+          onReorderTags={handleReorderTags}
+          onCommitTagOrder={handleCommitTagOrder}
+          isMobile={true}
+        />
+      );
+    }
+
+    // Janela de Chat nativa
+    return (
+      <ChatWindow
+        chat={selectedChat}
+        messages={messages}
+        isLoading={isLoadingSelectedMessages}
+        isLoadingOlder={isLoadingOlderMessages}
+        hasMoreMessages={!!selectedChatRemoteId && hasMoreMessages}
+        onLoadOlderMessages={loadOlderMessages}
+        onCloseChat={() => setSelectedChatId(undefined)}
+        onSendMessage={handleSendMessage}
+        onReplyMessage={handleReplyMessage}
+        onForwardMessage={handleForwardMessage}
+        onForwardMessages={handleForwardMessages}
+        onDeleteMessage={handleDeleteMessage}
+        onDeleteMessages={handleDeleteMessages}
+        forwardTargets={chats}
+        error={error}
+        onToggleDetails={() => setShowDetails(!showDetails)}
+        isDetailsOpen={showDetails}
+        onToggleStatus={handleToggleStatus}
+        isMobile={true}
+      />
+    );
+  }
+
+  // Desktop (original) layout
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <ContactList
@@ -1366,9 +1491,8 @@ export default function ChatsPage() {
         isGhostMode={isGhostMode}
         onToggleGhost={setIsGhostMode}
       />
-
       <PanelGroup direction="horizontal" className="flex-1">
-        <Panel defaultSize={70} minSize={30}>
+        <Panel defaultSize={showDetails ? panelSizes.chatDefault : 100} minSize={50}>
           <ChatWindow
             chat={selectedChat}
             messages={messages}
@@ -1393,8 +1517,8 @@ export default function ChatsPage() {
 
         {selectedChat && showDetails && (
           <>
-            <PanelResizeHandle className="w-1 bg-(--chat-muted)/50 transition-colors hover:bg-(--chat-primary)/50" />
-            <Panel defaultSize={30} minSize={26} maxSize={40} className="bg-(--chat-card) border-l border-(--chat-muted)">
+            <PanelResizeHandle className="w-1 bg-(--chat-muted)/50 transition-colors hover:bg-theme-primary/50" />
+            <Panel id="details-panel" defaultSize={panelSizes.detailsDefault} minSize={panelSizes.detailsMin} maxSize={panelSizes.detailsMax} className="bg-(--chat-card) border-l border-(--chat-muted)">
               <ContactDetails
                 chat={selectedChat}
                 onClose={() => setShowDetails(false)}

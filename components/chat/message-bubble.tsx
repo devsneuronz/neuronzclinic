@@ -1,11 +1,11 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import type { ChatRecord, MessageRecord } from "@/lib/supabase-rest";
+import { cn } from "@/lib/utils";
+import { Check, CheckSquare, Download, FileImage, FileText, Forward, Mic, PenLine, Reply, Trash2, Video } from "lucide-react";
 import Image from "next/image";
 import { memo } from "react";
-import { Check, CheckSquare, Download, FileImage, FileText, Forward, Mic, PenLine, Reply, Trash2, Video } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import type { ChatRecord, MessageRecord } from "@/lib/supabase-rest";
 import { MessageAudioPlayer } from "./message-audio-player";
 import { MessageStatusIcon } from "./message-status-icon";
 import { getDisplayName, getFileName, getMediaKind, getMediaUrl, getMessagePreviewText, getMessageText, getQuotedMessage, getTimeLabel, isDeletedMessage } from "./message-utils";
@@ -61,12 +61,13 @@ export const MessageBubble = memo(
         <div
           id={`message-bubble-${message.id}`}
           className={cn(
-            "group relative min-w-[168px] max-w-[72%] rounded-lg px-3 py-2 shadow-sm sm:min-w-[196px] transition-all",
+            "group relative max-w-[72%] rounded-lg px-3 py-2 shadow-sm transition-all",
             fromMe ? "rounded-tr-none bg-(--chat-me)" : "rounded-tl-none bg-(--chat-other)",
             selected && "ring-2 ring-teal-500/70",
             isHighlighted && "ring-2 ring-teal-500/30 bg-teal-500/20 duration-300",
             !isHighlighted && "duration-1000",
             deleted && "border border-dashed border-red-500/45 bg-(--chat-muted)/80 opacity-80 shadow-none saturate-[0.65]",
+            mediaKind === "audio" && " w-[320px] ",
           )}
         >
           {message.participant && !fromMe && <p className="mb-1 text-sm font-medium text-(--chat-primary)">{message.participant}</p>}
@@ -114,12 +115,12 @@ export const MessageBubble = memo(
                 }}
                 className={cn(
                   "mb-2 overflow-hidden rounded-md border-l-4 px-2.5 py-2 shadow-[inset_0_0_0_1px_rgba(17,27,33,0.035)] cursor-pointer hover:opacity-80 transition-opacity",
-                  fromMe ? "bg-[#c8f4c2] dark:bg-[#0f3f2d]" : "bg-[#f5f6f6] dark:bg-[#1d1e1e]",
-                  quotedMessage.fromMe ? "border-l-[#00a884]" : "border-l-[#53bdeb]",
+                  fromMe ? "bg-(--chat-reply-me-bg)" : "bg-(--chat-reply-other-bg)",
+                  quotedMessage.fromMe ? "border-l-(--chat-reply-me-border) text-(--chat-reply-me-border)" : "border-l-(--chat-reply-other-border) text-(--chat-reply-other-border)",
                 )}
               >
                 <div className="mb-0.5 flex min-w-0 items-center gap-1.5">
-                  <p className={cn("truncate text-[12px] font-semibold", quotedMessage.fromMe ? "text-[#008069] dark:text-[#06cf9c]" : "text-[#3b82c4] dark:text-[#53bdeb]")}>{quotedMessage.fromMe ? "Você" : getDisplayName(chat)}</p>
+                  <p className="truncate text-[12px] font-semibold">{quotedMessage.fromMe ? "Você" : getDisplayName(chat)}</p>
                 </div>
                 <div className="flex min-w-0 items-center gap-1.5 text-(--chat-muted-foreground)">
                   {quotedKind === "image" && <FileImage className="h-3.5 w-3.5 shrink-0 opacity-75" />}

@@ -1,9 +1,9 @@
 "use client";
 
-import type { RefObject, UIEvent } from "react";
-import { ArrowDown, MessageSquareText, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ChatRecord, MessageRecord } from "@/lib/supabase-rest";
+import { ArrowDown, MessageSquareText, Trash2 } from "lucide-react";
+import type { RefObject, UIEvent } from "react";
 import { MessageBubble } from "./message-bubble";
 import { getDisplayName, getTimeLabel } from "./message-utils";
 
@@ -122,10 +122,9 @@ export function MessageList({
     <>
       <div
         ref={scrollAreaRef}
-        className="relative flex-1 overflow-y-auto"
+        className="relative flex-1 overflow-y-auto bg-theme-accent/10"
         onScroll={onMessagesScroll}
         style={{
-          backgroundColor: "var(--chat-background)",
           backgroundImage: "url(/bgs/bgdefault.png)",
           backgroundRepeat: "repeat",
           backgroundSize: "600px",
@@ -133,11 +132,11 @@ export function MessageList({
       >
         <div className="mx-auto flex min-h-full w-full flex-col px-6 py-4">
           {isLoading ? (
-            <div className="shadow-x m-auto rounded border border-input bg-input/30 px-4 py-2 text-sm shadow-sm">Carregando mensagens...</div>
+            <div className="shadow-x m-auto rounded-full border border-input/30 bg-input/20 px-4 py-2 text-sm shadow-sm backdrop-blur-[1px]">Carregando mensagens...</div>
           ) : error ? (
-            <div className="m-auto max-w-md rounded bg-red-400/30 px-4 py-3 text-sm text-red-500 shadow-sm">{error}</div>
+            <div className="m-auto max-w-md rounded-full bg-red-400/30 px-4 py-3 text-sm text-red-500 shadow-sm backdrop-blur-[1px]">{error}</div>
           ) : groupedMessages.length === 0 ? (
-            <div className="shadow-x m-auto rounded border border-input bg-input/30 px-4 py-2 text-sm text-foreground/75 shadow-sm">Esta conversa ainda não tem mensagens visíveis.</div>
+            <div className="shadow-x m-auto rounded-full border border-input/30 bg-input/20 px-4 py-2 text-sm text-foreground/75 shadow-sm backdrop-blur-[1px]">Esta conversa ainda não tem mensagens visíveis.</div>
           ) : (
             <>
               <div className="mb-2 flex justify-center">

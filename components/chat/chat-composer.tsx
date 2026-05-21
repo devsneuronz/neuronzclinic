@@ -1,15 +1,15 @@
 "use client";
 
-import type { FormEvent, RefObject } from "react";
-import { useMemo } from "react";
-import { Camera, Check, FileImage, FileText, MapPin, Mic, Paperclip, Pause, PenLine, Reply, Send, Trash2, UserRound, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import type { ChatRecord, MessageRecord } from "@/lib/supabase-rest";
-import type { MentionableUser } from "@/lib/user-roles";
 import { getMentionLabel, getMentionSlug } from "@/lib/user-mentions";
+import type { MentionableUser } from "@/lib/user-roles";
+import { cn } from "@/lib/utils";
+import { Camera, Check, FileImage, FileText, MapPin, Mic, Paperclip, Pause, PenLine, Reply, Send, Trash2, UserRound, Video, X } from "lucide-react";
+import type { FormEvent, RefObject } from "react";
+import { useMemo } from "react";
 import { getAttachmentLabel } from "./chat-attachment-utils";
 import { formatTime, getDisplayName, getMediaKind, getMessagePreviewText } from "./message-utils";
 
@@ -132,12 +132,7 @@ export function ChatComposer({
             {mentionSuggestions.length > 0 && (
               <div className="absolute bottom-full left-0 z-20 mb-2 w-72 overflow-hidden rounded-md border border-amber-200 bg-card p-1 text-sm shadow-lg">
                 {mentionSuggestions.map((user) => (
-                  <button
-                    key={user.email}
-                    type="button"
-                    className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-foreground transition hover:bg-amber-100 dark:hover:bg-amber-500/15"
-                    onClick={() => insertMention(user)}
-                  >
+                  <button key={user.email} type="button" className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-foreground transition hover:bg-amber-100 dark:hover:bg-amber-500/15" onClick={() => insertMention(user)}>
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-xs font-semibold text-amber-700">{getMentionLabel(user).charAt(0).toUpperCase()}</span>
                     <span className="min-w-0">
                       <span className="block truncate font-medium">@{getMentionLabel(user)}</span>
@@ -176,10 +171,15 @@ export function ChatComposer({
       )}
 
       {!isInternalNoteOpen && replyTo && (
-        <div className="mb-2 flex items-center gap-3 overflow-hidden rounded-lg border-l-4 border-[#00a884] bg-[#f0f2f5] px-3 py-2 text-sm shadow-[inset_0_0_0_1px_rgba(17,27,33,0.05)] dark:bg-[#202c33]">
-          <Reply className="h-4 w-4 shrink-0 text-[#00a884]" />
+        <div
+          className={cn(
+            "mb-2 flex items-center gap-3 overflow-hidden rounded-lg border-l-4 bg-(--chat-reply-other-bg) px-3 py-2 text-sm shadow-[inset_0_0_0_1px_rgba(17,27,33,0.05)]",
+            replyTo.from_me ? "border-(--chat-reply-me-border) text-(--chat-reply-me-border)" : "border-l-(--chat-reply-other-border) text-(--chat-reply-other-border)",
+          )}
+        >
+          <Reply className="h-4 w-4 shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold text-[#008069] dark:text-[#06cf9c]">Respondendo {replyTo.from_me ? "você" : getDisplayName(chat)}</p>
+            <p className="truncate text-xs font-semibold">Respondendo {replyTo.from_me ? "você" : getDisplayName(chat)}</p>
             <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted-foreground">
               {getMediaKind(replyTo) === "image" && <FileImage className="h-3.5 w-3.5 shrink-0 opacity-75" />}
               {getMediaKind(replyTo) === "video" && <Video className="h-3.5 w-3.5 shrink-0 opacity-75" />}
@@ -225,7 +225,15 @@ export function ChatComposer({
                 })}
               </div>
 
-              <Button type="button" variant="ghost" size="icon" className="shrink-0 rounded-full text-rose-400 hover:bg-rose-400/10 hover:text-rose-400" onClick={onToggleRecordingPause} disabled={isSending} aria-label={isRecordingPaused ? "Retomar gravação" : "Pausar gravação"}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="shrink-0 rounded-full text-rose-400 hover:bg-rose-400/10 hover:text-rose-400"
+                onClick={onToggleRecordingPause}
+                disabled={isSending}
+                aria-label={isRecordingPaused ? "Retomar gravação" : "Pausar gravação"}
+              >
                 {isRecordingPaused ? <Mic className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
               </Button>
 
