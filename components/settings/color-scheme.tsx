@@ -6,7 +6,6 @@ import { useColorTheme } from "@/hooks/use-color-theme";
 import { Tabs } from "@radix-ui/react-tabs";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useState } from "react";
 import { TabsList, TabsTrigger } from "../ui/tabs";
 import { ThemeCircle } from "./colors";
 
@@ -32,7 +31,6 @@ const colorThemes = [
 export default function Pallete() {
   const { theme, setTheme } = useTheme();
   const { colorTheme, setColorTheme } = useColorTheme();
-  const [followDeviceColors, setFollowDeviceColors] = useState(false);
 
   return (
     <Card className="border border-border bg-card shadow-sm max-w-1/2">
@@ -79,4 +77,3 @@ export default function Pallete() {
     </Card>
   );
 }
-

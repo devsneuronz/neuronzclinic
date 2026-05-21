@@ -211,10 +211,21 @@
   /* =======================================================
      1. TEMA: Padrão
      ======================================================= */
-  html.default:not(.dark),
-  .default {
+  html.default:not(.dark):not(.theme-sand):not(.theme-blue):not(.theme-gray):not(.theme-teal),
+  .default:not(.dark.default):not(.theme-sand):not(.theme-blue):not(.theme-gray):not(.theme-teal) {
+    --background: oklch(0.9305 0.0046 258.32);
+    --card: oklch(0.9505 0.0046 258);
+    --chat-other: var(--color-background);
+    --chat-card: var(--color-background);
+    --secondary: oklch(0.85 0 0);
+    --accent: oklch(0.92 0 0);
+    --border: oklch(0.85 0 0);
+    --input: oklch(0.85 0 0);
+    --muted: oklch(91% 0.00467 258);
+    --popover: oklch(0.95 0 0);
+
     --sidebar-custom-bg: oklch(0.4705 0.0324 103.03);
-    --sidebar-custom-fg: oklch(62.176% 0.03473 103.456);
+    --sidebar-custom-fg: oklch(70.176% 0.03473 103.456);
     --sidebar-custom-primary: oklch(34.559% 0.02009 103.487);
     --sidebar-custom-primary-fg: oklch(0.9017 0.0139 67.65);
     --sidebar-custom-accent: oklch(0.5205 0.0324 103.03);
@@ -223,12 +234,12 @@
 
   html.dark.default,
   .dark.default {
-    --sidebar-custom-bg: oklch(0.16 0.015 60) !important;
-    --sidebar-custom-fg: oklch(0.9 0.02 75) !important;
-    --sidebar-custom-primary: oklch(0.38 0.05 65) !important;
-    --sidebar-custom-primary-fg: oklch(0.99 0 0) !important;
-    --sidebar-custom-accent: oklch(0.22 0.02 60) !important;
-    --sidebar-custom-border: oklch(0.24 0.02 60) !important;
+    --sidebar-custom-bg: oklch(0.18 0.015 100) !important;
+    --sidebar-custom-fg: oklch(0.88 0.02 103.456) !important;
+    --sidebar-custom-primary: oklch(0.32 0.03 103.487) !important;
+    --sidebar-custom-primary-fg: oklch(0.95 0.01 103) !important;
+    --sidebar-custom-accent: oklch(0.23 0.015 103.03) !important;
+    --sidebar-custom-border: oklch(0.26 0.012 105.076) !important;
   }
 
   /* =======================================================
