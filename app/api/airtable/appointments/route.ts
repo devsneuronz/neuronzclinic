@@ -10,7 +10,9 @@ type CreateAppointmentBody = {
   type?: unknown
   attendanceMode?: unknown
   startDateTime?: unknown
+  endDateTime?: unknown
   professionalId?: unknown
+  patientId?: unknown
   patientName?: unknown
   contactPhone?: unknown
   chatId?: unknown
@@ -20,6 +22,33 @@ type CreateAppointmentBody = {
 type AirtableRecord = {
   id: string
   fields?: Record<string, unknown>
+}
+
+type CalendarAppointment = {
+  id: string
+  status: string
+  type: string
+  attendanceMode: string
+  startDateTime: string
+  endDateTime: string
+  professionalId: string
+  professional: string
+  patientId: string
+  patient: string
+  phone: string
+  observations: string
+}
+
+type ContactAppointment = {
+  id: string
+  status: string
+  type: string
+  attendanceMode: string
+  startDateTime: string
+  endDateTime: string
+  professionalId: string
+  professional: string
+  observations: string
 }
 
 function getString(value: unknown) {
@@ -130,6 +159,76 @@ function getLinkedRecordIds(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && isAirtableRecordId(item)) : []
 }
 
+function getFirstLinkedRecordId(value: unknown) {
+  return getLinkedRecordIds(value)[0] ?? ""
+}
+
+function getStringField(fields: Record<string, unknown>, candidates: string[]) {
+  for (const candidate of candidates) {
+    const value = fields[candidate]
+    if (typeof value === "string" && value.trim()) return value.trim()
+    if (typeof value === "number") return String(value)
+  }
+
+  return ""
+}
+
+function getFirstReadableStringField(fields: Record<string, unknown>) {
+  for (const [key, value] of Object.entries(fields)) {
+    const normalizedKey = key.toLowerCase()
+    if (["status", "excluir", "cpf", "whatsapp"].includes(normalizedKey)) continue
+    if (typeof value === "string" && value.trim() && !value.startsWith("rec")) return value.trim()
+  }
+
+  return ""
+}
+
+async function fetchRecordsByIds(table: string, ids: string[]) {
+  const uniqueIds = Array.from(new Set(ids.filter(isAirtableRecordId)))
+  const records: AirtableRecord[] = []
+
+  for (let index = 0; index < uniqueIds.length; index += 25) {
+    const chunk = uniqueIds.slice(index, index + 25)
+    const filterByFormula = `OR(${chunk.map((id) => `RECORD_ID()=${formulaString(id)}`).join(",")})`
+    const params = new URLSearchParams({
+      pageSize: "100",
+      filterByFormula,
+    })
+
+    records.push(...(await fetchAirtableRecords(table, params)))
+  }
+
+  return records
+}
+
+function getContactLabel(fields: Record<string, unknown>) {
+  return (
+    getStringField(fields, ["Nome", "nome", "Name", "name", "Paciente", "paciente", "Nome completo"]) ||
+    getFirstReadableStringField(fields)
+  )
+}
+
+function getProfessionalLabel(fields: Record<string, unknown>) {
+  return (
+    getStringField(fields, ["Nome", "nome", "Name", "name", "Profissional", "profissional", "Nome completo"]) ||
+    getFirstReadableStringField(fields)
+  )
+}
+
+function getContactPhone(fields: Record<string, unknown>) {
+  return getStringField(fields, [
+    "Telefone Princial",
+    "Telefone Principal",
+    "Telefone Secundário",
+    "N_WHATS_API",
+    "N_WHATS_WEB",
+    "celular-so-numero",
+    "Celularsupabase",
+    "Whatsapp",
+    "WhatsApp",
+  ])
+}
+
 function getRecordTimestamp(record: AirtableRecord) {
   const fields = record.fields ?? {}
   const candidates = [
@@ -148,13 +247,121 @@ function getRecordTimestamp(record: AirtableRecord) {
   return 0
 }
 
-function getLatestAppointment(records: AirtableRecord[]) {
-  return records
-    .filter((record) => {
-      const excluded = getString(record.fields?.Excluir)
-      return !["sim", "yes", "true", "excluir", "excluido", "excluído"].includes(excluded.toLowerCase())
-    })
-    .sort((a, b) => getRecordTimestamp(b) - getRecordTimestamp(a))[0]
+function isExcludedAppointment(record: AirtableRecord) {
+  const excluded = getString(record.fields?.Excluir)
+  return ["sim", "yes", "true", "excluir", "excluido", "excluído"].includes(excluded.toLowerCase())
+}
+
+function getAppointmentStart(record: AirtableRecord) {
+  return getString(record.fields?.["Data e Hora - Inicio"])
+}
+
+function getAppointmentEnd(record: AirtableRecord) {
+  return getString(record.fields?.["Data e Hora - Fim"])
+}
+
+async function mapContactAppointments(records: AirtableRecord[]) {
+  const activeRecords = records.filter((record) => !isExcludedAppointment(record)).sort((a, b) => getRecordTimestamp(b) - getRecordTimestamp(a))
+  const professionalIds = activeRecords.map((record) => getFirstLinkedRecordId(record.fields?.Profissional)).filter(Boolean)
+  const professionals =
+    professionalIds.length > 0
+      ? await fetchRecordsByIds(process.env.AIRTABLE_PROFESSIONALS_TABLE || "Profissional", professionalIds).catch(() => [])
+      : []
+  const professionalsById = new Map(professionals.map((record) => [record.id, record.fields ?? {}]))
+
+  return activeRecords.map((record): ContactAppointment => {
+    const fields = record.fields ?? {}
+    const professionalIdValue = getFirstLinkedRecordId(fields.Profissional)
+    const professionalFields = professionalsById.get(professionalIdValue) ?? {}
+
+    return {
+      id: record.id,
+      status: getString(fields.Status) || "Sem status",
+      type: getString(fields.Tipo),
+      attendanceMode: getString(fields["Presencial/Online"]),
+      startDateTime: getAppointmentStart(record),
+      endDateTime: getAppointmentEnd(record),
+      professionalId: professionalIdValue,
+      professional: getProfessionalLabel(professionalFields) || professionalIdValue || "Sem profissional",
+      observations: getString(fields.Observações),
+    }
+  })
+}
+
+async function listCalendarAppointments(searchParams: URLSearchParams) {
+  const start = getString(searchParams.get("start"))
+  const end = getString(searchParams.get("end"))
+  const status = getString(searchParams.get("status"))
+  const type = getString(searchParams.get("type"))
+  const patient = getString(searchParams.get("patient"))
+  const formulaParts: string[] = []
+
+  if (start) {
+    formulaParts.push(
+      `OR(IS_SAME({Data e Hora - Inicio}, DATETIME_PARSE(${formulaString(start)}), "minute"), IS_AFTER({Data e Hora - Inicio}, DATETIME_PARSE(${formulaString(start)})))`,
+    )
+  }
+
+  if (end) {
+    formulaParts.push(`IS_BEFORE({Data e Hora - Inicio}, DATETIME_PARSE(${formulaString(end)}))`)
+  }
+
+  if (status) {
+    formulaParts.push(`LOWER({Status}&"")=LOWER(${formulaString(status)})`)
+  }
+
+  if (type) {
+    formulaParts.push(`LOWER({Tipo}&"")=LOWER(${formulaString(type)})`)
+  }
+
+  const params = new URLSearchParams({ pageSize: "100" })
+  params.append("sort[0][field]", "Data e Hora - Inicio")
+  params.append("sort[0][direction]", "asc")
+
+  if (formulaParts.length > 0) {
+    params.set("filterByFormula", `AND(${formulaParts.join(",")})`)
+  }
+
+  const records = (await fetchAirtableRecords(APPOINTMENT_TABLE, params)).filter((record) => !isExcludedAppointment(record))
+  const contactIds = records.map((record) => getFirstLinkedRecordId(record.fields?.Paciente)).filter(Boolean)
+  const professionalIds = records.map((record) => getFirstLinkedRecordId(record.fields?.Profissional)).filter(Boolean)
+  const [contacts, professionals] = await Promise.all([
+    contactIds.length > 0 ? fetchRecordsByIds(CONTACTS_TABLE, contactIds) : Promise.resolve([]),
+    professionalIds.length > 0
+      ? fetchRecordsByIds(process.env.AIRTABLE_PROFESSIONALS_TABLE || "Profissional", professionalIds).catch(() => [])
+      : Promise.resolve([]),
+  ])
+  const contactsById = new Map(contacts.map((record) => [record.id, record.fields ?? {}]))
+  const professionalsById = new Map(professionals.map((record) => [record.id, record.fields ?? {}]))
+
+  const appointments = records.map((record): CalendarAppointment => {
+    const fields = record.fields ?? {}
+    const patientId = getFirstLinkedRecordId(fields.Paciente)
+    const professionalIdValue = getFirstLinkedRecordId(fields.Profissional)
+    const patientFields = contactsById.get(patientId) ?? {}
+    const professionalFields = professionalsById.get(professionalIdValue) ?? {}
+
+    return {
+      id: record.id,
+      status: getString(fields.Status) || "Sem status",
+      type: getString(fields.Tipo),
+      attendanceMode: getString(fields["Presencial/Online"]),
+      startDateTime: getAppointmentStart(record),
+      endDateTime: getAppointmentEnd(record),
+      professionalId: professionalIdValue,
+      professional: getProfessionalLabel(professionalFields) || professionalIdValue || "Sem profissional",
+      patientId,
+      patient: getContactLabel(patientFields) || patientId || "Sem paciente",
+      phone: getContactPhone(patientFields),
+      observations: getString(fields.Observações),
+    }
+  })
+
+  const filteredAppointments = patient
+    ? appointments.filter((appointment) => appointment.patient.toLowerCase().includes(patient.toLowerCase()))
+    : appointments
+
+  return NextResponse.json({ appointments: filteredAppointments })
 }
 
 async function createAppointment(fields: Record<string, unknown>) {
@@ -180,24 +387,35 @@ async function createAppointment(fields: Record<string, unknown>) {
 
 export async function GET(request: Request) {
   if (!AIRTABLE_TOKEN) {
-    return NextResponse.json({ latestAppointment: null, message: "Missing AIRTABLE_TOKEN or AIRTABLE_API_KEY" }, { status: 200 })
+    return NextResponse.json({ appointments: [], latestAppointment: null, message: "Missing AIRTABLE_TOKEN or AIRTABLE_API_KEY" }, { status: 200 })
   }
 
   const { searchParams } = new URL(request.url)
   const chatId = getString(searchParams.get("chatId"))
   const contactPhone = getString(searchParams.get("contactPhone"))
 
+  if (!chatId && !contactPhone) {
+    try {
+      return await listCalendarAppointments(searchParams)
+    } catch (error) {
+      return NextResponse.json(
+        { appointments: [], message: error instanceof Error ? error.message : "Não foi possível carregar os agendamentos." },
+        { status: 200 },
+      )
+    }
+  }
+
   try {
     const contactId = await findContactId({ chatId, contactPhone })
     if (!contactId) {
-      return NextResponse.json({ latestAppointment: null })
+      return NextResponse.json({ appointments: [], latestAppointment: null })
     }
 
     const contact = await fetchAirtableRecord(CONTACTS_TABLE, contactId)
     const appointmentIds = getLinkedRecordIds(contact?.fields?.Agendamentos)
 
     if (appointmentIds.length === 0) {
-      return NextResponse.json({ latestAppointment: null })
+      return NextResponse.json({ appointments: [], latestAppointment: null })
     }
 
     const filterByFormula = `OR(${appointmentIds.map((id) => `RECORD_ID()=${formulaString(id)}`).join(",")})`
@@ -206,19 +424,16 @@ export async function GET(request: Request) {
       filterByFormula,
     })
     const records = await fetchAirtableRecords(APPOINTMENT_TABLE, params)
-    const latest = getLatestAppointment(records)
+    const appointments = await mapContactAppointments(records)
+    const latest = appointments[0]
 
     if (!latest) {
-      return NextResponse.json({ latestAppointment: null })
+      return NextResponse.json({ appointments: [], latestAppointment: null })
     }
 
     return NextResponse.json({
-      latestAppointment: {
-        id: latest.id,
-        status: getString(latest.fields?.Status) || "Sem status",
-        type: getString(latest.fields?.Tipo),
-        startDateTime: getString(latest.fields?.["Data e Hora - Inicio"]),
-      },
+      appointments,
+      latestAppointment: latest,
     })
   } catch (error) {
     return NextResponse.json(
@@ -238,7 +453,9 @@ export async function POST(request: Request) {
   const type = getString(body.type)
   const attendanceMode = getString(body.attendanceMode)
   const startDateTime = getString(body.startDateTime)
+  const endDateTime = getString(body.endDateTime)
   const professionalId = getString(body.professionalId)
+  const patientId = getString(body.patientId)
   const patientName = getString(body.patientName)
   const contactPhone = getString(body.contactPhone)
   const chatId = getString(body.chatId)
@@ -252,13 +469,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Profissional inválido." }, { status: 400 })
   }
 
+  if (patientId && !isAirtableRecordId(patientId)) {
+    return NextResponse.json({ message: "Paciente inválido." }, { status: 400 })
+  }
+
   const startDate = new Date(startDateTime)
   if (Number.isNaN(startDate.getTime())) {
     return NextResponse.json({ message: "Data e hora invalidas." }, { status: 400 })
   }
 
+  const endDate = endDateTime ? new Date(endDateTime) : null
+  if (endDateTime && (!endDate || Number.isNaN(endDate.getTime()) || endDate.getTime() <= startDate.getTime())) {
+    return NextResponse.json({ message: "Data e hora final inválidas." }, { status: 400 })
+  }
+
   try {
-    const contactId = await findContactId({ chatId, contactPhone })
+    const contactId = patientId || (await findContactId({ chatId, contactPhone }))
     if (!contactId) {
       return NextResponse.json({ message: "Contato não encontrado no Airtable para vincular como paciente." }, { status: 404 })
     }
@@ -272,6 +498,7 @@ export async function POST(request: Request) {
       Paciente: [contactId],
     }
 
+    if (endDate) fields["Data e Hora - Fim"] = endDate.toISOString()
     if (observations) fields["Observações"] = observations
 
     const record = await createAppointment(fields)

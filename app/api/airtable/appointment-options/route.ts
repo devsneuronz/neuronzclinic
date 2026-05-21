@@ -16,6 +16,14 @@ const PROFESSIONAL_TABLE_CANDIDATES = [
   "Professional",
   "Professionals",
 ].filter(Boolean) as string[]
+const CONTACTS_TABLE_CANDIDATES = [
+  process.env.AIRTABLE_CONTACTS_TABLE,
+  "Contatos",
+  "Contato",
+  "Pacientes",
+  "Paciente",
+  "Contacts",
+].filter(Boolean) as string[]
 
 type AirtableRecord = {
   id: string
@@ -151,52 +159,94 @@ async function getProfessionals(tableName: string) {
     .sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }))
 }
 
+async function getPatients(tableName: string) {
+  const records = await fetchAllRecords(tableName)
+
+  return records
+    .filter((record) => !isInactive(record.fields ?? {}))
+    .map((record) => {
+      const fields = record.fields ?? {}
+      const label =
+        getStringField(fields, ["Nome", "nome", "Nome completo", "Name", "name", "Paciente", "paciente"]) ||
+        getFirstReadableStringField(fields)
+
+      return label ? { id: record.id, label } : null
+    })
+    .filter((patient): patient is { id: string; label: string } => Boolean(patient))
+    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }))
+}
+
 export async function GET() {
   if (!AIRTABLE_TOKEN) {
     return NextResponse.json(
-      { types: [], professionals: [], error: "Missing AIRTABLE_TOKEN or AIRTABLE_API_KEY" },
+      { types: [], professionals: [], patients: [], error: "Missing AIRTABLE_TOKEN or AIRTABLE_API_KEY" },
       { status: 200 },
     )
   }
 
-  const tables = await fetchMetadataTables()
-  const appointmentTable = getTableByCandidates(tables, APPOINTMENT_TABLE_CANDIDATES)
-  const professionalTable = getTableByCandidates(tables, PROFESSIONAL_TABLE_CANDIDATES)
-  const errors: string[] = []
+  try {
+    const tables = await fetchMetadataTables()
+    const appointmentTable = getTableByCandidates(tables, APPOINTMENT_TABLE_CANDIDATES)
+    const professionalTable = getTableByCandidates(tables, PROFESSIONAL_TABLE_CANDIDATES)
+    const contactsTable = getTableByCandidates(tables, CONTACTS_TABLE_CANDIDATES)
+    const errors: string[] = []
 
-  let types = getChoiceNames(appointmentTable, ["Tipo", "tipo"])
-  const status = getChoiceNames(appointmentTable, ["Status", "status"])
-  const attendanceModes = getChoiceNames(appointmentTable, ["Presencial/Online", "presencial/online"])
-  let professionals: Array<{ id: string; label: string }> = []
+    let types = getChoiceNames(appointmentTable, ["Tipo", "tipo"])
+    const status = getChoiceNames(appointmentTable, ["Status", "status"])
+    const attendanceModes = getChoiceNames(appointmentTable, ["Presencial/Online", "presencial/online"])
+    let professionals: Array<{ id: string; label: string }> = []
+    let patients: Array<{ id: string; label: string }> = []
 
-  if (professionalTable?.name) {
-    try {
-      professionals = await getProfessionals(professionalTable.name)
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : "Não foi possível carregar profissionais do Airtable.")
+    if (professionalTable?.name) {
+      try {
+        professionals = await getProfessionals(professionalTable.name)
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : "Não foi possível carregar profissionais do Airtable.")
+      }
     }
-  }
 
-  if (types.length === 0 && appointmentTable?.name) {
-    try {
-      const records = await fetchAllRecords(appointmentTable.name)
-      types = Array.from(
-        new Set(
-          records
-            .map((record) => getStringField(record.fields ?? {}, ["Tipo", "tipo"]))
-            .filter(Boolean),
-        ),
-      ).sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }))
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : "Não foi possível carregar tipos do Airtable.")
+    if (contactsTable?.name) {
+      try {
+        patients = await getPatients(contactsTable.name)
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : "Não foi possível carregar pacientes do Airtable.")
+      }
     }
-  }
 
-  return NextResponse.json({
-    types,
-    professionals,
-    status,
-    attendanceModes,
-    errors,
-  })
+    if (types.length === 0 && appointmentTable?.name) {
+      try {
+        const records = await fetchAllRecords(appointmentTable.name)
+        types = Array.from(
+          new Set(
+            records
+              .map((record) => getStringField(record.fields ?? {}, ["Tipo", "tipo"]))
+              .filter(Boolean),
+          ),
+        ).sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }))
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : "Não foi possível carregar tipos do Airtable.")
+      }
+    }
+
+    return NextResponse.json({
+      types,
+      professionals,
+      patients,
+      status,
+      attendanceModes,
+      errors,
+    })
+  } catch (error) {
+    return NextResponse.json(
+      {
+        types: [],
+        professionals: [],
+        patients: [],
+        status: [],
+        attendanceModes: [],
+        errors: [error instanceof Error ? error.message : "Não foi possível carregar opções do Airtable."],
+      },
+      { status: 200 },
+    )
+  }
 }

@@ -31,12 +31,16 @@ type LatestAppointment = {
   id: string;
   status: string;
   type?: string;
+  attendanceMode?: string;
   startDateTime?: string;
+  endDateTime?: string;
+  professional?: string;
+  observations?: string;
 };
 
 type LatestAppointmentResult = {
   key: string;
-  appointment: LatestAppointment | null;
+  appointments: LatestAppointment[];
 };
 
 interface ProfileViewProps {
@@ -146,6 +150,21 @@ function getReadableDateTime(value: string) {
   }).format(new Date(value));
 }
 
+function getAppointmentDateLabel(value?: string) {
+  if (!value) return "Sem data";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions = [], onChangeStatus, onToggleTag, onReorderTags, onCommitTagOrder, onChangeContactInfo }: ProfileViewProps) {
   const [bottomTab, setBottomTab] = useState<"consultas" | "avisos">("consultas");
   const [draggedTagId, setDraggedTagId] = useState<string | null>(null);
@@ -206,7 +225,8 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
     { id: "avisos", label: "Avisos / Tarefas" },
   ] as const;
   const latestAppointmentKey = `${chat?.chat_id || ""}|${contactPhone || chat?.phone_contact || ""}`;
-  const latestAppointment = latestAppointmentResult?.key === latestAppointmentKey ? latestAppointmentResult.appointment : null;
+  const appointments = latestAppointmentResult?.key === latestAppointmentKey ? latestAppointmentResult.appointments : [];
+  const latestAppointment = appointments[0] ?? null;
   const isLoadingLatestAppointment = Boolean(latestAppointmentKey && latestAppointmentResult?.key !== latestAppointmentKey);
   const appointmentStatusLabel = isLoadingLatestAppointment ? "Carregando..." : latestAppointment?.status || "Nenhum";
   const hasUnsavedContactInfo = (Object.keys(contactInfo) as ContactInfoField[]).some(
@@ -294,14 +314,17 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
     if (phone) params.set("contactPhone", phone);
 
     fetch(`/api/airtable/appointments?${params.toString()}`)
-      .then((response) => response.json() as Promise<{ latestAppointment?: LatestAppointment | null }>)
+      .then((response) => response.json() as Promise<{ appointments?: LatestAppointment[]; latestAppointment?: LatestAppointment | null }>)
       .then((data) => {
         if (!isMounted) return;
-        setLatestAppointmentResult({ key, appointment: data.latestAppointment ?? null });
+        setLatestAppointmentResult({
+          key,
+          appointments: Array.isArray(data.appointments) ? data.appointments : data.latestAppointment ? [data.latestAppointment] : [],
+        });
       })
       .catch(() => {
         if (!isMounted) return;
-        setLatestAppointmentResult({ key, appointment: null });
+        setLatestAppointmentResult({ key, appointments: [] });
       });
 
     return () => {
@@ -418,10 +441,24 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
       setAppointmentDateTime("");
       setAppointmentProfessionalId("");
       setAppointmentObservations("");
-      setLatestAppointmentResult({
-        key: latestAppointmentKey,
-        appointment: data.id ? { id: data.id, status: appointmentStatus, type: appointmentType, startDateTime: appointmentDateTime } : null,
-      });
+      if (data.id) {
+        const professional = appointmentOptions.professionals.find((option) => option.id === appointmentProfessionalId)?.label || "";
+        setLatestAppointmentResult((current) => ({
+          key: latestAppointmentKey,
+          appointments: [
+            {
+              id: data.id!,
+              status: appointmentStatus,
+              type: appointmentType,
+              attendanceMode: appointmentAttendanceMode,
+              startDateTime: appointmentDateTime,
+              professional,
+              observations: appointmentObservations,
+            },
+            ...(current?.key === latestAppointmentKey ? current.appointments.filter((appointment) => appointment.id !== data.id) : []),
+          ],
+        }));
+      }
       window.setTimeout(() => {
         setIsAppointmentDialogOpen(false);
       }, 700);
@@ -1102,7 +1139,36 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
           ))}
         </div>
 
-        <div className="h-32 p-4">{bottomTab === "consultas" ? <p className="text-sm text-muted-foreground">Nenhuma consulta registrada</p> : <p className="text-sm text-muted-foreground">Nenhum aviso ou tarefa</p>}</div>
+        <div className="max-h-64 overflow-y-auto p-4">
+          {bottomTab === "consultas" ? (
+            isLoadingLatestAppointment ? (
+              <p className="text-sm text-muted-foreground">Carregando consultas...</p>
+            ) : appointments.length > 0 ? (
+              <div className="space-y-2">
+                {appointments.map((appointment) => (
+                  <div key={appointment.id} className="rounded-md border border-border bg-card px-3 py-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">{appointment.type || "Consulta"}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{getAppointmentDateLabel(appointment.startDateTime)}</p>
+                      </div>
+                      <span className="shrink-0 rounded-sm bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">{appointment.status || "Sem status"}</span>
+                    </div>
+                    <div className="mt-2 grid gap-1 text-xs text-muted-foreground">
+                      {appointment.professional && <p className="truncate">Profissional: {appointment.professional}</p>}
+                      {appointment.attendanceMode && <p className="truncate">Formato: {appointment.attendanceMode}</p>}
+                      {appointment.observations && <p className="line-clamp-2 break-words">Obs.: {appointment.observations}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nenhuma consulta registrada</p>
+            )
+          ) : (
+            <p className="text-sm text-muted-foreground">Nenhum aviso ou tarefa</p>
+          )}
+        </div>
       </div>
     </>
   );
