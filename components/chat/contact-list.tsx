@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { CHAT_DRAFT_CHANGED_EVENT, CHAT_DRAFT_STORAGE_PREFIX, readChatDraft, type ChatDraftChangedDetail } from "@/lib/chat-drafts";
 import { getChatStatusColor, getChatStatusLabel } from "@/lib/chat-status";
@@ -22,7 +23,7 @@ import { MessageStatusIcon } from "./message-status-icon";
 interface ContactListProps {
   chats: ChatRecord[];
   search: string;
-  isLoading?: boolean;
+  isLoadingMessages?: boolean;
   isLoadingMore?: boolean;
   isSearching?: boolean;
   hasMore?: boolean;
@@ -113,7 +114,7 @@ function getSectorLabel(id: string, labels: Record<string, string>) {
 export function ContactList({
   chats,
   search,
-  isLoading,
+  isLoadingMessages,
   isLoadingMore,
   isSearching,
   hasMore,
@@ -144,6 +145,9 @@ export function ContactList({
   const sectorOptions = useMemo(() => (sectorCatalog.length > 0 ? sectorCatalog : getUniqueOptions(sectorIds.map((id) => getSectorLabel(id, sectorLabels)))), [sectorCatalog, sectorIds, sectorLabels]);
 
   const hasActiveFilters = statusFilter !== ALL_FILTERS || tagFilter !== ALL_FILTERS || sectorFilter !== ALL_FILTERS;
+
+  const { user, isLoading } = useCurrentUser();
+  const userName = user?.name ?? "Usuário";
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -310,7 +314,7 @@ export function ContactList({
         <Avatar className="h-9 w-9">
           <AvatarFallback className="bg-gradient-to-br from-teal-600 to-teal-800 text-xs text-white">P</AvatarFallback>
         </Avatar>
-        <span className="font-medium text-foreground">Pedro</span>
+        <span className="font-medium text-foreground">{isLoading ? "Carregando usuário..." : userName}</span>
 
         <div className="ml-auto flex items-center gap-3">
           <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
@@ -467,7 +471,7 @@ export function ContactList({
       </div>
 
       <div className="flex-1 overflow-y-auto" onScroll={handleListScroll}>
-        {isLoading || isSearching ? (
+        {isLoadingMessages || isSearching ? (
           <div className="p-4 text-sm text-muted-foreground">Carregando conversas...</div>
         ) : visibleChats.length === 0 ? (
           <div className="p-4 text-sm text-muted-foreground">Nenhuma conversa encontrada.</div>
@@ -541,7 +545,7 @@ export function ContactList({
             );
           })
         )}
-        {!isLoading && !search.trim() && (
+        {!isLoadingMessages && !search.trim() && (
           <div className="p-3">
             {hasMore ? (
               <Button variant="ghost" className="h-9 w-full text-sm text-muted-foreground" disabled={isLoadingMore} onClick={onLoadMore}>

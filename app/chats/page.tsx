@@ -246,7 +246,12 @@ function isMatchingSentMessage(message: MessageRecord, optimisticMessage: Messag
     return message.message_type === optimisticMessage.message_type || !!message.media_url || !!message.public_media_url;
   }
 
-  return message.content?.trim() === optimisticMessage.content?.trim();
+  const cleanContent = (text: string | null | undefined) => {
+    if (!text) return "";
+    return text.replace(/\r\n/g, "\n").trim();
+  };
+
+  return cleanContent(message.content) === cleanContent(optimisticMessage.content);
 }
 
 function hasFreshLatestStatus(chat: ChatRecord, latestStatus?: LatestMessageStatus) {
@@ -328,8 +333,6 @@ export default function ChatsPage() {
   const [statusOptions, setStatusOptions] = useState<ChatStatusOption[]>([]);
   const [tagOptions, setTagOptions] = useState<ChatTag[]>([]);
   const [error, setError] = useState<string>();
-  const [isAssinaturaMode, setIsAssinaturaMode] = useState(false);
-  const [isGhostMode, setIsGhostMode] = useState(true);
   const searchRequestIdRef = useRef(0);
 
   const normalizedSearch = search.trim();
@@ -354,7 +357,6 @@ export default function ChatsPage() {
   const hasLoadedSelectedMessages = !!selectedChatRemoteId && selectedChatRemoteId in messagesByChatId;
   const isLoadingSelectedMessages = !!selectedChatRemoteId && !hasLoadedSelectedMessages;
   const selectedChatRemoteIdRef = useRef<string | undefined>(undefined);
-  const isGhostModeRef = useRef(isGhostMode);
   const messagesByChatIdRef = useRef(messagesByChatId);
   const readReceiptKeyByChatIdRef = useRef<Record<string, string>>({});
   const targetChatId = searchParams.get("chatId") || "";
@@ -366,16 +368,41 @@ export default function ChatsPage() {
     detailsMax: 40,
   });
 
+  const [isAssinaturaMode, setIsAssinaturaMode] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("neuronzclinic.chat.use-signature");
+      return saved === "true"; // Converte a string "true" para o booleano true. Qualquer outra coisa vira false.
+    }
+    return false;
+  });
+
+  const [isGhostMode, setIsGhostMode] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("neuronzclinic.chat.ghost-mode");
+      return saved === "true";
+    }
+    return false;
+  });
+
+  const isGhostModeRef = useRef(isGhostMode);
+
+  // 3. Efeito que assiste as mudanças de estado e as escreve no localStorage
+  useEffect(() => {
+    localStorage.setItem("neuronzclinic.chat.use-signature", String(isAssinaturaMode));
+  }, [isAssinaturaMode]);
+
+  useEffect(() => {
+    localStorage.setItem("neuronzclinic.chat.ghost-mode", String(isGhostMode));
+  }, [isGhostMode]);
+
   useEffect(() => {
     const calculateSizes = () => {
       const width = window.innerWidth;
 
-      // 1. Defina quanto você quer que a barra de detalhes meça EM PIXELS fixos ideais
       const idealDetailsWidthPx = 550;
       const minDetailsWidthPx = 500;
       const maxDetailsWidthPx = 700;
 
-      // 2. Transforma esses pixels na porcentagem exata que a tela atual representa
       const detailsDefaultPercent = (idealDetailsWidthPx / width) * 100;
       const detailsMinPercent = (minDetailsWidthPx / width) * 100;
       const detailsMaxPercent = (maxDetailsWidthPx / width) * 100;
@@ -1404,7 +1431,7 @@ export default function ChatsPage() {
         <ContactList
           chats={visibleChats}
           search={search}
-          isLoading={isLoadingChats}
+          isLoadingMessages={isLoadingChats}
           isLoadingMore={isSearching ? isLoadingMoreSearchChats : isLoadingMoreChats}
           isSearching={isSearchingChats}
           hasMore={isSearching ? hasMoreSearchChats : hasMoreChats}
@@ -1467,6 +1494,7 @@ export default function ChatsPage() {
         isDetailsOpen={showDetails}
         onToggleStatus={handleToggleStatus}
         isMobile={true}
+        isAssinaturaMode={isAssinaturaMode}
       />
     );
   }
@@ -1477,7 +1505,7 @@ export default function ChatsPage() {
       <ContactList
         chats={visibleChats}
         search={search}
-        isLoading={isLoadingChats}
+        isLoadingMessages={isLoadingChats}
         isLoadingMore={isSearching ? isLoadingMoreSearchChats : isLoadingMoreChats}
         isSearching={isSearchingChats}
         hasMore={isSearching ? hasMoreSearchChats : hasMoreChats}
@@ -1512,6 +1540,7 @@ export default function ChatsPage() {
             onToggleDetails={() => setShowDetails(!showDetails)}
             isDetailsOpen={showDetails}
             onToggleStatus={handleToggleStatus}
+            isAssinaturaMode={isAssinaturaMode}
           />
         </Panel>
 
