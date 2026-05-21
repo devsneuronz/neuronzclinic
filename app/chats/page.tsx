@@ -1009,7 +1009,7 @@ export default function ChatsPage() {
 
         {selectedChat && showDetails && (
           <>
-            <PanelResizeHandle className="w-1 bg-(--chat-muted)/50 transition-colors hover:bg-(--chat-primary)/50" />
+            <PanelResizeHandle className="w-1 bg-(--chat-muted)/50 transition-colors hover:bg-theme-primary/50" />
             <Panel id="details-panel" defaultSize={panelSizes.detailsDefault} minSize={panelSizes.detailsMin} maxSize={panelSizes.detailsMax} className="bg-(--chat-card) border-l border-(--chat-muted)">
               <ContactDetails
                 chat={selectedChat}

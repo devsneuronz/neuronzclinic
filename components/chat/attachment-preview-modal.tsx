@@ -1,10 +1,10 @@
 "use client";
 
-import Image from "next/image";
-import type { FormEvent } from "react";
-import { FileText, Mic, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FileText, Mic, Send, X } from "lucide-react";
+import Image from "next/image";
+import type { FormEvent } from "react";
 import type { AttachmentPreviewKind } from "./chat-attachment-utils";
 import { getAttachmentLabel } from "./chat-attachment-utils";
 
@@ -21,7 +21,7 @@ type AttachmentPreviewModalProps = {
 
 export function AttachmentPreviewModal({ attachment, attachmentKind, attachmentPreviewUrl, draft, isSending, onDraftChange, onRemoveAttachment, onSubmit }: AttachmentPreviewModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-background/95 backdrop-blur-sm">
+    <div className="fixed inset-0 z-100 flex flex-col bg-background/95 backdrop-blur-sm">
       <div className="flex h-16 items-center justify-between border-b border-border bg-card px-4">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-foreground">{attachment.name}</p>

@@ -1,10 +1,10 @@
 "use client";
 
-import { ChevronLeft, Forward, Info, Trash2, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import type { ChatRecord } from "@/lib/supabase-rest";
+import { ChevronLeft, Forward, Info, Trash2, X } from "lucide-react";
 import { getDisplayName } from "./message-utils";
 
 type ChatHeaderProps = {
@@ -67,7 +67,7 @@ export function ChatHeader({ chat, isSelectionMode, selectedMessagesCount, canDe
           </div>
 
           <div className="flex items-center gap-2">
-            <Button onClick={onToggleStatus} className="cursor-pointer bg-teal-500 font-medium text-white hover:bg-teal-600">
+            <Button onClick={onToggleStatus} className="cursor-pointer bg-theme-primary font-medium text-white hover:bg-theme-primary/80">
               {chat.finalizada ? "Reabrir" : "Finalizar"}
             </Button>
             <Button onClick={onToggleDetails} variant="ghost" size="icon" className="cursor-pointer text-muted-foreground hover:text-foreground">

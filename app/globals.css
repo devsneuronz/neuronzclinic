@@ -133,6 +133,10 @@
     --chat-muted-foreground: #667781;
     --chat-me: #d9fdd3;
     --chat-other: #ffffff;
+    --chat-reply-me-bg: #c8f4c2;
+    --chat-reply-other-bg: #f5f6f6;
+    --chat-reply-me-border: #00a884;
+    --chat-reply-other-border: #53bdeb;
   }
 
   .dark {
@@ -195,6 +199,8 @@
     --chat-muted-foreground: #8696a0;
     --chat-me: #144d37;
     --chat-other: #242626;
+    --chat-reply-me-bg: #0f3f2d;
+    --chat-reply-other-bg: #1d1e1e;
   }
 }
 
@@ -203,7 +209,30 @@
    ========================================================================== */
 @layer base {
   /* =======================================================
-     1. TEMA: AREIA
+     1. TEMA: Padrão
+     ======================================================= */
+  html.default:not(.dark),
+  .default {
+    --sidebar-custom-bg: oklch(0.4705 0.0324 103.03);
+    --sidebar-custom-fg: oklch(62.176% 0.03473 103.456);
+    --sidebar-custom-primary: oklch(34.559% 0.02009 103.487);
+    --sidebar-custom-primary-fg: oklch(0.9017 0.0139 67.65);
+    --sidebar-custom-accent: oklch(0.5205 0.0324 103.03);
+    --sidebar-custom-border: oklch(37.84% 0.02909 105.076);
+  }
+
+  html.dark.default,
+  .dark.default {
+    --sidebar-custom-bg: oklch(0.16 0.015 60) !important;
+    --sidebar-custom-fg: oklch(0.9 0.02 75) !important;
+    --sidebar-custom-primary: oklch(0.38 0.05 65) !important;
+    --sidebar-custom-primary-fg: oklch(0.99 0 0) !important;
+    --sidebar-custom-accent: oklch(0.22 0.02 60) !important;
+    --sidebar-custom-border: oklch(0.24 0.02 60) !important;
+  }
+
+  /* =======================================================
+     2. TEMA: AREIA
      ======================================================= */
   html.theme-sand:not(.dark),
   .theme-sand {
@@ -226,7 +255,7 @@
   }
 
   /* =======================================================
-     2. TEMA: AZUL
+     3. TEMA: AZUL
      ======================================================= */
   html.theme-blue:not(.dark),
   .theme-blue {
@@ -249,7 +278,7 @@
   }
 
   /* =======================================================
-     3. TEMA: CINZA
+     4. TEMA: CINZA
      ======================================================= */
   html.theme-gray:not(.dark),
   .theme-gray {
@@ -272,7 +301,7 @@
   }
 
   /* =======================================================
-     4. TEMA: AZUL-OCEANO (TEAL)
+     5. TEMA: AZUL-OCEANO (TEAL)
      ======================================================= */
   html.theme-teal:not(.dark),
   .theme-teal {

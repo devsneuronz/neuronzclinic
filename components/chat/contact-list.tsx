@@ -1,22 +1,22 @@
 "use client";
 
-import type { UIEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Feather, Filter, FilterX, HatGlasses, Repeat, Search, SquarePlus } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { getChatTags, getReadableTextColor } from "@/lib/chat-tags";
-import { getChatStatusColor, getChatStatusLabel } from "@/lib/chat-status";
-import { cn } from "@/lib/utils";
-import { ChatRecord, LatestMessageStatus } from "@/lib/supabase-rest";
 import { getAvatarInitials } from "@/lib/avatar-initials";
-import { MessageStatusIcon } from "./message-status-icon";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { getChatStatusColor, getChatStatusLabel } from "@/lib/chat-status";
+import { getChatTags, getReadableTextColor } from "@/lib/chat-tags";
+import { ChatRecord, LatestMessageStatus } from "@/lib/supabase-rest";
+import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
+import { ChevronDown, ChevronUp, Feather, FilterX, HatGlasses, Repeat, Search, SquarePlus } from "lucide-react";
+import type { UIEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { MessageStatusIcon } from "./message-status-icon";
 
 interface ContactListProps {
   chats: ChatRecord[];
@@ -254,9 +254,9 @@ export function ContactList({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex items-center">
+                <div className="flex items-center ">
                   <Feather className="mr-1 h-3.5 w-3.5 text-muted-foreground" />
-                  <Switch className="scale-75 data-[state=checked]:bg-primary" checked={isAssinaturaMode} onCheckedChange={onToggleAssinatura} />
+                  <Switch className="scale-75" checked={isAssinaturaMode} onCheckedChange={onToggleAssinatura} />
                 </div>
               </TooltipTrigger>
               <TooltipContent side="bottom" align="start">
@@ -267,7 +267,7 @@ export function ContactList({
               <TooltipTrigger asChild>
                 <div className="flex items-center">
                   <HatGlasses className="mr-1 h-4 w-4 text-muted-foreground" />
-                  <Switch className="scale-75 data-[state=checked]:bg-primary" checked={isGhostMode} onCheckedChange={onToggleGhost} />
+                  <Switch className="scale-75" checked={isGhostMode} onCheckedChange={onToggleGhost} />
                 </div>
               </TooltipTrigger>
               <TooltipContent side="bottom" align="start">
@@ -284,9 +284,7 @@ export function ContactList({
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={search} onChange={(event) => onSearchChange?.(event.target.value)} placeholder="Procure a conversa" className="h-9 border-0 bg-secondary pl-9 text-sm" />
           </div>
-          <Button variant="ghost" size="icon" className={cn("h-9 w-9 text-muted-foreground hover:text-foreground", hasActiveFilters && "text-foreground")} onClick={clearFilters} title="Limpar filtros" aria-label="Limpar filtros">
-            <FilterX className="h-4 w-4" />
-          </Button>
+
           <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground" title="Novo contato" aria-label="Novo contato">
             <SquarePlus className="h-4 w-4" />
           </Button>
@@ -299,7 +297,17 @@ export function ContactList({
             Filtros
           </button>
           <div className="flex items-center gap-3">
-            <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+            <Button
+              variant="ghost"
+              disabled={!hasActiveFilters}
+              size="icon"
+              className={cn("h-7 w-7 text-muted-foreground", hasActiveFilters && "hover:bg-red-500/10! hover:text-red-500")}
+              onClick={clearFilters}
+              title="Limpar filtros"
+              aria-label="Limpar filtros"
+            >
+              <FilterX className="h-4 w-4" />
+            </Button>
             <button className="text-muted-foreground hover:text-foreground" onClick={() => setIsFiltersOpen((current) => !current)} aria-label={isFiltersOpen ? "Ocultar filtros" : "Mostrar filtros"}>
               {isFiltersOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
@@ -313,7 +321,9 @@ export function ContactList({
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_FILTERS}>Status</SelectItem>
+                <SelectItem value={ALL_FILTERS}>
+                  <span className="text-muted-foreground">Selecione um status</span>
+                </SelectItem>
                 {statusOptions.map((status) => (
                   <SelectItem key={status} value={status}>
                     {status}
@@ -327,7 +337,9 @@ export function ContactList({
                 <SelectValue placeholder="Tags" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_FILTERS}>Tags</SelectItem>
+                <SelectItem value={ALL_FILTERS}>
+                  <span className="text-muted-foreground">Selecione uma tag</span>
+                </SelectItem>
                 {tagOptions.map((tag) => (
                   <SelectItem key={tag} value={tag}>
                     {tag}
@@ -341,7 +353,9 @@ export function ContactList({
                 <SelectValue placeholder="Setor" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_FILTERS}>Setor</SelectItem>
+                <SelectItem value={ALL_FILTERS}>
+                  <span className="text-muted-foreground">Selecione um setor</span>
+                </SelectItem>
                 {sectorOptions.map((sector) => (
                   <SelectItem key={sector} value={sector}>
                     {sector}
@@ -361,7 +375,7 @@ export function ContactList({
               type="button"
               className={cn(
                 "relative text-xs font-medium text-muted-foreground transition-colors hover:text-foreground",
-                scopeTab === tab.id && "text-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-(--chat-primary)",
+                scopeTab === tab.id && "text-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-(--color-theme-primary)",
               )}
               onClick={() => setScopeTab(tab.id)}
             >
@@ -374,7 +388,11 @@ export function ContactList({
             <button
               key={tab.id}
               type="button"
-              className={cn("h-8 rounded-md text-xs font-medium text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground", stateTab === tab.id && "bg-background text-foreground shadow-sm ring-1 ring-border/70")}
+              className={cn(
+                "h-8 rounded-md text-xs font-medium text-muted-foreground transition-colors",
+                stateTab === tab.id && "bg-theme-primary text-white shadow-sm ring-1 ring-border/70",
+                stateTab !== tab.id && "hover:bg-theme-accent hover:text-foreground dark:hover:bg-theme-primary/20",
+              )}
               onClick={() => setStateTab(tab.id)}
             >
               {tab.label}
@@ -398,7 +416,7 @@ export function ContactList({
               <button
                 key={chat.id}
                 onClick={() => onSelect?.(chat.id)}
-                className={cn("flex w-full items-start gap-3 border-b border-border/50 p-3 text-left transition-colors hover:bg-secondary/50", selectedId === chat.id && "bg-secondary")}
+                className={cn("flex w-full items-start gap-3 border-b border-border/50 p-3 text-left transition-colors hover:bg-theme-accent/30", selectedId === chat.id && "bg-theme-accent/10")}
               >
                 <div className="relative h-11 w-11 shrink-0">
                   <Avatar className="h-11 w-11">
@@ -422,7 +440,7 @@ export function ContactList({
                   <div className="mt-0.5 flex items-center gap-1">
                     {chat.text_last_message && <MessageStatusIcon fromMe={chat.last_message_fromMe} status={latestStatus?.status} timestamp={latestStatus?.timestamp_msg ?? chat.last_message_time} />}
                     <p className="truncate text-sm text-muted-foreground">{chat.text_last_message || "Sem mensagens recentes"}</p>
-                    {!!chat.unread_count && <Badge className="ml-auto h-5 min-w-5 shrink-0 bg-green-500 px-1.5 text-[10px] font-medium text-white">{chat.unread_count}</Badge>}
+                    {!!chat.unread_count && <Badge className="ml-auto h-5 min-w-5 shrink-0 bg-green-500 px-1.5 text-[10px] font-medium text-white">{chat.unread_count <= 99 ? chat.unread_count : "+99"}</Badge>}
                   </div>
 
                   {tags.length > 0 && (

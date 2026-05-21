@@ -12,6 +12,7 @@ import { ThemeCircle } from "./colors";
 
 // Definição das paletas de cores baseadas no Chrome (nome do tema para aplicar na classe do HTML)
 const colorThemes = [
+  { id: "default", name: "Padrão", primary: "#e5ddd5", secondary: "#5e5c47", muted: "#6c6a55" },
   { id: "theme-sand", name: "Areia Premium", primary: "#795548", secondary: "#ffe0b2", muted: "#bcaaa4" },
   { id: "theme-blue", name: "Azul Clássico", primary: "#0b57d0", secondary: "#a8c7fa", muted: "#747775" },
   { id: "theme-gray", name: "Cinza Neutro", primary: "#1f1f1f", secondary: "#e3e3e3", muted: "#757575" },
@@ -46,18 +47,12 @@ export default function Pallete() {
                 Claro
               </TabsTrigger>
 
-              <TabsTrigger
-                value="dark"
-                className="rounded-full gap-2 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
-              >
+              <TabsTrigger value="dark" className="rounded-full gap-2 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:border data-[state=active]:border-border">
                 <Moon className="h-4 w-4 text-blue-400" />
                 Escuro
               </TabsTrigger>
 
-              <TabsTrigger
-                value="system"
-                className="rounded-full gap-2 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
-              >
+              <TabsTrigger value="system" className="rounded-full gap-2 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:border data-[state=active]:border-border">
                 <Monitor className="h-4 w-4 text-muted-foreground" />
                 Dispositivo
               </TabsTrigger>

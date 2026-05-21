@@ -45,7 +45,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
       className={cn(
         "relative flex h-screen flex-col transition-all duration-300 ease-in-out",
         // Aplicando o fundo e a borda lateral baseados no tema ativo da sidebar
-        "bg-[var(--sidebar-custom-bg)] border-r border-[var(--sidebar-custom-border)]",
+        "bg-[var(--sidebar-custom-bg)] border-r border-border",
         isCollapsed ? "w-[68px]" : "w-[200px]",
       )}
     >
@@ -61,7 +61,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         {isCollapsed ? <ChevronRight /> : <ChevronLeft />}
       </Button>
 
-      <nav className="flex-1 space-y-1 px-3 py-4 w-full">
+      <nav className="flex-1 space-y-1 px-3 py-4 w-full overflow-clip">
         {visibleNavItems.map((item) => {
           const isActive = pathname === item.href;
           return (

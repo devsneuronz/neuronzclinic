@@ -1,12 +1,12 @@
 "use client";
 
-import type { FormEvent, RefObject } from "react";
-import { Camera, FileImage, FileText, MapPin, Mic, Paperclip, Pause, PenLine, Reply, Send, Trash2, UserRound, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import type { ChatRecord, MessageRecord } from "@/lib/supabase-rest";
+import { cn } from "@/lib/utils";
+import { Camera, FileImage, FileText, MapPin, Mic, Paperclip, Pause, PenLine, Reply, Send, Trash2, UserRound, Video, X } from "lucide-react";
+import type { FormEvent, RefObject } from "react";
 import { getAttachmentLabel } from "./chat-attachment-utils";
 import { formatTime, getDisplayName, getMediaKind, getMessagePreviewText } from "./message-utils";
 
@@ -83,10 +83,15 @@ export function ChatComposer({
       )}
 
       {replyTo && (
-        <div className="mb-2 flex items-center gap-3 overflow-hidden rounded-lg border-l-4 border-[#00a884] bg-[#f0f2f5] px-3 py-2 text-sm shadow-[inset_0_0_0_1px_rgba(17,27,33,0.05)] dark:bg-[#202c33]">
-          <Reply className="h-4 w-4 shrink-0 text-[#00a884]" />
+        <div
+          className={cn(
+            "mb-2 flex items-center gap-3 overflow-hidden rounded-lg border-l-4 bg-(--chat-reply-other-bg) px-3 py-2 text-sm shadow-[inset_0_0_0_1px_rgba(17,27,33,0.05)]",
+            replyTo.from_me ? "border-(--chat-reply-me-border) text-(--chat-reply-me-border) " : "border-l-(--chat-reply-other-border) text-(--chat-reply-other-border) ",
+          )}
+        >
+          <Reply className="h-4 w-4 shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold text-[#008069] dark:text-[#06cf9c]">Respondendo {replyTo.from_me ? "voce" : getDisplayName(chat)}</p>
+            <p className="truncate text-xs font-semibold">Respondendo {replyTo.from_me ? "você" : getDisplayName(chat)}</p>
             <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted-foreground">
               {getMediaKind(replyTo) === "image" && <FileImage className="h-3.5 w-3.5 shrink-0 opacity-75" />}
               {getMediaKind(replyTo) === "video" && <Video className="h-3.5 w-3.5 shrink-0 opacity-75" />}
@@ -131,7 +136,15 @@ export function ChatComposer({
               })}
             </div>
 
-            <Button type="button" variant="ghost" size="icon" className="shrink-0 rounded-full text-rose-400 hover:bg-rose-400/10 hover:text-rose-400" onClick={onToggleRecordingPause} disabled={isSending} aria-label={isRecordingPaused ? "Retomar gravacao" : "Pausar gravacao"}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="shrink-0 rounded-full text-rose-400 hover:bg-rose-400/10 hover:text-rose-400"
+              onClick={onToggleRecordingPause}
+              disabled={isSending}
+              aria-label={isRecordingPaused ? "Retomar gravacao" : "Pausar gravacao"}
+            >
               {isRecordingPaused ? <Mic className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
             </Button>
 

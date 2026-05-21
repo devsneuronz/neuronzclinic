@@ -1,8 +1,8 @@
 "use client";
 
+import { Pause, PlayIcon } from "lucide-react";
 import type { MouseEvent } from "react";
 import { memo, useCallback, useRef, useState } from "react";
-import { Pause, PlayIcon } from "lucide-react";
 import { formatTime } from "./message-utils";
 
 export const MessageAudioPlayer = memo(function MessageAudioPlayer({ mediaUrl }: { mediaUrl: string }) {
