@@ -233,7 +233,7 @@ export function ContactDetails({
               onCommitTagOrder={onCommitTagOrder}
             />
           ) : (
-            <IATrainingView />
+            <IATrainingView chat={chat} contactPhone={contactPhone} />
           )}
         </div>
       </div>

@@ -278,6 +278,7 @@ export function ContactList({
     const stateFilteredChats = filteredChats.filter((chat) => {
       if (scopeTab === "ia" && chat.ia_responde !== true) return false;
       if (scopeTab === "mine" && chat.ia_responde === true) return false;
+      if (scopeTab === "all") return true;
 
       if (stateTab === "finalizados") return chat.finalizada === true;
       if (chat.finalizada === true) return false;
@@ -448,22 +449,24 @@ export function ContactList({
             </button>
           ))}
         </div>
-        <div className="grid grid-cols-3 gap-1 border-t border-border/60 bg-secondary/60 p-1.5">
-          {stateTabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              className={cn(
-                "h-8 rounded-md text-xs font-medium text-muted-foreground transition-colors",
-                stateTab === tab.id && "bg-theme-primary text-white shadow-sm ring-1 ring-border/70",
-                stateTab !== tab.id && "hover:bg-theme-accent hover:text-foreground dark:hover:bg-theme-primary/20",
-              )}
-              onClick={() => setStateTab(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        {scopeTab !== "all" && (
+          <div className="grid grid-cols-3 gap-1 border-t border-border/60 bg-secondary/60 p-1.5">
+            {stateTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={cn(
+                  "h-8 rounded-md text-xs font-medium text-muted-foreground transition-colors",
+                  stateTab === tab.id && "bg-theme-primary text-white shadow-sm ring-1 ring-border/70",
+                  stateTab !== tab.id && "hover:bg-theme-accent hover:text-foreground dark:hover:bg-theme-primary/20",
+                )}
+                onClick={() => setStateTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto" onScroll={handleListScroll}>
