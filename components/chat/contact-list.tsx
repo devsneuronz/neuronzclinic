@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import { ChevronDown, ChevronUp, Feather, FilterX, HatGlasses, Repeat, Search, SquarePlus } from "lucide-react";
 import type { UIEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { MessageStatusIcon } from "./message-status-icon";
 
@@ -137,6 +137,7 @@ export function ContactList({
   const [sectorLabels, setSectorLabels] = useState<Record<string, string>>({});
   const [sectorCatalog, setSectorCatalog] = useState<string[]>([]);
   const [draftsByChatId, setDraftsByChatId] = useState<Record<string, string>>({});
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
 
   const statusOptions = useMemo(() => getUniqueOptions(chats.map(getChatStatusLabel)), [chats]);
   const tagOptions = useMemo(() => getUniqueOptions(chats.flatMap((chat) => getChatTags(chat).map((tag) => tag.label))), [chats]);
@@ -300,10 +301,26 @@ export function ContactList({
     const target = event.currentTarget;
     const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
 
-    if (distanceFromBottom < 160 && hasMore && !isLoadingMore && !search.trim()) {
+    if (distanceFromBottom < 160 && hasMore && !isLoadingMore) {
       onLoadMore?.();
     }
   }
+
+  useEffect(() => {
+    if (!hasMore || isLoadingMore || isLoading || isSearching) return;
+
+    const frameId = window.requestAnimationFrame(() => {
+      const target = listScrollRef.current;
+      if (!target) return;
+
+      const hasFilledVisibleArea = target.scrollHeight > target.clientHeight + 24;
+      if (!hasFilledVisibleArea) {
+        onLoadMore?.();
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [hasMore, isLoading, isLoadingMore, isSearching, onLoadMore, visibleChats.length]);
 
   return (
     <div className={cn("flex h-full shrink-0 flex-col border-r border-border bg-card", isMobile ? "w-full" : "w-[340px]")}>
@@ -469,7 +486,7 @@ export function ContactList({
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto" onScroll={handleListScroll}>
+      <div ref={listScrollRef} className="flex-1 overflow-y-auto" onScroll={handleListScroll}>
         {isLoading || isSearching ? (
           <div className="p-4 text-sm text-muted-foreground">Carregando conversas...</div>
         ) : visibleChats.length === 0 ? (
@@ -544,12 +561,10 @@ export function ContactList({
             );
           })
         )}
-        {!isLoading && !search.trim() && (
+        {!isLoading && (
           <div className="p-3">
             {hasMore ? (
-              <Button variant="ghost" className="h-9 w-full text-sm text-muted-foreground" disabled={isLoadingMore} onClick={onLoadMore}>
-                {isLoadingMore ? "Carregando mais conversas..." : "Carregar mais conversas"}
-              </Button>
+              <p className="py-2 text-center text-xs text-muted-foreground">{isLoadingMore ? "Carregando mais conversas..." : "Role para carregar mais conversas"}</p>
             ) : chats.length > 0 ? (
               <p className="py-2 text-center text-xs text-muted-foreground">Todas as conversas carregadas</p>
             ) : null}
