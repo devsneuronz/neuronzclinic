@@ -459,8 +459,7 @@ export function ContactList({
               type="button"
               className={cn(
                 "h-8 rounded-md text-xs font-medium text-muted-foreground transition-colors",
-                stateTab === tab.id && "bg-theme-primary text-white shadow-sm ring-1 ring-border/70",
-                stateTab !== tab.id && "hover:bg-theme-accent hover:text-foreground dark:hover:bg-theme-primary/20",
+                stateTab === tab.id ? "bg-theme-primary text-white shadow-sm ring-1 ring-border/70" : "hover:bg-theme-accent hover:text-foreground dark:hover:bg-theme-primary/20",
               )}
               onClick={() => setStateTab(tab.id)}
             >
