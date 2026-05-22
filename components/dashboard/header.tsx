@@ -1,10 +1,10 @@
 "use client"
 
-import { Bell, Plus, Search } from "lucide-react"
+import { Plus, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
-export function Header() {
+export function Header({ onCreateAppointment }: { onCreateAppointment?: () => void }) {
   return (
     <header className="flex h-16 items-center justify-between border-b border-border bg-card px-6">
       {/* Title */}
@@ -22,15 +22,8 @@ export function Header() {
           />
         </div>
 
-        {/* Notifications */}
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5 text-muted-foreground" />
-          <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-destructive" />
-          <span className="sr-only">Notificações</span>
-        </Button>
-
         {/* New Appointment */}
-        <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
+        <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90" onClick={onCreateAppointment}>
           <Plus className="h-4 w-4" />
           <span className="hidden sm:inline">Novo Agendamento</span>
         </Button>
