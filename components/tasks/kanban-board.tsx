@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import type { FormEvent, ReactNode } from "react"
 import type { ComponentType } from "react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -15,6 +16,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   AlertCircle,
   CalendarDays,
@@ -22,6 +26,7 @@ import {
   CircleDashed,
   Clock3,
   Loader2,
+  Plus,
   RefreshCw,
   Search,
   Timer,
@@ -36,6 +41,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 type TaskStatus = "aguardando" | "resolvendo" | "finalizado"
+type TaskView = "todas" | TaskStatus
 
 interface Task {
   id: string
@@ -53,7 +59,19 @@ interface Task {
   dueDate: string
 }
 
+interface TaskOptions {
+  types: string[]
+  statuses: string[]
+  users: Array<{ id: string; label: string }>
+}
+
 const statusOrder: TaskStatus[] = ["aguardando", "resolvendo", "finalizado"]
+const taskViewOptions: Array<{ value: TaskView; label: string }> = [
+  { value: "todas", label: "Todas" },
+  { value: "aguardando", label: "Aguardando" },
+  { value: "resolvendo", label: "Resolvendo" },
+  { value: "finalizado", label: "Finalizadas" },
+]
 
 const statusConfig: Record<
   TaskStatus,
@@ -101,6 +119,15 @@ const statusConfig: Record<
 }
 
 const filterAll = "Todos"
+const fallbackTaskOptions: TaskOptions = {
+  types: ["Tarefa"],
+  statuses: ["Aguardando", "Resolvendo", "Finalizado"],
+  users: [],
+}
+
+function getTodayDate() {
+  return new Date().toISOString().slice(0, 10)
+}
 
 function formatDateTime(value: string, options: Intl.DateTimeFormatOptions) {
   if (!value) return ""
@@ -121,6 +148,27 @@ function isOverdue(task: Task) {
   return dueDate.getTime() < Date.now()
 }
 
+function getTaskTypeBadgeClassName(type: string) {
+  const normalizedType = type
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+
+  if (normalizedType.includes("aviso")) {
+    return "border-sky-500/30 bg-sky-500/12 text-sky-700 dark:border-sky-300/30 dark:bg-sky-300/15 dark:text-sky-200"
+  }
+
+  if (normalizedType.includes("pendencia")) {
+    return "border-rose-500/30 bg-rose-500/12 text-rose-700 dark:border-rose-300/30 dark:bg-rose-300/15 dark:text-rose-200"
+  }
+
+  if (normalizedType.includes("tarefa")) {
+    return "border-violet-500/30 bg-violet-500/12 text-violet-700 dark:border-violet-300/30 dark:bg-violet-300/15 dark:text-violet-200"
+  }
+
+  return "border-primary/20 bg-primary/5 text-primary"
+}
+
 function uniqueValues(tasks: Task[], key: keyof Task) {
   return Array.from(new Set(tasks.map((task) => String(task[key] || "").trim()).filter(Boolean))).sort((a, b) =>
     a.localeCompare(b, "pt-BR", { sensitivity: "base" }),
@@ -136,6 +184,21 @@ async function fetchTaskRecords({ signal, refresh = false }: { signal?: AbortSig
   }
 
   return data.tasks ?? []
+}
+
+async function fetchTaskOptions() {
+  const response = await fetch("/api/airtable/task-options", { cache: "no-store" })
+  const data = (await response.json()) as Partial<TaskOptions>
+
+  if (!response.ok) {
+    throw new Error("Não foi possível carregar as opções de tarefas.")
+  }
+
+  return {
+    types: data.types?.length ? data.types : fallbackTaskOptions.types,
+    statuses: data.statuses?.length ? data.statuses : fallbackTaskOptions.statuses,
+    users: data.users ?? [],
+  }
 }
 
 function TaskCard({ task, onSelect }: { task: Task; onSelect: (task: Task) => void }) {
@@ -164,7 +227,7 @@ function TaskCard({ task, onSelect }: { task: Task; onSelect: (task: Task) => vo
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="mb-1 flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="max-w-full truncate border-primary/20 bg-primary/5 text-[11px] text-primary">
+            <Badge variant="outline" className={cn("max-w-full truncate text-[11px]", getTaskTypeBadgeClassName(task.type))}>
               {task.type || "Encaminhamento"}
             </Badge>
             {overdue ? (
@@ -282,6 +345,56 @@ function KanbanColumn({
           <EmptyColumn isFiltering={isFiltering} />
         )}
       </div>
+    </section>
+  )
+}
+
+function TaskStatusGrid({
+  status,
+  tasks,
+  isFiltering,
+  onSelectTask,
+}: {
+  status: TaskStatus
+  tasks: Task[]
+  isFiltering: boolean
+  onSelectTask: (task: Task) => void
+}) {
+  const config = statusConfig[status]
+  const Icon = config.icon
+
+  return (
+    <section className={cn("flex min-w-full flex-1 flex-col rounded-md border p-4", config.columnClassName)}>
+      <div className="mb-4 flex items-start justify-between gap-3 px-1">
+        <div className="flex items-start gap-2">
+          <span className={cn("mt-1 h-2.5 w-2.5 rounded-full", config.markerClassName)} />
+          <div>
+            <div className={cn("flex items-center gap-2 font-semibold", config.headerClassName)}>
+              <Icon className="h-4 w-4" />
+              {config.label}
+            </div>
+            <p className={cn("mt-0.5 text-xs", config.helperClassName)}>{config.helper}</p>
+          </div>
+        </div>
+        <span
+          className={cn(
+            "flex h-6 min-w-6 items-center justify-center rounded-md border px-2 text-xs font-semibold shadow-xs",
+            config.countClassName,
+          )}
+        >
+          {tasks.length}
+        </span>
+      </div>
+
+      {tasks.length > 0 ? (
+        <div className="grid flex-1 auto-rows-max grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 overflow-y-auto pr-1">
+          {tasks.map((task) => (
+            <TaskCard key={task.id} task={task} onSelect={onSelectTask} />
+          ))}
+        </div>
+      ) : (
+        <EmptyColumn isFiltering={isFiltering} />
+      )}
     </section>
   )
 }
@@ -416,18 +529,36 @@ function TaskDetailsDialog({
   )
 }
 
+function FieldLabel({ children }: { children: ReactNode }) {
+  return <label className="text-xs font-semibold text-foreground">{children}</label>
+}
+
 export function KanbanBoard() {
   const [tasks, setTasks] = useState<Task[]>([])
+  const [activeView, setActiveView] = useState<TaskView>("todas")
   const [searchQuery, setSearchQuery] = useState("")
   const [typeFilter, setTypeFilter] = useState(filterAll)
   const [creatorFilter, setCreatorFilter] = useState(filterAll)
   const [responsibleFilter, setResponsibleFilter] = useState(filterAll)
+  const [taskOptions, setTaskOptions] = useState<TaskOptions>(fallbackTaskOptions)
+  const [isLoadingTaskOptions, setIsLoadingTaskOptions] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [isCreatingTask, setIsCreatingTask] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [deletingTaskId, setDeletingTaskId] = useState("")
   const [taskActionError, setTaskActionError] = useState("")
+  const [createTaskError, setCreateTaskError] = useState("")
+  const [taskType, setTaskType] = useState(fallbackTaskOptions.types[0])
+  const [taskStatus, setTaskStatus] = useState(fallbackTaskOptions.statuses[0])
+  const [taskDueDate, setTaskDueDate] = useState(getTodayDate())
+  const [taskPatientName, setTaskPatientName] = useState("")
+  const [taskContactPhone, setTaskContactPhone] = useState("")
+  const [taskResponsibleUserId, setTaskResponsibleUserId] = useState("")
+  const [taskSubject, setTaskSubject] = useState("")
+  const [taskObservations, setTaskObservations] = useState("")
 
   useEffect(() => {
     const controller = new AbortController()
@@ -491,6 +622,83 @@ export function KanbanBoard() {
     }
   }
 
+  const resetCreateForm = () => {
+    setTaskType(taskOptions.types[0] || fallbackTaskOptions.types[0])
+    setTaskStatus(
+      taskOptions.statuses.find((status) => status.toLowerCase() === "aguardando") ||
+        taskOptions.statuses[0] ||
+        fallbackTaskOptions.statuses[0],
+    )
+    setTaskDueDate(getTodayDate())
+    setTaskPatientName("")
+    setTaskContactPhone("")
+    setTaskResponsibleUserId(taskOptions.users[0]?.id || "")
+    setTaskSubject("")
+    setTaskObservations("")
+    setCreateTaskError("")
+  }
+
+  const handleOpenCreateDialog = () => {
+    setIsCreateDialogOpen(true)
+    setIsLoadingTaskOptions(true)
+    setCreateTaskError("")
+
+    fetchTaskOptions()
+      .then((options) => {
+        setTaskOptions(options)
+        setTaskType((current) => current || options.types[0] || fallbackTaskOptions.types[0])
+        setTaskStatus(
+          (current) =>
+            current ||
+            options.statuses.find((status) => status.toLowerCase() === "aguardando") ||
+            options.statuses[0] ||
+            fallbackTaskOptions.statuses[0],
+        )
+        setTaskResponsibleUserId((current) => current || options.users[0]?.id || "")
+      })
+      .catch((error) => {
+        setCreateTaskError(error instanceof Error ? error.message : "Não foi possível carregar as opções de tarefas.")
+      })
+      .finally(() => setIsLoadingTaskOptions(false))
+  }
+
+  const handleCreateTask = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setIsCreatingTask(true)
+    setCreateTaskError("")
+
+    try {
+      const response = await fetch("/api/airtable/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: taskType,
+          status: taskStatus,
+          createdAt: new Date().toISOString(),
+          dueDate: taskDueDate,
+          responsibleUserId: taskResponsibleUserId,
+          patientName: taskPatientName,
+          contactPhone: taskContactPhone,
+          subject: taskSubject,
+          observations: taskObservations,
+        }),
+      })
+      const data = (await response.json()) as { message?: string }
+
+      if (!response.ok) {
+        throw new Error(data.message || "Não foi possível criar a tarefa.")
+      }
+
+      resetCreateForm()
+      setIsCreateDialogOpen(false)
+      await loadTasks({ refresh: true })
+    } catch (error) {
+      setCreateTaskError(error instanceof Error ? error.message : "Não foi possível criar a tarefa.")
+    } finally {
+      setIsCreatingTask(false)
+    }
+  }
+
   const typeOptions = useMemo(() => uniqueValues(tasks, "type"), [tasks])
   const creatorOptions = useMemo(() => uniqueValues(tasks, "creator"), [tasks])
   const responsibleOptions = useMemo(() => uniqueValues(tasks, "responsible"), [tasks])
@@ -542,19 +750,25 @@ export function KanbanBoard() {
               <h1 className="mt-1 text-2xl font-semibold tracking-normal text-foreground">Tarefas</h1>
             </div>
 
-            <div className="grid grid-cols-3 overflow-hidden rounded-md border bg-background shadow-xs">
-              <div className="px-4 py-2 text-center">
-                <p className="text-lg font-semibold text-foreground">{filteredTasks.length}</p>
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Visíveis</p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="grid grid-cols-3 overflow-hidden rounded-md border bg-background shadow-xs">
+                <div className="px-4 py-2 text-center">
+                  <p className="text-lg font-semibold text-foreground">{filteredTasks.length}</p>
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Visíveis</p>
+                </div>
+                <div className="border-x px-4 py-2 text-center">
+                  <p className="text-lg font-semibold text-foreground">{totalOpen}</p>
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Abertas</p>
+                </div>
+                <div className="px-4 py-2 text-center">
+                  <p className="text-lg font-semibold text-foreground">{tasksByStatus.finalizado.length}</p>
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Finalizadas</p>
+                </div>
               </div>
-              <div className="border-x px-4 py-2 text-center">
-                <p className="text-lg font-semibold text-foreground">{totalOpen}</p>
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Abertas</p>
-              </div>
-              <div className="px-4 py-2 text-center">
-                <p className="text-lg font-semibold text-foreground">{tasksByStatus.finalizado.length}</p>
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Finalizadas</p>
-              </div>
+              <Button type="button" onClick={handleOpenCreateDialog}>
+                <Plus className="h-4 w-4" />
+                Nova tarefa
+              </Button>
             </div>
           </div>
 
@@ -606,29 +820,175 @@ export function KanbanBoard() {
         </div>
       </header>
 
-      <main className="flex flex-1 gap-4 overflow-x-auto p-5">
-        {isLoading ? (
-          <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Carregando encaminhamentos
+      <Tabs value={activeView} onValueChange={(value) => setActiveView(value as TaskView)} className="flex min-h-0 flex-1 gap-0">
+        <div className="border-b px-5 py-3">
+          <TabsList className="h-10 w-full justify-start overflow-x-auto sm:w-fit">
+            {taskViewOptions.map((view) => (
+              <TabsTrigger key={view.value} value={view.value} className="h-8 px-3">
+                {view.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
+
+        {taskViewOptions.map((view) => (
+          <TabsContent key={view.value} value={view.value} className="min-h-0 overflow-hidden">
+            <main className="flex h-full flex-1 gap-4 overflow-x-auto p-5">
+              {isLoading ? (
+                <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Carregando encaminhamentos
+                  </div>
+                </div>
+              ) : view.value === "todas" ? (
+                statusOrder.map((status) => (
+                  <KanbanColumn
+                    key={status}
+                    status={status}
+                    tasks={tasksByStatus[status]}
+                    isFiltering={isFiltering}
+                    onSelectTask={(task) => {
+                      setTaskActionError("")
+                      setSelectedTask(task)
+                    }}
+                  />
+                ))
+              ) : (
+                <TaskStatusGrid
+                  status={view.value}
+                  tasks={tasksByStatus[view.value]}
+                  isFiltering={isFiltering}
+                  onSelectTask={(task) => {
+                    setTaskActionError("")
+                    setSelectedTask(task)
+                  }}
+                />
+              )}
+            </main>
+          </TabsContent>
+        ))}
+      </Tabs>
+      <Dialog
+        open={isCreateDialogOpen}
+        onOpenChange={(open) => {
+          setIsCreateDialogOpen(open)
+          if (!open) setCreateTaskError("")
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Nova tarefa</DialogTitle>
+            <DialogDescription>Crie uma tarefa vinculada a um contato do Airtable.</DialogDescription>
+          </DialogHeader>
+
+          <form className="space-y-4" onSubmit={handleCreateTask}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <FieldLabel>Tipo</FieldLabel>
+                <Select value={taskType} onValueChange={setTaskType} required>
+                  <SelectTrigger className="h-10 w-full">
+                    <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {taskOptions.types.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <FieldLabel>Status</FieldLabel>
+                <Select value={taskStatus} onValueChange={setTaskStatus} required>
+                  <SelectTrigger className="h-10 w-full">
+                    <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {taskOptions.statuses.map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {status}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <FieldLabel>Prazo</FieldLabel>
+                <Input type="date" className="h-10" value={taskDueDate} onChange={(event) => setTaskDueDate(event.target.value)} required />
+              </div>
+
+              <div className="space-y-1.5">
+                <FieldLabel>Responsável</FieldLabel>
+                <Select value={taskResponsibleUserId} onValueChange={setTaskResponsibleUserId} required>
+                  <SelectTrigger className="h-10 w-full">
+                    <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {taskOptions.users.length > 0 ? (
+                      taskOptions.users.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.label}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-users" disabled>
+                        Nenhum usuário encontrado
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <FieldLabel>Contato / Paciente</FieldLabel>
+                <Input className="h-10" value={taskPatientName} onChange={(event) => setTaskPatientName(event.target.value)} />
+              </div>
+
+              <div className="space-y-1.5">
+                <FieldLabel>Telefone do contato</FieldLabel>
+                <Input
+                  className="h-10"
+                  value={taskContactPhone}
+                  onChange={(event) => setTaskContactPhone(event.target.value)}
+                  placeholder="DDD + número"
+                  required
+                />
+              </div>
             </div>
-          </div>
-        ) : (
-          statusOrder.map((status) => (
-            <KanbanColumn
-              key={status}
-              status={status}
-              tasks={tasksByStatus[status]}
-              isFiltering={isFiltering}
-              onSelectTask={(task) => {
-                setTaskActionError("")
-                setSelectedTask(task)
-              }}
-            />
-          ))
-        )}
-      </main>
+
+            <div className="space-y-1.5">
+              <FieldLabel>Assunto</FieldLabel>
+              <Input className="h-10" value={taskSubject} onChange={(event) => setTaskSubject(event.target.value)} required />
+            </div>
+
+            <div className="space-y-1.5">
+              <FieldLabel>Observações</FieldLabel>
+              <Textarea className="min-h-24 resize-y" value={taskObservations} onChange={(event) => setTaskObservations(event.target.value)} />
+            </div>
+
+            {createTaskError ? (
+              <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                {createTaskError}
+              </div>
+            ) : null}
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isCreatingTask}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isCreatingTask || isLoadingTaskOptions || !taskResponsibleUserId}>
+                {isCreatingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                {isCreatingTask ? "Criando..." : "Criar tarefa"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
       <TaskDetailsDialog
         task={selectedTask}
         open={Boolean(selectedTask)}
