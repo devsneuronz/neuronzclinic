@@ -33,6 +33,7 @@ const CHAT_PAGE_SIZE = 50;
 const MESSAGE_PAGE_SIZE = 50;
 const CHAT_SYNC_INTERVAL_MS = 5000;
 const MESSAGE_SYNC_INTERVAL_MS = 2500;
+const LAST_OPEN_CHAT_STORAGE_KEY = "neuronzclinic:last-open-chat-id";
 const MEDIA_PREVIEW_LABELS = new Set(["Foto", "Vídeo", "Áudio", "Figurinha", "Documento"]);
 const EMPTY_MESSAGES: MessageRecord[] = [];
 
@@ -330,6 +331,7 @@ export default function ChatsPage() {
   const [error, setError] = useState<string>();
   const [isAssinaturaMode, setIsAssinaturaMode] = useState(false);
   const [isGhostMode, setIsGhostMode] = useState(true);
+  const [storedTargetChatId, setStoredTargetChatId] = useState(() => (typeof window === "undefined" ? "" : window.localStorage.getItem(LAST_OPEN_CHAT_STORAGE_KEY) || ""));
   const searchRequestIdRef = useRef(0);
 
   const normalizedSearch = search.trim();
@@ -357,7 +359,7 @@ export default function ChatsPage() {
   const isGhostModeRef = useRef(isGhostMode);
   const messagesByChatIdRef = useRef(messagesByChatId);
   const readReceiptKeyByChatIdRef = useRef<Record<string, string>>({});
-  const targetChatId = searchParams.get("chatId") || "";
+  const targetChatId = searchParams.get("chatId") || storedTargetChatId;
 
   const [panelSizes, setPanelSizes] = useState({
     chatDefault: 70,
@@ -407,6 +409,11 @@ export default function ChatsPage() {
   useEffect(() => {
     messagesByChatIdRef.current = messagesByChatId;
   }, [messagesByChatId]);
+
+  useEffect(() => {
+    if (!selectedChatRemoteId) return;
+    window.localStorage.setItem(LAST_OPEN_CHAT_STORAGE_KEY, selectedChatRemoteId);
+  }, [selectedChatRemoteId]);
 
   const loadMoreChats = useCallback(async () => {
     if (isSearching) {
@@ -460,6 +467,24 @@ export default function ChatsPage() {
       setSearchChatsTerm("");
       setHasMoreSearchChats(false);
     }
+  }, []);
+
+  const handleSelectChat = useCallback(
+    (id: string) => {
+      const chat = knownChats.find((knownChat) => knownChat.id === id);
+      if (chat?.chat_id) {
+        window.localStorage.setItem(LAST_OPEN_CHAT_STORAGE_KEY, chat.chat_id);
+        setStoredTargetChatId(chat.chat_id);
+      }
+      setSelectedChatId(id);
+    },
+    [knownChats],
+  );
+
+  const handleCloseChat = useCallback(() => {
+    window.localStorage.removeItem(LAST_OPEN_CHAT_STORAGE_KEY);
+    setStoredTargetChatId("");
+    setSelectedChatId(undefined);
   }, []);
 
   const setChatHasMoreMessages = useCallback((chatId: string, hasMore: boolean) => {
@@ -1412,7 +1437,7 @@ export default function ChatsPage() {
           latestMessageStatuses={latestMessageStatuses}
           onSearchChange={setSearch}
           onSelect={(id) => {
-            setSelectedChatId(id);
+            handleSelectChat(id);
             setShowDetails(false);
           }}
           onLoadMore={loadMoreChats}
@@ -1454,7 +1479,7 @@ export default function ChatsPage() {
         isLoadingOlder={isLoadingOlderMessages}
         hasMoreMessages={!!selectedChatRemoteId && hasMoreMessages}
         onLoadOlderMessages={loadOlderMessages}
-        onCloseChat={() => setSelectedChatId(undefined)}
+        onCloseChat={handleCloseChat}
         onSendMessage={handleSendMessage}
         onReplyMessage={handleReplyMessage}
         onForwardMessage={handleForwardMessage}
@@ -1484,7 +1509,7 @@ export default function ChatsPage() {
         selectedId={selectedChat?.id}
         latestMessageStatuses={latestMessageStatuses}
         onSearchChange={handleSearchChange}
-        onSelect={setSelectedChatId}
+        onSelect={handleSelectChat}
         onLoadMore={loadMoreChats}
         isAssinaturaMode={isAssinaturaMode}
         onToggleAssinatura={setIsAssinaturaMode}
@@ -1500,7 +1525,7 @@ export default function ChatsPage() {
             isLoadingOlder={isLoadingOlderMessages}
             hasMoreMessages={!!selectedChatRemoteId && hasMoreMessages}
             onLoadOlderMessages={loadOlderMessages}
-            onCloseChat={() => setSelectedChatId(undefined)}
+            onCloseChat={handleCloseChat}
             onSendMessage={handleSendMessage}
             onReplyMessage={handleReplyMessage}
             onForwardMessage={handleForwardMessage}
