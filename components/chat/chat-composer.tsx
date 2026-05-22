@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import type { ChatRecord, MessageRecord } from "@/lib/supabase-rest";
 import { getMentionLabel, getMentionSlug } from "@/lib/user-mentions";
 import type { MentionableUser } from "@/lib/user-roles";
@@ -35,6 +36,9 @@ type ChatComposerProps = {
   photoInputRef: RefObject<HTMLInputElement | null>;
   videoInputRef: RefObject<HTMLInputElement | null>;
   cameraInputRef: RefObject<HTMLInputElement | null>;
+
+  isSignatureMode: boolean;
+
   onSubmit: (event?: FormEvent<HTMLFormElement>) => void;
   onDraftChange: (value: string) => void;
   onOpenAttachmentPreview: () => void;
@@ -84,6 +88,7 @@ export function ChatComposer({
   onCloseInternalNote,
   onNoteDraftChange,
   onSaveInternalNote,
+  isSignatureMode,
 }: ChatComposerProps) {
   const mentionMatch = noteDraft.match(/(^|\s)@([\p{L}\p{N}._-]*)$/u);
   const mentionQuery = mentionMatch?.[2] ?? "";
@@ -107,6 +112,9 @@ export function ChatComposer({
     const prefix = noteDraft.slice(0, mentionStart + mentionMatch[1].length);
     onNoteDraftChange(`${prefix}@${getMentionLabel(user)} `);
   }
+
+  const { user } = useCurrentUser();
+  const userName = user?.name ?? "Usuário";
 
   return (
     <form onSubmit={onSubmit} className="border-t border-border bg-card px-4 py-3">
@@ -310,7 +318,17 @@ export function ChatComposer({
                   </div>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Input value={draft} onChange={(event) => onDraftChange(event.target.value)} disabled={isSending} placeholder={attachment ? "Legenda opcional" : "Digite uma mensagem"} className="flex-1 border-0 bg-secondary" />
+              <div className="relative flex flex-1 rounded-md items-center bg-input/50! transition-[color,box-shadow] focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]">
+                {isSignatureMode && !attachment && <span className="shrink-0 select-none rounded-md text-xs font-semibold py-1 px-2 ml-2 bg-theme-primary text-theme-primary-fg">*{userName}*</span>}
+
+                <Input
+                  value={draft}
+                  onChange={(event) => onDraftChange(event.target.value)}
+                  disabled={isSending}
+                  placeholder={attachment ? "Legenda opcional" : "Digite uma mensagem..."}
+                  className="flex-1 border-0 bg-transparent! ring-0!"
+                />
+              </div>
               <Button type="submit" disabled={isSending || (!draft.trim() && !attachment)} size="icon" className="shrink-0 rounded-full bg-teal-500 text-white hover:bg-teal-600" aria-label="Enviar mensagem">
                 <Send className="h-5 w-5" />
               </Button>

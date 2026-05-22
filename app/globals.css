@@ -217,7 +217,7 @@
     --card: oklch(0.9505 0.0046 258);
     --chat-other: var(--color-background);
     --chat-card: var(--color-background);
-    --secondary: oklch(0.85 0 0);
+    --secondary: oklch(0.91 0 0);
     --accent: oklch(0.92 0 0);
     --border: oklch(0.85 0 0);
     --input: oklch(0.85 0 0);

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { CHAT_DRAFT_CHANGED_EVENT, CHAT_DRAFT_STORAGE_PREFIX, readChatDraft, type ChatDraftChangedDetail } from "@/lib/chat-drafts";
 import { getChatStatusColor, getChatStatusLabel } from "@/lib/chat-status";
@@ -22,7 +23,7 @@ import { MessageStatusIcon } from "./message-status-icon";
 interface ContactListProps {
   chats: ChatRecord[];
   search: string;
-  isLoading?: boolean;
+  isLoadingMessages?: boolean;
   isLoadingMore?: boolean;
   isSearching?: boolean;
   hasMore?: boolean;
@@ -32,7 +33,7 @@ interface ContactListProps {
   onSelect?: (id: string) => void;
   onLoadMore?: () => void;
 
-  isAssinaturaMode: boolean;
+  isSignatureMode: boolean;
   onToggleAssinatura: (checked: boolean) => void;
   isGhostMode: boolean;
   onToggleGhost: (checked: boolean) => void;
@@ -113,7 +114,7 @@ function getSectorLabel(id: string, labels: Record<string, string>) {
 export function ContactList({
   chats,
   search,
-  isLoading,
+  isLoadingMessages,
   isLoadingMore,
   isSearching,
   hasMore,
@@ -122,7 +123,7 @@ export function ContactList({
   onSearchChange,
   onSelect,
   onLoadMore,
-  isAssinaturaMode,
+  isSignatureMode,
   onToggleAssinatura,
   isGhostMode,
   onToggleGhost,
@@ -145,6 +146,9 @@ export function ContactList({
   const sectorOptions = useMemo(() => (sectorCatalog.length > 0 ? sectorCatalog : getUniqueOptions(sectorIds.map((id) => getSectorLabel(id, sectorLabels)))), [sectorCatalog, sectorIds, sectorLabels]);
 
   const hasActiveFilters = statusFilter !== ALL_FILTERS || tagFilter !== ALL_FILTERS || sectorFilter !== ALL_FILTERS;
+
+  const { user, isLoading } = useCurrentUser();
+  const userName = user?.name ?? "Usuário";
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -328,7 +332,7 @@ export function ContactList({
         <Avatar className="h-9 w-9">
           <AvatarFallback className="bg-gradient-to-br from-teal-600 to-teal-800 text-xs text-white">P</AvatarFallback>
         </Avatar>
-        <span className="font-medium text-foreground">Pedro</span>
+        <span className="font-medium text-foreground">{isLoading ? "Carregando usuário..." : userName}</span>
 
         <div className="ml-auto flex items-center gap-3">
           <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
@@ -339,7 +343,7 @@ export function ContactList({
               <TooltipTrigger asChild>
                 <div className="flex items-center ">
                   <Feather className="mr-1 h-3.5 w-3.5 text-muted-foreground" />
-                  <Switch className="scale-75" checked={isAssinaturaMode} onCheckedChange={onToggleAssinatura} />
+                  <Switch className="scale-75" checked={isSignatureMode} onCheckedChange={onToggleAssinatura} />
                 </div>
               </TooltipTrigger>
               <TooltipContent side="bottom" align="start">
@@ -474,8 +478,7 @@ export function ContactList({
                 type="button"
                 className={cn(
                   "h-8 rounded-md text-xs font-medium text-muted-foreground transition-colors",
-                  stateTab === tab.id && "bg-theme-primary text-white shadow-sm ring-1 ring-border/70",
-                  stateTab !== tab.id && "hover:bg-theme-accent hover:text-foreground dark:hover:bg-theme-primary/20",
+                  stateTab === tab.id ? "bg-theme-primary text-white shadow-sm ring-1 ring-border/70" : "hover:bg-theme-accent hover:text-foreground dark:hover:bg-theme-primary/20",
                 )}
                 onClick={() => setStateTab(tab.id)}
               >

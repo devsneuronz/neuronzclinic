@@ -1,5 +1,6 @@
 "use client";
 
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { readChatDraft, writeChatDraft } from "@/lib/chat-drafts";
 import { createSupabaseRealtimeSubscription } from "@/lib/supabase-realtime";
@@ -39,6 +40,8 @@ interface ChatWindowProps {
   onToggleStatus: () => void;
   isDetailsOpen: boolean;
   isMobile?: boolean;
+
+  isSignatureMode: boolean;
 }
 
 function getSupportedAudioMimeType() {
@@ -104,6 +107,7 @@ export function ChatWindow({
   onToggleStatus,
   isDetailsOpen,
   isMobile,
+  isSignatureMode,
 }: ChatWindowProps) {
   const [draft, setDraft] = useState("");
   const [draftChatId, setDraftChatId] = useState<string | null>(null);
@@ -151,6 +155,9 @@ export function ChatWindow({
   const debouncedForwardSearch = useDebouncedValue(normalizedForwardSearch, 250);
   const forwardSearchQuery = normalizedForwardSearch ? debouncedForwardSearch.trim() : "";
   const [showScrollButton, setShowScrollButton] = useState(false);
+
+  const { user } = useCurrentUser();
+  const userName = user?.name ?? "Usuário";
 
   const messagesRef = useRef(messages);
   const currentChatIdRef = useRef(chat?.chat_id ?? null);
@@ -501,13 +508,15 @@ export function ChatWindow({
     const text = draft.trim();
     if (!text && !attachment) return;
 
+    const textToSend = isSignatureMode && text ? `*${userName}*\n${text}` : text;
+
     setIsSending(true);
 
     try {
       if (replyTo && onReplyMessage) {
-        await onReplyMessage({ text, file: attachment, replyTo });
+        await onReplyMessage({ text: textToSend, file: attachment, replyTo });
       } else {
-        await onSendMessage?.({ text, file: attachment });
+        await onSendMessage?.({ text: textToSend, file: attachment });
       }
       setDraft("");
       setReplyTo(null);
@@ -983,6 +992,7 @@ export function ChatWindow({
           onCloseInternalNote={closeInternalNote}
           onNoteDraftChange={setNoteDraft}
           onSaveInternalNote={saveInternalNote}
+          isSignatureMode={isSignatureMode}
         />
       </div>
 
