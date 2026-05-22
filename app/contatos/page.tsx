@@ -313,6 +313,31 @@ export default function ContatosPage() {
     }
   }
 
+  async function handleMarkAsRead(contact: ChatRecord) {
+    updateContactById(contact.id, (current) => ({ ...current, unread_count: 0 }));
+    setError(undefined);
+
+    try {
+      await updateChatDetails({ id: contact.id, unread_count: 0 });
+    } catch (err) {
+      restoreContact(contact);
+      setError(err instanceof Error ? err.message : "Nao foi possivel marcar a conversa como lida.");
+    }
+  }
+
+  async function handleMarkAsUnread(contact: ChatRecord) {
+    const unreadCount = Math.max(contact.unread_count || 0, 1);
+    updateContactById(contact.id, (current) => ({ ...current, unread_count: unreadCount }));
+    setError(undefined);
+
+    try {
+      await updateChatDetails({ id: contact.id, unread_count: unreadCount });
+    } catch (err) {
+      restoreContact(contact);
+      setError(err instanceof Error ? err.message : "Nao foi possivel marcar a conversa como nao lida.");
+    }
+  }
+
   function goToChat(contact: ChatRecord) {
     router.push(`/chats?chatId=${encodeURIComponent(contact.chat_id)}`);
   }
@@ -468,8 +493,8 @@ export default function ContatosPage() {
                   onToggleTag={(tag) => void handleToggleContactTag(selectedContact, tag)}
                   onChangeName={(name) => handleChangeName(selectedContact, name)}
                   onChangeContactInfo={(info) => handleChangeContactInfo(selectedContact, info)}
-                  onMarkAsRead={() => updateContactById(selectedContact.id, (current) => ({ ...current, unread_count: 0 }))}
-                  onMarkAsUnread={() => updateContactById(selectedContact.id, (current) => ({ ...current, unread_count: Math.max(current.unread_count || 0, 1) }))}
+                  onMarkAsRead={() => void handleMarkAsRead(selectedContact)}
+                  onMarkAsUnread={() => void handleMarkAsUnread(selectedContact)}
                   onReorderTags={(tags) => handleReorderTags(selectedContact, tags)}
                   onCommitTagOrder={(tags) => void handleCommitTagOrder(selectedContact, tags)}
                 />

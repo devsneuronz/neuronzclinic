@@ -359,6 +359,7 @@ export default function ChatsPage() {
   const isGhostModeRef = useRef(isGhostMode);
   const messagesByChatIdRef = useRef(messagesByChatId);
   const readReceiptKeyByChatIdRef = useRef<Record<string, string>>({});
+  const ghostUnreadCountByChatIdRef = useRef<Record<string, number>>({});
   const targetChatId = searchParams.get("chatId") || storedTargetChatId;
 
   const [panelSizes, setPanelSizes] = useState({
@@ -1214,9 +1215,36 @@ export default function ChatsPage() {
     [selectedChatId],
   );
 
+  const persistSelectedChatUnreadCount = useCallback(
+    async (unreadCount: number) => {
+      if (!selectedChat) return;
+
+      await updateChatDetails({
+        id: selectedChat.id,
+        unread_count: unreadCount,
+      });
+    },
+    [selectedChat],
+  );
+
   const handleMarkAsRead = useCallback(() => {
     updateSelectedChatUnreadCount(0);
   }, [updateSelectedChatUnreadCount]);
+
+  const handleMarkAsReadPersisted = useCallback(async () => {
+    if (!selectedChat) return;
+
+    const previousChat = selectedChat;
+    updateSelectedChatUnreadCount(0);
+    setError(undefined);
+
+    try {
+      await persistSelectedChatUnreadCount(0);
+    } catch (err) {
+      restoreSelectedChat(previousChat);
+      setError(err instanceof Error ? err.message : "Não foi possível marcar a conversa como lida.");
+    }
+  }, [persistSelectedChatUnreadCount, restoreSelectedChat, selectedChat, updateSelectedChatUnreadCount]);
 
   const sendReadReceiptForChat = useCallback(async (chatId: string, messageList: MessageRecord[]) => {
     const incomingMessages = getIncomingReadMessages(messageList);
@@ -1250,9 +1278,44 @@ export default function ChatsPage() {
     });
   }, [hasLoadedSelectedMessages, isGhostMode, messages, selectedChatRemoteId, sendReadReceiptForChat]);
 
-  const handleMarkAsUnread = useCallback(() => {
-    updateSelectedChatUnreadCount(Math.max(selectedChat?.unread_count || 0, 1));
-  }, [selectedChat?.unread_count, updateSelectedChatUnreadCount]);
+  const handleMarkAsUnread = useCallback(async () => {
+    if (!selectedChat) return;
+
+    const previousChat = selectedChat;
+    const unreadCount = Math.max(selectedChat.unread_count || 0, 1);
+    ghostUnreadCountByChatIdRef.current[selectedChat.id] = unreadCount;
+    updateSelectedChatUnreadCount(unreadCount);
+    setError(undefined);
+
+    try {
+      await persistSelectedChatUnreadCount(unreadCount);
+    } catch (err) {
+      restoreSelectedChat(previousChat);
+      setError(err instanceof Error ? err.message : "Não foi possível marcar a conversa como não lida.");
+    }
+  }, [persistSelectedChatUnreadCount, restoreSelectedChat, selectedChat, updateSelectedChatUnreadCount]);
+
+  useEffect(() => {
+    if (!selectedChat || !isGhostMode) return;
+
+    const rememberedUnreadCount = ghostUnreadCountByChatIdRef.current[selectedChat.id] ?? 0;
+    const currentUnreadCount = selectedChat.unread_count ?? 0;
+
+    if (currentUnreadCount > rememberedUnreadCount) {
+      ghostUnreadCountByChatIdRef.current[selectedChat.id] = currentUnreadCount;
+      return;
+    }
+
+    if (rememberedUnreadCount <= 0 || currentUnreadCount >= rememberedUnreadCount) return;
+
+    updateSelectedChatUnreadCount(rememberedUnreadCount);
+    void updateChatDetails({
+      id: selectedChat.id,
+      unread_count: rememberedUnreadCount,
+    }).catch((err) => {
+      setError(err instanceof Error ? err.message : "Não foi possível manter a conversa como não lida no modo espião.");
+    });
+  }, [isGhostMode, selectedChat, updateSelectedChatUnreadCount]);
 
   const updateSelectedChatTags = useCallback(
     (tags: ChatTag[]) => {
@@ -1433,7 +1496,7 @@ export default function ChatsPage() {
           isLoadingMore={isSearching ? isLoadingMoreSearchChats : isLoadingMoreChats}
           isSearching={isSearchingChats}
           hasMore={isSearching ? hasMoreSearchChats : hasMoreChats}
-          selectedId={selectedChat?.id}
+          selectedId={undefined}
           latestMessageStatuses={latestMessageStatuses}
           onSearchChange={setSearch}
           onSelect={(id) => {
@@ -1461,7 +1524,7 @@ export default function ChatsPage() {
           tagOptions={contactTagOptions}
           onChangeStatus={handleChangeContactStatus}
           onToggleTag={handleToggleContactTag}
-          onMarkAsRead={handleMarkAsRead}
+          onMarkAsRead={handleMarkAsReadPersisted}
           onMarkAsUnread={handleMarkAsUnread}
           onReorderTags={handleReorderTags}
           onCommitTagOrder={handleCommitTagOrder}
@@ -1555,7 +1618,7 @@ export default function ChatsPage() {
                 onToggleTag={handleToggleContactTag}
                 onChangeName={handleChangeContactName}
                 onChangeContactInfo={handleChangeContactInfo}
-                onMarkAsRead={handleMarkAsRead}
+                onMarkAsRead={handleMarkAsReadPersisted}
                 onMarkAsUnread={handleMarkAsUnread}
                 onReorderTags={handleReorderTags}
                 onCommitTagOrder={handleCommitTagOrder}

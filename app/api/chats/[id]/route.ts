@@ -19,6 +19,12 @@ function getBoolean(value: unknown) {
   return typeof value === "boolean" ? value : null
 }
 
+function getUnreadCount(value: unknown) {
+  if (value === null) return null
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined
+  return Math.max(0, Math.floor(value))
+}
+
 function normalizeTags(value: unknown): TagInput[] | null {
   if (!Array.isArray(value)) return null
 
@@ -107,6 +113,16 @@ function buildPatch(body: RawChat, currentChat: RawChat) {
 
   if ("ia_responde" in body) {
     patch.ia_responde = getBoolean(body.ia_responde)
+  }
+
+  if ("unread_count" in body) {
+    const unreadCount = getUnreadCount(body.unread_count)
+
+    if (unreadCount === undefined) {
+      throw new Error("unread_count precisa ser um numero valido.")
+    }
+
+    patch.unread_count = unreadCount
   }
 
   if ("tags" in body) {
