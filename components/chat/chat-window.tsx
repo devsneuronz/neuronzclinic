@@ -41,7 +41,7 @@ interface ChatWindowProps {
   isDetailsOpen: boolean;
   isMobile?: boolean;
 
-  isAssinaturaMode: boolean;
+  isSignatureMode: boolean;
 }
 
 function getSupportedAudioMimeType() {
@@ -107,7 +107,7 @@ export function ChatWindow({
   onToggleStatus,
   isDetailsOpen,
   isMobile,
-  isAssinaturaMode,
+  isSignatureMode,
 }: ChatWindowProps) {
   const [draft, setDraft] = useState("");
   const [draftChatId, setDraftChatId] = useState<string | null>(null);
@@ -156,7 +156,7 @@ export function ChatWindow({
   const forwardSearchQuery = normalizedForwardSearch ? debouncedForwardSearch.trim() : "";
   const [showScrollButton, setShowScrollButton] = useState(false);
 
-  const { user, isLoading: isUserLoading } = useCurrentUser();
+  const { user } = useCurrentUser();
   const userName = user?.name ?? "Usuário";
 
   const messagesRef = useRef(messages);
@@ -508,7 +508,7 @@ export function ChatWindow({
     const text = draft.trim();
     if (!text && !attachment) return;
 
-    const textToSend = isAssinaturaMode && text ? `*${userName}*\n${text}` : text;
+    const textToSend = isSignatureMode && text ? `*${userName}*\n${text}` : text;
 
     setIsSending(true);
 
@@ -992,6 +992,7 @@ export function ChatWindow({
           onCloseInternalNote={closeInternalNote}
           onNoteDraftChange={setNoteDraft}
           onSaveInternalNote={saveInternalNote}
+          isSignatureMode={isSignatureMode}
         />
       </div>
 

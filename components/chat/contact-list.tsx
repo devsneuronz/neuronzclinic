@@ -33,7 +33,7 @@ interface ContactListProps {
   onSelect?: (id: string) => void;
   onLoadMore?: () => void;
 
-  isAssinaturaMode: boolean;
+  isSignatureMode: boolean;
   onToggleAssinatura: (checked: boolean) => void;
   isGhostMode: boolean;
   onToggleGhost: (checked: boolean) => void;
@@ -123,7 +123,7 @@ export function ContactList({
   onSearchChange,
   onSelect,
   onLoadMore,
-  isAssinaturaMode,
+  isSignatureMode,
   onToggleAssinatura,
   isGhostMode,
   onToggleGhost,
@@ -325,7 +325,7 @@ export function ContactList({
               <TooltipTrigger asChild>
                 <div className="flex items-center ">
                   <Feather className="mr-1 h-3.5 w-3.5 text-muted-foreground" />
-                  <Switch className="scale-75" checked={isAssinaturaMode} onCheckedChange={onToggleAssinatura} />
+                  <Switch className="scale-75" checked={isSignatureMode} onCheckedChange={onToggleAssinatura} />
                 </div>
               </TooltipTrigger>
               <TooltipContent side="bottom" align="start">

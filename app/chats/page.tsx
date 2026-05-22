@@ -368,7 +368,7 @@ export default function ChatsPage() {
     detailsMax: 40,
   });
 
-  const [isAssinaturaMode, setIsAssinaturaMode] = useState<boolean>(() => {
+  const [isSignatureMode, setIsAssinaturaMode] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("neuronzclinic.chat.use-signature");
       return saved === "true"; // Converte a string "true" para o booleano true. Qualquer outra coisa vira false.
@@ -386,10 +386,9 @@ export default function ChatsPage() {
 
   const isGhostModeRef = useRef(isGhostMode);
 
-  // 3. Efeito que assiste as mudanças de estado e as escreve no localStorage
   useEffect(() => {
-    localStorage.setItem("neuronzclinic.chat.use-signature", String(isAssinaturaMode));
-  }, [isAssinaturaMode]);
+    localStorage.setItem("neuronzclinic.chat.use-signature", String(isSignatureMode));
+  }, [isSignatureMode]);
 
   useEffect(() => {
     localStorage.setItem("neuronzclinic.chat.ghost-mode", String(isGhostMode));
@@ -417,7 +416,6 @@ export default function ChatsPage() {
       });
     };
 
-    // Roda uma vez ao montar e escuta o redimensionamento da janela
     calculateSizes();
     window.addEventListener("resize", calculateSizes);
     return () => window.removeEventListener("resize", calculateSizes);
@@ -1443,7 +1441,7 @@ export default function ChatsPage() {
             setShowDetails(false);
           }}
           onLoadMore={loadMoreChats}
-          isAssinaturaMode={isAssinaturaMode}
+          isSignatureMode={isSignatureMode}
           onToggleAssinatura={setIsAssinaturaMode}
           isGhostMode={isGhostMode}
           onToggleGhost={setIsGhostMode}
@@ -1494,7 +1492,7 @@ export default function ChatsPage() {
         isDetailsOpen={showDetails}
         onToggleStatus={handleToggleStatus}
         isMobile={true}
-        isAssinaturaMode={isAssinaturaMode}
+        isSignatureMode={isSignatureMode}
       />
     );
   }
@@ -1514,7 +1512,7 @@ export default function ChatsPage() {
         onSearchChange={handleSearchChange}
         onSelect={setSelectedChatId}
         onLoadMore={loadMoreChats}
-        isAssinaturaMode={isAssinaturaMode}
+        isSignatureMode={isSignatureMode}
         onToggleAssinatura={setIsAssinaturaMode}
         isGhostMode={isGhostMode}
         onToggleGhost={setIsGhostMode}
@@ -1540,7 +1538,7 @@ export default function ChatsPage() {
             onToggleDetails={() => setShowDetails(!showDetails)}
             isDetailsOpen={showDetails}
             onToggleStatus={handleToggleStatus}
-            isAssinaturaMode={isAssinaturaMode}
+            isSignatureMode={isSignatureMode}
           />
         </Panel>
 
