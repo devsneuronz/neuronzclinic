@@ -13,10 +13,27 @@ const TABLE_CANDIDATES = [
   "users",
   "user",
 ].filter(Boolean) as string[]
+const SECTOR_TABLE_CANDIDATES = [
+  process.env.AIRTABLE_SECTORS_TABLE,
+  "Setores",
+  "Setor",
+  "SETOR",
+  "setores",
+  "setor",
+  "Sectors",
+  "Sector",
+].filter(Boolean) as string[]
 
 type AirtableRecord = {
   id: string
   fields?: Record<string, unknown>
+}
+
+type ListedUser = {
+  email: string
+  name: string
+  role: ReturnType<typeof normalizeUserRole>
+  tags: string[]
 }
 
 function getStringField(fields: Record<string, unknown>, candidates: string[]) {
@@ -46,6 +63,44 @@ function getRole(fields: Record<string, unknown>) {
   return normalizeUserRole(
     getStringField(fields, ["Role", "role", "Perfil", "perfil", "Cargo", "cargo", "Tipo", "tipo", "Permissão", "Permissao"]),
   )
+}
+
+function getStringArrayField(fields: Record<string, unknown>, candidates: string[]) {
+  for (const candidate of candidates) {
+    const value = fields[candidate]
+
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => (typeof item === "string" ? item.trim() : null))
+        .filter((item): item is string => Boolean(item))
+    }
+
+    if (typeof value === "string" && value.trim()) {
+      return value
+        .split(/[,;|]/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+    }
+  }
+
+  return []
+}
+
+function getUserTags(fields: Record<string, unknown>) {
+  return getStringArrayField(fields, [
+    "Setores sob responsabilidade",
+    "Setores",
+    "Setor",
+    "Responsabilidades",
+    "Tags",
+    "tags",
+    "Sectors",
+    "Sector",
+  ])
+}
+
+function getRecordLabel(fields: Record<string, unknown>) {
+  return getStringField(fields, ["Nome", "nome", "Name", "name", "Setor", "setor", "Titulo", "title"])
 }
 
 function isInactive(fields: Record<string, unknown>) {
@@ -94,6 +149,32 @@ async function fetchAllRecords(table: string) {
   return records
 }
 
+async function getLinkedTagLabels(ids: string[]) {
+  const uniqueIds = Array.from(new Set(ids.filter((id) => /^rec[a-zA-Z0-9]+$/.test(id))))
+  const labels = new Map<string, string>()
+
+  if (uniqueIds.length === 0) {
+    return labels
+  }
+
+  for (const table of SECTOR_TABLE_CANDIDATES) {
+    const records = await fetchAllRecords(table)
+
+    for (const record of records) {
+      if (!uniqueIds.includes(record.id)) continue
+
+      const label = getRecordLabel(record.fields ?? {})
+      if (label) labels.set(record.id, label)
+    }
+
+    if (labels.size > 0) {
+      break
+    }
+  }
+
+  return labels
+}
+
 async function findUserByEmail(email: string) {
   const normalizedEmail = email.trim().toLowerCase()
 
@@ -120,7 +201,7 @@ async function findUserByEmail(email: string) {
 }
 
 async function listActiveUsers() {
-  const indexedUsers = new Map<string, { email: string; name: string; role: ReturnType<typeof normalizeUserRole> }>()
+  const indexedUsers = new Map<string, ListedUser>()
 
   for (const table of TABLE_CANDIDATES) {
     const records = await fetchAllRecords(table)
@@ -137,6 +218,7 @@ async function listActiveUsers() {
         email,
         name: getName(fields, email),
         role: getRole(fields),
+        tags: getUserTags(fields),
       })
     }
 
@@ -152,11 +234,19 @@ async function listActiveUsers() {
         email: user.email,
         name: user.name,
         role: user.role,
+        tags: user.role === "admin" ? ["ADM"] : [],
       })
     }
   }
 
-  return Array.from(indexedUsers.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+  const linkedTagLabels = await getLinkedTagLabels(Array.from(indexedUsers.values()).flatMap((user) => user.tags))
+
+  return Array.from(indexedUsers.values())
+    .map((user) => ({
+      ...user,
+      tags: Array.from(new Set(user.tags.map((tag) => linkedTagLabels.get(tag) ?? tag).filter((tag) => !/^rec[a-zA-Z0-9]+$/.test(tag)))),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
 }
 
 export async function GET(request: Request) {
@@ -168,7 +258,7 @@ export async function GET(request: Request) {
       return NextResponse.json({
         users: FALLBACK_ADMIN_EMAILS.map((fallbackEmail) => {
           const user = getDefaultUser(fallbackEmail)
-          return { email: user.email, name: user.name, role: user.role }
+          return { email: user.email, name: user.name, role: user.role, tags: user.role === "admin" ? ["ADM"] : [] }
         }),
       })
     }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Maximize2, RefreshCw, Search, Users } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -14,10 +14,12 @@ import type { ContactInfoValues } from "@/components/contact-details/profile-vie
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { getChatTags, getReadableTextColor, type ChatTag } from "@/lib/chat-tags";
 import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { cn } from "@/lib/utils";
 import { ChatRecord, fetchChats, updateChatDetails } from "@/lib/supabase-rest";
 
 const PAGE_SIZE = 100;
+const SEARCH_PAGE_SIZE = 1000;
 const ALL_FILTERS = "all";
 
 function getDisplayName(chat?: ChatRecord) {
@@ -110,6 +112,7 @@ export default function ContatosPage() {
   const [error, setError] = useState<string>();
   const [statusOptions, setStatusOptions] = useState<ChatStatusOption[]>([]);
   const [tagOptions, setTagOptions] = useState<ChatTag[]>([]);
+  const loadRequestIdRef = useRef(0);
 
   const selectedContact = contacts.find((contact) => contact.id === selectedContactId);
   const fallbackStatusOptions = useMemo(() => getFallbackStatusOptions(contacts), [contacts]);
@@ -117,45 +120,53 @@ export default function ContatosPage() {
   const contactStatusOptions = statusOptions.length > 0 ? statusOptions : fallbackStatusOptions;
   const contactTagOptions = tagOptions.length > 0 ? tagOptions : fallbackTagOptions;
   const cityOptions = useMemo(() => uniqueSorted(contacts.map(getContactCity)), [contacts]);
-  const normalizedSearch = search.trim().toLowerCase();
+  const debouncedSearch = useDebouncedValue(search.trim(), 300);
+  const hasSearch = debouncedSearch.length > 0;
 
   const filteredContacts = useMemo(() => {
     return contacts.filter((contact) => {
       if (statusFilter !== ALL_FILTERS && getChatStatusLabel(contact) !== statusFilter) return false;
       if (cityFilter !== ALL_FILTERS && getContactCity(contact) !== cityFilter) return false;
-      if (!normalizedSearch) return true;
-
-      return [getDisplayName(contact), getContactPhone(contact), getContactCity(contact), contact.email_contato, getChatStatusLabel(contact)]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(normalizedSearch));
+      return true;
     });
-  }, [cityFilter, contacts, normalizedSearch, statusFilter]);
+  }, [cityFilter, contacts, statusFilter]);
 
-  const loadContacts = useCallback(async ({ refresh = false, offset = 0 }: { refresh?: boolean; offset?: number } = {}) => {
+  const loadContacts = useCallback(async ({ refresh = false, offset = 0, searchTerm = "" }: { refresh?: boolean; offset?: number; searchTerm?: string } = {}) => {
+    const requestId = ++loadRequestIdRef.current;
+    const trimmedSearch = searchTerm.trim();
+
     if (refresh) {
       setIsLoading(true);
     }
 
     try {
-      const data = await fetchChats({ limit: PAGE_SIZE, offset: refresh ? 0 : offset });
+      const data = await fetchChats({
+        limit: trimmedSearch ? SEARCH_PAGE_SIZE : PAGE_SIZE,
+        offset: refresh ? 0 : offset,
+        search: trimmedSearch || undefined,
+      });
+      if (requestId !== loadRequestIdRef.current) return;
+
       setContacts((current) => {
         if (refresh) return data;
         const knownIds = new Set(current.map((contact) => contact.id));
         return [...current, ...data.filter((contact) => !knownIds.has(contact.id))];
       });
-      setHasMore(data.length === PAGE_SIZE);
+      setHasMore(!trimmedSearch && data.length === PAGE_SIZE);
       setError(undefined);
     } catch (err) {
+      if (requestId !== loadRequestIdRef.current) return;
       setError(err instanceof Error ? err.message : "Nao foi possivel carregar os contatos.");
     } finally {
+      if (requestId !== loadRequestIdRef.current) return;
       setIsLoading(false);
       setIsLoadingMore(false);
     }
   }, []);
 
   useEffect(() => {
-    window.queueMicrotask(() => void loadContacts({ refresh: true }));
-  }, [loadContacts]);
+    window.queueMicrotask(() => void loadContacts({ refresh: true, searchTerm: debouncedSearch }));
+  }, [debouncedSearch, loadContacts]);
 
   useEffect(() => {
     let isMounted = true;
@@ -181,7 +192,7 @@ export default function ContatosPage() {
   function loadMore() {
     if (isLoadingMore || !hasMore) return;
     setIsLoadingMore(true);
-    void loadContacts({ offset: contacts.length });
+    void loadContacts({ offset: contacts.length, searchTerm: debouncedSearch });
   }
 
   function updateContactById(contactId: string, updater: (contact: ChatRecord) => ChatRecord) {
@@ -319,7 +330,7 @@ export default function ContatosPage() {
             <p className="mt-1 text-sm text-muted-foreground">{filteredContacts.length} de {contacts.length} contatos carregados</p>
           </div>
 
-          <Button type="button" variant="outline" onClick={() => void loadContacts({ refresh: true })} disabled={isLoading}>
+          <Button type="button" variant="outline" onClick={() => void loadContacts({ refresh: true, searchTerm: debouncedSearch })} disabled={isLoading}>
             <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
             Atualizar
           </Button>
@@ -433,7 +444,7 @@ export default function ContatosPage() {
           </div>
         </div>
 
-        {!isLoading && hasMore && !search.trim() && (
+        {!isLoading && hasMore && !hasSearch && (
           <Button type="button" variant="outline" className="self-center" onClick={loadMore} disabled={isLoadingMore}>
             {isLoadingMore ? "Carregando..." : "Carregar mais contatos"}
           </Button>

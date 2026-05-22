@@ -10,6 +10,9 @@ export type CurrentUser = {
 export type MentionableUser = Pick<CurrentUser, "email" | "name" | "role">
 
 export const FALLBACK_ADMIN_EMAILS = ["p.augustocardoso@gmail.com"]
+const FALLBACK_USER_NAMES: Record<string, string> = {
+  "p.augustocardoso@gmail.com": "Pedro",
+}
 
 export function normalizeUserRole(value: unknown): UserRole {
   if (typeof value !== "string") {
@@ -46,7 +49,7 @@ export function isFallbackAdminEmail(email: string) {
 export function getDefaultUser(email: string, displayName?: string | null): CurrentUser {
   const normalizedEmail = email.trim().toLowerCase()
   const role = isFallbackAdminEmail(normalizedEmail) ? "admin" : "user"
-  const name = displayName?.trim() || normalizedEmail
+  const name = displayName?.trim() || FALLBACK_USER_NAMES[normalizedEmail] || normalizedEmail
 
   return {
     email: normalizedEmail,
