@@ -8,9 +8,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { addDays, addMonths, addWeeks, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek, subMonths, subWeeks } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarDays, CalendarPlus, ChevronLeft, ChevronRight, Circle, Clock, Loader2, Phone, Plus, Search, Stethoscope, User, UserPlus } from "lucide-react";
+import { CalendarDays, CalendarIcon, CalendarPlus, ChevronLeft, ChevronRight, Circle, Clock, Loader2, Phone, Plus, Search, Stethoscope, User, UserPlus } from "lucide-react";
 import type { FormEvent, MouseEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { Calendar } from "../ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 
 type ViewType = "Mês" | "Semana" | "Dia" | "Lista";
 
@@ -525,23 +527,36 @@ export function WeeklyCalendar() {
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goToPrevious} aria-label="Periodo anterior">
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <div className="w-50 flex items-center justify-center">
+          <div className="flex items-center justify-center">
             <h1 className="text-lg whitespace-nowrap font-semibold capitalize text-foreground">{getHeaderTitle(currentDate, activeView)}</h1>
           </div>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goToNext} aria-label="Proximo periodo">
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="cursor-pointer"
-            onClick={() => {
-              setCurrentDate(new Date());
-              setActiveView("Dia");
-            }}
-          >
-            Hoje
-          </Button>
+          {activeView === "Dia" && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                </Button>
+              </PopoverTrigger>
+
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={currentDate}
+                  onSelect={(date) => {
+                    if (date) {
+                      setCurrentDate(date);
+                      setActiveView("Dia");
+                    }
+                  }}
+                  initialFocus
+                  locale={ptBR}
+                />
+              </PopoverContent>
+            </Popover>
+          )}
           {isLoadingAppointments && (
             <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" />
