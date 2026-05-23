@@ -11,7 +11,6 @@ import { ptBR } from "date-fns/locale";
 import { CalendarDays, CalendarPlus, ChevronLeft, ChevronRight, Circle, Clock, Loader2, Phone, Plus, Search, Stethoscope, User, UserPlus } from "lucide-react";
 import type { FormEvent, MouseEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { Separator } from "../ui/separator";
 
 type ViewType = "Mês" | "Semana" | "Dia" | "Lista";
 
@@ -44,6 +43,8 @@ const allValue = "todos";
 const dayStartHour = 6;
 const dayEndHour = 22;
 const slotStepMinutes = 15;
+
+const correctHeightAspect = 1.5;
 
 function getDateKey(date: Date) {
   return format(date, "yyyy-MM-dd");
@@ -169,15 +170,18 @@ function getAppointmentStyle(appointment: CalendarAppointment) {
   const startDate = getAppointmentDate(appointment);
   const endDate = getAppointmentEndDate(appointment);
 
-  if (!startDate) return { top: 0, height: 52 };
+  if (!startDate) return { top: 0, height: 78 };
 
   const startMinutes = startDate.getHours() * 60 + startDate.getMinutes();
   const visibleStartMinutes = dayStartHour * 60;
+
+  const relativeMinutes = startMinutes - visibleStartMinutes;
+
   const durationMinutes = endDate ? Math.max(30, (endDate.getTime() - startDate.getTime()) / 60000) : 60;
 
   return {
-    top: Math.max(4, startMinutes - visibleStartMinutes + 4),
-    height: Math.max(44, durationMinutes - 8),
+    top: Math.max(4, relativeMinutes * correctHeightAspect + 2),
+    height: Math.max(44, durationMinutes * correctHeightAspect - 4),
   };
 }
 
@@ -194,7 +198,7 @@ function getDateAtMinute(day: Date, minuteOfDay: number) {
 function getPointerMinute(event: MouseEvent<HTMLElement>, element: HTMLElement) {
   const rect = element.getBoundingClientRect();
   const y = Math.min(Math.max(event.clientY - rect.top, 0), rect.height);
-  const rawMinute = dayStartHour * 60 + y;
+  const rawMinute = dayStartHour * 60 + y / correctHeightAspect;
   const snappedMinute = Math.round(rawMinute / slotStepMinutes) * slotStepMinutes;
 
   return Math.min(Math.max(snappedMinute, dayStartHour * 60), dayEndHour * 60);
@@ -468,40 +472,46 @@ export function WeeklyCalendar() {
       <button
         key={appointment.id}
         type="button"
-        className="p-1 gap-2 group flex flex-row h-full w-full overflow-hidden rounded-md border border-border/70 bg-secondary text-left shadow-sm transition-all hover:ring-2 hover:ring-theme-primary/50 hover:shadow-xl cursor-pointer overflow-y-auto"
+        className="p-1 gap-2 group flex flex-row h-full max-h-full w-full rounded-md border border-border/70 bg-secondary text-left shadow-sm transition-all hover:ring-2 hover:ring-theme-primary/50 hover:shadow-xl cursor-pointer items-stretch"
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation();
           setSelectedAppointment(appointment);
         }}
       >
-        <div className="w-1 shrink-0 rounded-full" style={{ backgroundColor: getStatusColorHex(appointment.status).base }} />
-        <div className="flex w-full gap-2 transition-all hover:ring-input/50 pr-3.75">
-          <div className="min-w-0 flex-1 flex flex-col justify-center">
+        <div className="w-1 shrink-0 rounded-full transition-transform" style={{ backgroundColor: getStatusColorHex(appointment.status).base }} />
+
+        <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5 overflow-y-auto">
+          <div className="flex min-w-0 items-center justify-between gap-2 shrink-0">
             <div className="flex min-w-0 items-center gap-1.5">
               {startDate && (
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-primary/10 px-1.5 py-0.5 text-[11px] font-bold text-primary">
-                  <Clock className="h-3 w-3" />
+                <span className="inline-flex shrink-0 items-center gap-1 rounded bg-foreground/5 dark:bg-white/10 px-1.5 py-0.5 text-[10px] font-bold text-foreground/90 font-mono">
+                  <Clock className="h-3 w-3 text-muted-foreground" />
                   {format(startDate, "HH:mm")}
                 </span>
               )}
-              <p className="truncate text-xs font-bold text-foreground">{professional}</p>
+              <p className="truncate text-xs font-semibold text-muted-foreground">{professional}</p>
             </div>
-            <p className="mt-1 truncate text-xs font-medium text-foreground/80">{appointment.patient}</p>
-            {appointment.phone && <p className="truncate text-[11px] text-muted-foreground">{appointment.phone}</p>}
-            <Separator className="my-1.5" />
-            <div className="mt-1 flex min-w-0 items-center justify-between gap-2">
-              <p className="truncate text-[11px] font-semibold text-primary">{appointment.type || "Sem tipo"}</p>
-              <span
-                className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold border text-foreground")}
-                style={{
-                  borderColor: getStatusColorHex(appointment.status).bg,
-                  background: getStatusColorHex(appointment.status).base,
-                }}
-              >
-                {appointment.status}
-              </span>
-            </div>
+          </div>
+
+          <div className="my-2 min-w-0 flex flex-col gap-0.5">
+            <h4 className="truncate text-sm font-bold text-foreground tracking-tight">{appointment.patient}</h4>
+            {appointment.phone && <p className="truncate text-[11px] font-medium text-muted-foreground/80 font-mono">{appointment.phone}</p>}
+          </div>
+
+          <div className="mt-auto flex items-center justify-between gap-2 pt-1.5 border-t border-border/30 shrink-0">
+            <span className="truncate text-[10px] font-bold tracking-wider text-primary uppercase">{appointment.type || "Geral"}</span>
+
+            <span
+              className="shrink-0 w-fit rounded px-2 py-0.5 text-[10px] font-bold tracking-wide border transition-all"
+              style={{
+                borderColor: `${getStatusColorHex(appointment.status).base}33`,
+                backgroundColor: getStatusColorHex(appointment.status).bg,
+                color: getStatusColorHex(appointment.status).base,
+              }}
+            >
+              {appointment.status}
+            </span>
           </div>
         </div>
       </button>
@@ -515,8 +525,8 @@ export function WeeklyCalendar() {
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goToPrevious} aria-label="Periodo anterior">
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <div>
-            <h1 className="text-lg font-semibold capitalize text-foreground">{getHeaderTitle(currentDate, activeView)}</h1>
+          <div className="w-50 flex items-center justify-center">
+            <h1 className="text-lg whitespace-nowrap font-semibold capitalize text-foreground">{getHeaderTitle(currentDate, activeView)}</h1>
           </div>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goToNext} aria-label="Proximo periodo">
             <ChevronRight className="h-4 w-4" />
@@ -644,7 +654,7 @@ export function WeeklyCalendar() {
                 <div className={cn("relative flex min-h-[960px]", activeView == "Semana" && "min-w-341.5")}>
                   <div className="w-16 flex-shrink-0 border-r border-border">
                     {timeSlots.map((hour) => (
-                      <div key={hour} className="h-[60px] border-b border-border flex justify-center items-center">
+                      <div key={hour} className="h-[90px] border-b border-border flex justify-center items-center">
                         <span className="text-xs font-medium text-muted-foreground ">{String(hour).padStart(2, "0")}:00</span>
                       </div>
                     ))}
@@ -652,8 +662,8 @@ export function WeeklyCalendar() {
                   {visibleDays.map((day) => {
                     const dayAppointments = appointmentsByDay.get(getDateKey(day)) ?? [];
                     const daySelection = selection && getDateKey(selection.day) === getDateKey(day) ? selection : null;
-                    const selectionTop = daySelection ? Math.min(daySelection.startMinute, daySelection.endMinute) - dayStartHour * 60 : 0;
-                    const selectionHeight = daySelection ? Math.max(slotStepMinutes, Math.abs(daySelection.endMinute - daySelection.startMinute)) : 0;
+                    const selectionTop = daySelection ? (Math.min(daySelection.startMinute, daySelection.endMinute) - dayStartHour * 60) * correctHeightAspect : 0;
+                    const selectionHeight = daySelection ? Math.max(slotStepMinutes, Math.abs(daySelection.endMinute - daySelection.startMinute)) * correctHeightAspect : 0;
                     return (
                       <div
                         key={day.toISOString()}
@@ -666,7 +676,7 @@ export function WeeklyCalendar() {
                         }}
                       >
                         {timeSlots.map((hour) => (
-                          <div key={hour} className="h-[60px] border-b border-border" />
+                          <div key={hour} className="h-[90px] border-b border-border" />
                         ))}
                         {daySelection && <div className="pointer-events-none absolute left-1 right-1 z-10 rounded-md border border-dashed border-primary bg-primary/15" style={{ top: selectionTop, height: selectionHeight }} />}
                         {dayAppointments.map((appointment) => {

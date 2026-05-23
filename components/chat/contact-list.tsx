@@ -532,7 +532,7 @@ export function ContactList({
                     {!hasDraft && chat.text_last_message && <MessageStatusIcon fromMe={chat.last_message_fromMe} status={latestStatus?.status} timestamp={latestStatus?.timestamp_msg ?? chat.last_message_time} />}
 
                     <p className="truncate text-sm text-muted-foreground">
-                      {hasDraft && <span className="font-medium text-red-500">Rascunho: </span>}
+                      {hasDraft && <span className="font-medium text-theme-primary">Rascunho: </span>}
                       {previewText || chat.text_last_message || "Sem mensagens recentes"}
                     </p>
 
