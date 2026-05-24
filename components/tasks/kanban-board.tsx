@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { AlertCircle, CalendarDays, CheckCircle2, CircleDashed, Clock3, Loader2, Plus, RefreshCw, Search, Timer, Trash2, UserRound } from "lucide-react";
+import { AlertCircle, CalendarDays, CheckCircle2, Circle, CircleDashed, Clock3, Loader2, Plus, RefreshCw, Search, Timer, Trash2, UserRound } from "lucide-react";
 import type { ComponentType, FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -129,18 +129,52 @@ function getTaskTypeBadgeClassName(type: string) {
     .toLowerCase();
 
   if (normalizedType.includes("aviso")) {
-    return "border-sky-500/30 bg-sky-500/12 text-sky-700 dark:border-sky-300/30 dark:bg-sky-300/15 dark:text-sky-200";
+    return "border-sky-400/20 bg-sky-400/10 text-sky-400";
   }
 
   if (normalizedType.includes("pendencia")) {
-    return "border-rose-500/30 bg-rose-500/12 text-rose-700 dark:border-rose-300/30 dark:bg-rose-300/15 dark:text-rose-200";
+    return "border-rose-400/25 bg-rose-400/10 text-rose-400";
   }
 
   if (normalizedType.includes("tarefa")) {
-    return "border-violet-500/30 bg-violet-500/12 text-violet-700 dark:border-violet-300/30 dark:bg-violet-300/15 dark:text-violet-200";
+    return "border-violet-400/20 bg-violet-400/10 text-violet-400";
   }
 
   return "border-primary/20 bg-primary/5 text-primary";
+}
+
+function getTaskStatusColor(status: string) {
+  const normalized = status.toLowerCase();
+
+  if (normalized.includes("aguard")) {
+    return {
+      base: "#f59e0b",
+      bg: "#f59e0b1a",
+      text: "#f59e0b",
+    };
+  }
+
+  if (normalized.includes("resolv")) {
+    return {
+      base: "#0ea5e9",
+      bg: "#0ea5e91a",
+      text: "#0ea5e9",
+    };
+  }
+
+  if (normalized.includes("finaliz") || normalized.includes("conclu")) {
+    return {
+      base: "#10b981",
+      bg: "#10b9811a",
+      text: "#10b981",
+    };
+  }
+
+  return {
+    base: "#94a3b8",
+    bg: "#94a3b81a",
+    text: "#64748b",
+  };
 }
 
 function uniqueValues(tasks: Task[], key: keyof Task) {
@@ -194,7 +228,6 @@ function TaskCard({ task, onSelect }: { task: Task; onSelect: (task: Task) => vo
           onSelect(task);
         }
       }}
-      className="group cursor-pointer rounded-md border bg-card p-4 text-left shadow-xs transition hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
     >
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -265,11 +298,13 @@ function KanbanColumn({ status, tasks, isFiltering, onSelectTask }: { status: Ta
   const config = statusConfig[status];
   const Icon = config.icon;
 
+  const colorName = config?.markerClassName?.replace("bg-", "") || "theme-primary/50";
+
   return (
     <section className={cn("flex min-w-[300px] flex-1 flex-col rounded-md border p-3", config.columnClassName)}>
       <div className="mb-3 flex items-start justify-between gap-3 px-1">
         <div className="flex items-start gap-2">
-          <span className={cn("mt-1 h-2.5 w-2.5 rounded-full", config.markerClassName)} />
+          <span className={cn("mt-1.25 h-2.5 w-2.5 rounded-full", config.markerClassName)} />
           <div>
             <div className={cn("flex items-center gap-2 font-semibold", config.headerClassName)}>
               <Icon className="h-4 w-4" />
@@ -281,7 +316,23 @@ function KanbanColumn({ status, tasks, isFiltering, onSelectTask }: { status: Ta
         <span className={cn("flex h-6 min-w-6 items-center justify-center rounded-md border px-2 text-xs font-semibold shadow-xs", config.countClassName)}>{tasks.length}</span>
       </div>
 
-      <div className="flex flex-1 flex-col gap-3 overflow-y-auto pr-1">{tasks.length > 0 ? tasks.map((task) => <TaskCard key={task.id} task={task} onSelect={onSelectTask} />) : <EmptyColumn isFiltering={isFiltering} />}</div>
+      <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-1">
+        {tasks.length > 0 ? (
+          tasks.map((task) => (
+            <div
+              key={task.id}
+              className={cn(
+                "group cursor-pointer rounded-md border bg-card p-4 text-left shadow-xs transition hover:ring-2 hover:shadow-sm focus-visible:outline-hidden focus-visible:ring-2",
+                `hover:ring-${colorName} focus-visible:ring-${colorName}`,
+              )}
+            >
+              <TaskCard task={task} onSelect={onSelectTask} />
+            </div>
+          ))
+        ) : (
+          <EmptyColumn isFiltering={isFiltering} />
+        )}
+      </div>
     </section>
   );
 }
@@ -290,11 +341,13 @@ function TaskStatusGrid({ status, tasks, isFiltering, onSelectTask }: { status: 
   const config = statusConfig[status];
   const Icon = config.icon;
 
+  const colorName = config?.markerClassName?.replace("bg-", "") || "theme-primary/50";
+
   return (
-    <section className={cn("flex min-w-full flex-1 flex-col rounded-md border p-4", config.columnClassName)}>
-      <div className="mb-4 flex items-start justify-between gap-3 px-1">
+    <section className={cn("flex min-w-full flex-1 flex-col rounded-md border p-3", config.columnClassName)}>
+      <div className="mb-3 flex items-start justify-between gap-3 px-1">
         <div className="flex items-start gap-2">
-          <span className={cn("mt-1 h-2.5 w-2.5 rounded-full", config.markerClassName)} />
+          <span className={cn("mt-1.25 h-2.5 w-2.5 rounded-full", config.markerClassName)} />
           <div>
             <div className={cn("flex items-center gap-2 font-semibold", config.headerClassName)}>
               <Icon className="h-4 w-4" />
@@ -307,9 +360,17 @@ function TaskStatusGrid({ status, tasks, isFiltering, onSelectTask }: { status: 
       </div>
 
       {tasks.length > 0 ? (
-        <div className="grid flex-1 auto-rows-max grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 overflow-y-auto pr-1">
+        <div className="p-1 grid flex-1 auto-rows-max grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 overflow-y-auto pr-1">
           {tasks.map((task) => (
-            <TaskCard key={task.id} task={task} onSelect={onSelectTask} />
+            <div
+              key={task.id}
+              className={cn(
+                "group cursor-pointer rounded-md border bg-card p-4 text-left shadow-xs transition hover:ring-2 hover:shadow-sm focus-visible:outline-hidden focus-visible:ring-2",
+                `hover:ring-${colorName} focus-visible:ring-${colorName}`,
+              )}
+            >
+              <TaskCard task={task} onSelect={onSelectTask} />
+            </div>
           ))}
         </div>
       ) : (
@@ -651,9 +712,9 @@ export function KanbanBoard() {
                   <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Finalizadas</p>
                 </div>
               </div>
-              <Button type="button" onClick={handleOpenCreateDialog}>
+              <Button type="button" className="gap-2 bg-theme-primary text-white hover:bg-theme-primary/90" onClick={handleOpenCreateDialog}>
                 <Plus className="h-4 w-4" />
-                Nova tarefa
+                Nova Tarefa
               </Button>
             </div>
           </div>
@@ -692,12 +753,26 @@ export function KanbanBoard() {
 
       <Tabs value={activeView} onValueChange={(value) => setActiveView(value as TaskView)} className="flex min-h-0 flex-1 gap-0">
         <div className="border-b px-5 py-3">
-          <TabsList className="h-10 w-full justify-start overflow-x-auto sm:w-fit">
-            {taskViewOptions.map((view) => (
-              <TabsTrigger key={view.value} value={view.value} className="h-8 px-3">
-                {view.label}
-              </TabsTrigger>
-            ))}
+          <TabsList className="gap-1.5 rounded-full px-1.5 h-10! bg-secondary/50 border border-border/40">
+            {taskViewOptions.map((view) => {
+              const colors = getTaskStatusColor(view.value);
+              const isActive = activeView === view.value;
+
+              return (
+                <TabsTrigger key={view.value} value={view.value} className="group relative data-[state=active]:bg-card px-3.5 h-7 rounded-full text-xs font-medium transition-all gap-2 cursor-pointer data-[state=active]:shadow-xs">
+                  <Circle
+                    className="h-2 w-2 transition-all duration-300"
+                    style={{
+                      fill: isActive ? colors.base : "transparent",
+                      stroke: colors.base,
+                      strokeWidth: isActive ? 0 : 2,
+                      opacity: isActive ? 1 : 0.6,
+                    }}
+                  />
+                  <span className="transition-colors group-data-[state=active]:text-foreground text-muted-foreground">{view.label}</span>
+                </TabsTrigger>
+              );
+            })}
           </TabsList>
         </div>
 
