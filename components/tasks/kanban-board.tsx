@@ -1,215 +1,187 @@
-"use client"
+"use client";
 
-import { useEffect, useMemo, useState } from "react"
-import type { FormEvent, ReactNode } from "react"
-import type { ComponentType } from "react"
-import { cn } from "@/lib/utils"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  AlertCircle,
-  CalendarDays,
-  CheckCircle2,
-  CircleDashed,
-  Clock3,
-  Loader2,
-  Plus,
-  RefreshCw,
-  Search,
-  Timer,
-  Trash2,
-  UserRound,
-} from "lucide-react"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import { AlertCircle, CalendarDays, CheckCircle2, CircleDashed, Clock3, Loader2, Plus, RefreshCw, Search, Timer, Trash2, UserRound } from "lucide-react";
+import type { ComponentType, FormEvent, ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-type TaskStatus = "aguardando" | "resolvendo" | "finalizado"
-type TaskView = "todas" | TaskStatus
+type TaskStatus = "aguardando" | "resolvendo" | "finalizado";
+type TaskView = "todas" | TaskStatus;
 
 interface Task {
-  id: string
-  subject: string
-  description: string
-  creator: string
-  creatorInitials: string
-  responsible: string
-  responsibleInitials: string
-  patient: string
-  type: string
-  status: TaskStatus
-  statusLabel: string
-  createdAt: string
-  dueDate: string
+  id: string;
+  subject: string;
+  description: string;
+  creator: string;
+  creatorInitials: string;
+  responsible: string;
+  responsibleInitials: string;
+  patient: string;
+  type: string;
+  status: TaskStatus;
+  statusLabel: string;
+  createdAt: string;
+  dueDate: string;
 }
 
 interface TaskOptions {
-  types: string[]
-  statuses: string[]
-  users: Array<{ id: string; label: string }>
+  types: string[];
+  statuses: string[];
+  users: Array<{ id: string; label: string }>;
 }
 
-const statusOrder: TaskStatus[] = ["aguardando", "resolvendo", "finalizado"]
+const statusOrder: TaskStatus[] = ["aguardando", "resolvendo", "finalizado"];
 const taskViewOptions: Array<{ value: TaskView; label: string }> = [
   { value: "todas", label: "Todas" },
   { value: "aguardando", label: "Aguardando" },
   { value: "resolvendo", label: "Resolvendo" },
   { value: "finalizado", label: "Finalizadas" },
-]
+];
 
 const statusConfig: Record<
   TaskStatus,
   {
-    label: string
-    helper: string
-    icon: ComponentType<{ className?: string }>
-    columnClassName: string
-    headerClassName: string
-    helperClassName: string
-    markerClassName: string
-    countClassName: string
+    label: string;
+    helper: string;
+    icon: ComponentType<{ className?: string }>;
+    columnClassName: string;
+    headerClassName: string;
+    helperClassName: string;
+    markerClassName: string;
+    countClassName: string;
   }
 > = {
   aguardando: {
     label: "Aguardando",
     helper: "Pendentes de triagem ou início",
     icon: CircleDashed,
-    columnClassName: "border-amber-300 bg-amber-50 dark:border-amber-500/55 dark:bg-[#3a2a0b]",
-    headerClassName: "text-amber-950 dark:text-amber-200",
-    helperClassName: "text-amber-800/75 dark:text-amber-100/65",
-    markerClassName: "bg-amber-600",
-    countClassName: "border-amber-200 bg-amber-100 text-amber-950 dark:border-amber-400/35 dark:bg-amber-300/15 dark:text-amber-100",
+    columnClassName: "border-amber-500/20 bg-amber-500/5",
+    headerClassName: "text-amber-500",
+    helperClassName: "text-muted-foreground",
+    markerClassName: "bg-amber-500",
+    countClassName: "border-amber-500/20 bg-amber-500/10 text-amber-500",
   },
   resolvendo: {
     label: "Resolvendo",
     helper: "Em acompanhamento pela equipe",
     icon: Timer,
-    columnClassName: "border-cyan-300 bg-cyan-50 dark:border-cyan-500/55 dark:bg-[#082f3b]",
-    headerClassName: "text-cyan-950 dark:text-cyan-200",
-    helperClassName: "text-cyan-800/75 dark:text-cyan-100/65",
-    markerClassName: "bg-cyan-600",
-    countClassName: "border-cyan-200 bg-cyan-100 text-cyan-950 dark:border-cyan-400/35 dark:bg-cyan-300/15 dark:text-cyan-100",
+    columnClassName: "border-cyan-500/20 bg-cyan-500/5",
+    headerClassName: "text-cyan-500",
+    helperClassName: "text-muted-foreground",
+    markerClassName: "bg-cyan-500",
+    countClassName: "border-cyan-500/20 bg-cyan-500/10 text-cyan-500",
   },
   finalizado: {
     label: "Finalizadas",
     helper: "Concluídas no fluxo",
     icon: CheckCircle2,
-    columnClassName: "border-teal-300 bg-teal-50 dark:border-teal-500/55 dark:bg-[#0b332d]",
-    headerClassName: "text-teal-950 dark:text-teal-200",
-    helperClassName: "text-teal-800/75 dark:text-teal-100/65",
+    columnClassName: "border-teal-500/20 bg-teal-500/5",
+    headerClassName: "text-teal-500",
+    helperClassName: "text-muted-foreground",
     markerClassName: "bg-teal-600",
-    countClassName: "border-teal-200 bg-teal-100 text-teal-950 dark:border-teal-400/35 dark:bg-teal-300/15 dark:text-teal-100",
+    countClassName: "border-teal-500/20 bg-teal-500/10 text-teal-500",
   },
-}
+};
 
-const filterAll = "Todos"
+const filterAll = "Todos";
 const fallbackTaskOptions: TaskOptions = {
   types: ["Tarefa"],
   statuses: ["Aguardando", "Resolvendo", "Finalizado"],
   users: [],
-}
+};
 
 function getTodayDate() {
-  return new Date().toISOString().slice(0, 10)
+  return new Date().toISOString().slice(0, 10);
 }
 
 function formatDateTime(value: string, options: Intl.DateTimeFormatOptions) {
-  if (!value) return ""
+  if (!value) return "";
 
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ""
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
 
-  return new Intl.DateTimeFormat("pt-BR", options).format(date)
+  return new Intl.DateTimeFormat("pt-BR", options).format(date);
 }
 
 function isOverdue(task: Task) {
-  if (!task.dueDate || task.status === "finalizado") return false
+  if (!task.dueDate || task.status === "finalizado") return false;
 
-  const dueDate = new Date(task.dueDate)
-  if (Number.isNaN(dueDate.getTime())) return false
+  const dueDate = new Date(task.dueDate);
+  if (Number.isNaN(dueDate.getTime())) return false;
 
-  dueDate.setHours(23, 59, 59, 999)
-  return dueDate.getTime() < Date.now()
+  dueDate.setHours(23, 59, 59, 999);
+  return dueDate.getTime() < Date.now();
 }
 
 function getTaskTypeBadgeClassName(type: string) {
   const normalizedType = type
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
+    .toLowerCase();
 
   if (normalizedType.includes("aviso")) {
-    return "border-sky-500/30 bg-sky-500/12 text-sky-700 dark:border-sky-300/30 dark:bg-sky-300/15 dark:text-sky-200"
+    return "border-sky-500/30 bg-sky-500/12 text-sky-700 dark:border-sky-300/30 dark:bg-sky-300/15 dark:text-sky-200";
   }
 
   if (normalizedType.includes("pendencia")) {
-    return "border-rose-500/30 bg-rose-500/12 text-rose-700 dark:border-rose-300/30 dark:bg-rose-300/15 dark:text-rose-200"
+    return "border-rose-500/30 bg-rose-500/12 text-rose-700 dark:border-rose-300/30 dark:bg-rose-300/15 dark:text-rose-200";
   }
 
   if (normalizedType.includes("tarefa")) {
-    return "border-violet-500/30 bg-violet-500/12 text-violet-700 dark:border-violet-300/30 dark:bg-violet-300/15 dark:text-violet-200"
+    return "border-violet-500/30 bg-violet-500/12 text-violet-700 dark:border-violet-300/30 dark:bg-violet-300/15 dark:text-violet-200";
   }
 
-  return "border-primary/20 bg-primary/5 text-primary"
+  return "border-primary/20 bg-primary/5 text-primary";
 }
 
 function uniqueValues(tasks: Task[], key: keyof Task) {
-  return Array.from(new Set(tasks.map((task) => String(task[key] || "").trim()).filter(Boolean))).sort((a, b) =>
-    a.localeCompare(b, "pt-BR", { sensitivity: "base" }),
-  )
+  return Array.from(new Set(tasks.map((task) => String(task[key] || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
 }
 
 async function fetchTaskRecords({ signal, refresh = false }: { signal?: AbortSignal; refresh?: boolean } = {}) {
-  const response = await fetch(`/api/airtable/tasks${refresh ? "?refresh=1" : ""}`, { cache: "no-store", signal })
-  const data = (await response.json()) as { tasks?: Task[]; message?: string }
+  const response = await fetch(`/api/airtable/tasks${refresh ? "?refresh=1" : ""}`, { cache: "no-store", signal });
+  const data = (await response.json()) as { tasks?: Task[]; message?: string };
 
   if (!response.ok) {
-    throw new Error(data.message || "Não foi possível carregar os encaminhamentos.")
+    throw new Error(data.message || "Não foi possível carregar os encaminhamentos.");
   }
 
-  return data.tasks ?? []
+  return data.tasks ?? [];
 }
 
 async function fetchTaskOptions() {
-  const response = await fetch("/api/airtable/task-options", { cache: "no-store" })
-  const data = (await response.json()) as Partial<TaskOptions>
+  const response = await fetch("/api/airtable/task-options", { cache: "no-store" });
+  const data = (await response.json()) as Partial<TaskOptions>;
 
   if (!response.ok) {
-    throw new Error("Não foi possível carregar as opções de tarefas.")
+    throw new Error("Não foi possível carregar as opções de tarefas.");
   }
 
   return {
     types: data.types?.length ? data.types : fallbackTaskOptions.types,
     statuses: data.statuses?.length ? data.statuses : fallbackTaskOptions.statuses,
     users: data.users ?? [],
-  }
+  };
 }
 
 function TaskCard({ task, onSelect }: { task: Task; onSelect: (task: Task) => void }) {
-  const overdue = isOverdue(task)
-  const dueDate = formatDateTime(task.dueDate, { day: "2-digit", month: "short", year: "numeric" })
+  const overdue = isOverdue(task);
+  const dueDate = formatDateTime(task.dueDate, { day: "2-digit", month: "short", year: "numeric" });
   const createdAt = formatDateTime(task.createdAt, {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
-  })
+  });
 
   return (
     <article
@@ -218,8 +190,8 @@ function TaskCard({ task, onSelect }: { task: Task; onSelect: (task: Task) => vo
       onClick={() => onSelect(task)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault()
-          onSelect(task)
+          event.preventDefault();
+          onSelect(task);
         }
       }}
       className="group cursor-pointer rounded-md border bg-card p-4 text-left shadow-xs transition hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
@@ -237,22 +209,14 @@ function TaskCard({ task, onSelect }: { task: Task; onSelect: (task: Task) => vo
               </Badge>
             ) : null}
           </div>
-          <h3 className="line-clamp-2 text-sm font-semibold leading-5 text-foreground">
-            {task.subject || "Encaminhamento sem assunto"}
-          </h3>
+          <h3 className="line-clamp-2 text-sm font-semibold leading-5 text-foreground">{task.subject || "Encaminhamento sem assunto"}</h3>
         </div>
         <Avatar className="h-8 w-8 shrink-0 border border-primary/15">
-          <AvatarFallback className="bg-primary/10 text-[11px] font-semibold text-primary">
-            {task.responsibleInitials}
-          </AvatarFallback>
+          <AvatarFallback className="bg-primary/10 text-[11px] font-semibold text-primary">{task.responsibleInitials}</AvatarFallback>
         </Avatar>
       </div>
 
-      {task.description ? (
-        <p className="mb-4 line-clamp-3 text-sm leading-6 text-muted-foreground">{task.description}</p>
-      ) : (
-        <p className="mb-4 text-sm italic leading-6 text-muted-foreground">Sem observações registradas.</p>
-      )}
+      {task.description ? <p className="mb-4 line-clamp-3 text-sm leading-6 text-muted-foreground">{task.description}</p> : <p className="mb-4 text-sm italic leading-6 text-muted-foreground">Sem observações registradas.</p>}
 
       <div className="space-y-3 border-t pt-3">
         {task.patient ? (
@@ -269,9 +233,7 @@ function TaskCard({ task, onSelect }: { task: Task; onSelect: (task: Task) => vo
           </div>
           <div className="text-right">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Prazo</p>
-            <p className={cn("text-xs font-medium", overdue ? "text-destructive" : "text-foreground")}>
-              {dueDate || "Sem prazo"}
-            </p>
+            <p className={cn("text-xs font-medium", overdue ? "text-destructive" : "text-foreground")}>{dueDate || "Sem prazo"}</p>
           </div>
         </div>
 
@@ -286,7 +248,7 @@ function TaskCard({ task, onSelect }: { task: Task; onSelect: (task: Task) => vo
         </div>
       </div>
     </article>
-  )
+  );
 }
 
 function EmptyColumn({ isFiltering }: { isFiltering: boolean }) {
@@ -294,26 +256,14 @@ function EmptyColumn({ isFiltering }: { isFiltering: boolean }) {
     <div className="flex min-h-40 flex-col items-center justify-center rounded-md border border-dashed bg-background/70 p-6 text-center">
       <CheckCircle2 className="mb-2 h-5 w-5 text-muted-foreground" />
       <p className="text-sm font-medium text-foreground">{isFiltering ? "Nada encontrado" : "Sem encaminhamentos"}</p>
-      <p className="mt-1 text-xs text-muted-foreground">
-        {isFiltering ? "Ajuste busca ou filtros para ampliar a lista." : "Quando houver registros, eles aparecem aqui."}
-      </p>
+      <p className="mt-1 text-xs text-muted-foreground">{isFiltering ? "Ajuste busca ou filtros para ampliar a lista." : "Quando houver registros, eles aparecem aqui."}</p>
     </div>
-  )
+  );
 }
 
-function KanbanColumn({
-  status,
-  tasks,
-  isFiltering,
-  onSelectTask,
-}: {
-  status: TaskStatus
-  tasks: Task[]
-  isFiltering: boolean
-  onSelectTask: (task: Task) => void
-}) {
-  const config = statusConfig[status]
-  const Icon = config.icon
+function KanbanColumn({ status, tasks, isFiltering, onSelectTask }: { status: TaskStatus; tasks: Task[]; isFiltering: boolean; onSelectTask: (task: Task) => void }) {
+  const config = statusConfig[status];
+  const Icon = config.icon;
 
   return (
     <section className={cn("flex min-w-[300px] flex-1 flex-col rounded-md border p-3", config.columnClassName)}>
@@ -328,40 +278,17 @@ function KanbanColumn({
             <p className={cn("mt-0.5 text-xs", config.helperClassName)}>{config.helper}</p>
           </div>
         </div>
-        <span
-          className={cn(
-            "flex h-6 min-w-6 items-center justify-center rounded-md border px-2 text-xs font-semibold shadow-xs",
-            config.countClassName,
-          )}
-        >
-          {tasks.length}
-        </span>
+        <span className={cn("flex h-6 min-w-6 items-center justify-center rounded-md border px-2 text-xs font-semibold shadow-xs", config.countClassName)}>{tasks.length}</span>
       </div>
 
-      <div className="flex flex-1 flex-col gap-3 overflow-y-auto pr-1">
-        {tasks.length > 0 ? (
-          tasks.map((task) => <TaskCard key={task.id} task={task} onSelect={onSelectTask} />)
-        ) : (
-          <EmptyColumn isFiltering={isFiltering} />
-        )}
-      </div>
+      <div className="flex flex-1 flex-col gap-3 overflow-y-auto pr-1">{tasks.length > 0 ? tasks.map((task) => <TaskCard key={task.id} task={task} onSelect={onSelectTask} />) : <EmptyColumn isFiltering={isFiltering} />}</div>
     </section>
-  )
+  );
 }
 
-function TaskStatusGrid({
-  status,
-  tasks,
-  isFiltering,
-  onSelectTask,
-}: {
-  status: TaskStatus
-  tasks: Task[]
-  isFiltering: boolean
-  onSelectTask: (task: Task) => void
-}) {
-  const config = statusConfig[status]
-  const Icon = config.icon
+function TaskStatusGrid({ status, tasks, isFiltering, onSelectTask }: { status: TaskStatus; tasks: Task[]; isFiltering: boolean; onSelectTask: (task: Task) => void }) {
+  const config = statusConfig[status];
+  const Icon = config.icon;
 
   return (
     <section className={cn("flex min-w-full flex-1 flex-col rounded-md border p-4", config.columnClassName)}>
@@ -376,14 +303,7 @@ function TaskStatusGrid({
             <p className={cn("mt-0.5 text-xs", config.helperClassName)}>{config.helper}</p>
           </div>
         </div>
-        <span
-          className={cn(
-            "flex h-6 min-w-6 items-center justify-center rounded-md border px-2 text-xs font-semibold shadow-xs",
-            config.countClassName,
-          )}
-        >
-          {tasks.length}
-        </span>
+        <span className={cn("flex h-6 min-w-6 items-center justify-center rounded-md border px-2 text-xs font-semibold shadow-xs", config.countClassName)}>{tasks.length}</span>
       </div>
 
       {tasks.length > 0 ? (
@@ -396,20 +316,10 @@ function TaskStatusGrid({
         <EmptyColumn isFiltering={isFiltering} />
       )}
     </section>
-  )
+  );
 }
 
-function FilterMenu({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string
-  value: string
-  options: string[]
-  onChange: (value: string) => void
-}) {
+function FilterMenu({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -425,24 +335,16 @@ function FilterMenu({
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
-  )
+  );
 }
 
-function DetailRow({
-  label,
-  value,
-  className,
-}: {
-  label: string
-  value: string
-  className?: string
-}) {
+function DetailRow({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
     <div className={className}>
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="mt-1 break-words text-sm text-foreground">{value || "Nao informado"}</p>
     </div>
-  )
+  );
 }
 
 function TaskDetailsDialog({
@@ -453,14 +355,14 @@ function TaskDetailsDialog({
   isDeleting,
   errorMessage,
 }: {
-  task: Task | null
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onDelete: (task: Task) => void
-  isDeleting: boolean
-  errorMessage: string
+  task: Task | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDelete: (task: Task) => void;
+  isDeleting: boolean;
+  errorMessage: string;
 }) {
-  const overdue = task ? isOverdue(task) : false
+  const overdue = task ? isOverdue(task) : false;
   const createdAt = task
     ? formatDateTime(task.createdAt, {
         day: "2-digit",
@@ -469,8 +371,8 @@ function TaskDetailsDialog({
         hour: "2-digit",
         minute: "2-digit",
       })
-    : ""
-  const dueDate = task ? formatDateTime(task.dueDate, { day: "2-digit", month: "long", year: "numeric" }) : ""
+    : "";
+  const dueDate = task ? formatDateTime(task.dueDate, { day: "2-digit", month: "long", year: "numeric" }) : "";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -526,146 +428,136 @@ function TaskDetailsDialog({
         ) : null}
       </DialogContent>
     </Dialog>
-  )
+  );
 }
 
 function FieldLabel({ children }: { children: ReactNode }) {
-  return <label className="text-xs font-semibold text-foreground">{children}</label>
+  return <label className="text-xs font-semibold text-foreground">{children}</label>;
 }
 
 export function KanbanBoard() {
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [activeView, setActiveView] = useState<TaskView>("todas")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [typeFilter, setTypeFilter] = useState(filterAll)
-  const [creatorFilter, setCreatorFilter] = useState(filterAll)
-  const [responsibleFilter, setResponsibleFilter] = useState(filterAll)
-  const [taskOptions, setTaskOptions] = useState<TaskOptions>(fallbackTaskOptions)
-  const [isLoadingTaskOptions, setIsLoadingTaskOptions] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isCreatingTask, setIsCreatingTask] = useState(false)
-  const [errorMessage, setErrorMessage] = useState("")
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null)
-  const [deletingTaskId, setDeletingTaskId] = useState("")
-  const [taskActionError, setTaskActionError] = useState("")
-  const [createTaskError, setCreateTaskError] = useState("")
-  const [taskType, setTaskType] = useState(fallbackTaskOptions.types[0])
-  const [taskStatus, setTaskStatus] = useState(fallbackTaskOptions.statuses[0])
-  const [taskDueDate, setTaskDueDate] = useState(getTodayDate())
-  const [taskPatientName, setTaskPatientName] = useState("")
-  const [taskContactPhone, setTaskContactPhone] = useState("")
-  const [taskResponsibleUserId, setTaskResponsibleUserId] = useState("")
-  const [taskSubject, setTaskSubject] = useState("")
-  const [taskObservations, setTaskObservations] = useState("")
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [activeView, setActiveView] = useState<TaskView>("todas");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState(filterAll);
+  const [creatorFilter, setCreatorFilter] = useState(filterAll);
+  const [responsibleFilter, setResponsibleFilter] = useState(filterAll);
+  const [taskOptions, setTaskOptions] = useState<TaskOptions>(fallbackTaskOptions);
+  const [isLoadingTaskOptions, setIsLoadingTaskOptions] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [deletingTaskId, setDeletingTaskId] = useState("");
+  const [taskActionError, setTaskActionError] = useState("");
+  const [createTaskError, setCreateTaskError] = useState("");
+  const [taskType, setTaskType] = useState(fallbackTaskOptions.types[0]);
+  const [taskStatus, setTaskStatus] = useState(fallbackTaskOptions.statuses[0]);
+  const [taskDueDate, setTaskDueDate] = useState(getTodayDate());
+  const [taskPatientName, setTaskPatientName] = useState("");
+  const [taskContactPhone, setTaskContactPhone] = useState("");
+  const [taskResponsibleUserId, setTaskResponsibleUserId] = useState("");
+  const [taskSubject, setTaskSubject] = useState("");
+  const [taskObservations, setTaskObservations] = useState("");
 
   useEffect(() => {
-    const controller = new AbortController()
+    const controller = new AbortController();
 
     void (async () => {
       try {
-        setErrorMessage("")
-        setTasks(await fetchTaskRecords({ signal: controller.signal }))
+        setErrorMessage("");
+        setTasks(await fetchTaskRecords({ signal: controller.signal }));
       } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") return
-        setErrorMessage(error instanceof Error ? error.message : "Não foi possível carregar os encaminhamentos.")
-        setTasks([])
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setErrorMessage(error instanceof Error ? error.message : "Não foi possível carregar os encaminhamentos.");
+        setTasks([]);
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
-    })()
+    })();
 
-    return () => controller.abort()
-  }, [])
+    return () => controller.abort();
+  }, []);
 
   const loadTasks = async ({ refresh = false }: { refresh?: boolean } = {}) => {
-    const shouldShowFullLoader = tasks.length === 0
-    setIsLoading(shouldShowFullLoader)
-    setIsRefreshing(!shouldShowFullLoader)
-    setErrorMessage("")
+    const shouldShowFullLoader = tasks.length === 0;
+    setIsLoading(shouldShowFullLoader);
+    setIsRefreshing(!shouldShowFullLoader);
+    setErrorMessage("");
 
     try {
-      setTasks(await fetchTaskRecords({ refresh }))
+      setTasks(await fetchTaskRecords({ refresh }));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Não foi possível carregar os encaminhamentos.")
-      if (tasks.length === 0) setTasks([])
+      setErrorMessage(error instanceof Error ? error.message : "Não foi possível carregar os encaminhamentos.");
+      if (tasks.length === 0) setTasks([]);
     } finally {
-      setIsLoading(false)
-      setIsRefreshing(false)
+      setIsLoading(false);
+      setIsRefreshing(false);
     }
-  }
+  };
 
   const handleDeleteTask = async (task: Task) => {
-    const shouldDelete = window.confirm(`Excluir a tarefa "${task.subject || task.type || "sem assunto"}"?`)
-    if (!shouldDelete) return
+    const shouldDelete = window.confirm(`Excluir a tarefa "${task.subject || task.type || "sem assunto"}"?`);
+    if (!shouldDelete) return;
 
-    setDeletingTaskId(task.id)
-    setTaskActionError("")
+    setDeletingTaskId(task.id);
+    setTaskActionError("");
 
     try {
       const response = await fetch(`/api/airtable/tasks?id=${encodeURIComponent(task.id)}`, {
         method: "DELETE",
-      })
-      const data = (await response.json()) as { message?: string }
+      });
+      const data = (await response.json()) as { message?: string };
 
       if (!response.ok) {
-        throw new Error(data.message || "Nao foi possivel excluir a tarefa.")
+        throw new Error(data.message || "Nao foi possivel excluir a tarefa.");
       }
 
-      setTasks((current) => current.filter((currentTask) => currentTask.id !== task.id))
-      setSelectedTask(null)
+      setTasks((current) => current.filter((currentTask) => currentTask.id !== task.id));
+      setSelectedTask(null);
     } catch (error) {
-      setTaskActionError(error instanceof Error ? error.message : "Nao foi possivel excluir a tarefa.")
+      setTaskActionError(error instanceof Error ? error.message : "Nao foi possivel excluir a tarefa.");
     } finally {
-      setDeletingTaskId("")
+      setDeletingTaskId("");
     }
-  }
+  };
 
   const resetCreateForm = () => {
-    setTaskType(taskOptions.types[0] || fallbackTaskOptions.types[0])
-    setTaskStatus(
-      taskOptions.statuses.find((status) => status.toLowerCase() === "aguardando") ||
-        taskOptions.statuses[0] ||
-        fallbackTaskOptions.statuses[0],
-    )
-    setTaskDueDate(getTodayDate())
-    setTaskPatientName("")
-    setTaskContactPhone("")
-    setTaskResponsibleUserId(taskOptions.users[0]?.id || "")
-    setTaskSubject("")
-    setTaskObservations("")
-    setCreateTaskError("")
-  }
+    setTaskType(taskOptions.types[0] || fallbackTaskOptions.types[0]);
+    setTaskStatus(taskOptions.statuses.find((status) => status.toLowerCase() === "aguardando") || taskOptions.statuses[0] || fallbackTaskOptions.statuses[0]);
+    setTaskDueDate(getTodayDate());
+    setTaskPatientName("");
+    setTaskContactPhone("");
+    setTaskResponsibleUserId(taskOptions.users[0]?.id || "");
+    setTaskSubject("");
+    setTaskObservations("");
+    setCreateTaskError("");
+  };
 
   const handleOpenCreateDialog = () => {
-    setIsCreateDialogOpen(true)
-    setIsLoadingTaskOptions(true)
-    setCreateTaskError("")
+    setIsCreateDialogOpen(true);
+    setIsLoadingTaskOptions(true);
+    setCreateTaskError("");
 
     fetchTaskOptions()
       .then((options) => {
-        setTaskOptions(options)
-        setTaskType((current) => current || options.types[0] || fallbackTaskOptions.types[0])
-        setTaskStatus(
-          (current) =>
-            current ||
-            options.statuses.find((status) => status.toLowerCase() === "aguardando") ||
-            options.statuses[0] ||
-            fallbackTaskOptions.statuses[0],
-        )
-        setTaskResponsibleUserId((current) => current || options.users[0]?.id || "")
+        setTaskOptions(options);
+        setTaskType((current) => current || options.types[0] || fallbackTaskOptions.types[0]);
+        setTaskStatus((current) => current || options.statuses.find((status) => status.toLowerCase() === "aguardando") || options.statuses[0] || fallbackTaskOptions.statuses[0]);
+        setTaskResponsibleUserId((current) => current || options.users[0]?.id || "");
       })
       .catch((error) => {
-        setCreateTaskError(error instanceof Error ? error.message : "Não foi possível carregar as opções de tarefas.")
+        setCreateTaskError(error instanceof Error ? error.message : "Não foi possível carregar as opções de tarefas.");
       })
-      .finally(() => setIsLoadingTaskOptions(false))
-  }
+      .finally(() => setIsLoadingTaskOptions(false));
+  };
 
   const handleCreateTask = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setIsCreatingTask(true)
-    setCreateTaskError("")
+    event.preventDefault();
+    setIsCreatingTask(true);
+    setCreateTaskError("");
 
     try {
       const response = await fetch("/api/airtable/tasks", {
@@ -682,60 +574,54 @@ export function KanbanBoard() {
           subject: taskSubject,
           observations: taskObservations,
         }),
-      })
-      const data = (await response.json()) as { message?: string }
+      });
+      const data = (await response.json()) as { message?: string };
 
       if (!response.ok) {
-        throw new Error(data.message || "Não foi possível criar a tarefa.")
+        throw new Error(data.message || "Não foi possível criar a tarefa.");
       }
 
-      resetCreateForm()
-      setIsCreateDialogOpen(false)
-      await loadTasks({ refresh: true })
+      resetCreateForm();
+      setIsCreateDialogOpen(false);
+      await loadTasks({ refresh: true });
     } catch (error) {
-      setCreateTaskError(error instanceof Error ? error.message : "Não foi possível criar a tarefa.")
+      setCreateTaskError(error instanceof Error ? error.message : "Não foi possível criar a tarefa.");
     } finally {
-      setIsCreatingTask(false)
+      setIsCreatingTask(false);
     }
-  }
+  };
 
-  const typeOptions = useMemo(() => uniqueValues(tasks, "type"), [tasks])
-  const creatorOptions = useMemo(() => uniqueValues(tasks, "creator"), [tasks])
-  const responsibleOptions = useMemo(() => uniqueValues(tasks, "responsible"), [tasks])
+  const typeOptions = useMemo(() => uniqueValues(tasks, "type"), [tasks]);
+  const creatorOptions = useMemo(() => uniqueValues(tasks, "creator"), [tasks]);
+  const responsibleOptions = useMemo(() => uniqueValues(tasks, "responsible"), [tasks]);
 
   const filteredTasks = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase()
+    const query = searchQuery.trim().toLowerCase();
 
     return tasks.filter((task) => {
-      const matchesQuery = query
-        ? [task.subject, task.description, task.patient, task.creator, task.responsible, task.type]
-            .join(" ")
-            .toLowerCase()
-            .includes(query)
-        : true
-      const matchesType = typeFilter === filterAll || task.type === typeFilter
-      const matchesCreator = creatorFilter === filterAll || task.creator === creatorFilter
-      const matchesResponsible = responsibleFilter === filterAll || task.responsible === responsibleFilter
+      const matchesQuery = query ? [task.subject, task.description, task.patient, task.creator, task.responsible, task.type].join(" ").toLowerCase().includes(query) : true;
+      const matchesType = typeFilter === filterAll || task.type === typeFilter;
+      const matchesCreator = creatorFilter === filterAll || task.creator === creatorFilter;
+      const matchesResponsible = responsibleFilter === filterAll || task.responsible === responsibleFilter;
 
-      return matchesQuery && matchesType && matchesCreator && matchesResponsible
-    })
-  }, [creatorFilter, responsibleFilter, searchQuery, tasks, typeFilter])
+      return matchesQuery && matchesType && matchesCreator && matchesResponsible;
+    });
+  }, [creatorFilter, responsibleFilter, searchQuery, tasks, typeFilter]);
 
   const tasksByStatus = useMemo(
     () =>
       statusOrder.reduce(
         (acc, status) => {
-          acc[status] = filteredTasks.filter((task) => task.status === status)
-          return acc
+          acc[status] = filteredTasks.filter((task) => task.status === status);
+          return acc;
         },
         {} as Record<TaskStatus, Task[]>,
       ),
     [filteredTasks],
-  )
+  );
 
-  const isFiltering =
-    Boolean(searchQuery.trim()) || typeFilter !== filterAll || creatorFilter !== filterAll || responsibleFilter !== filterAll
-  const totalOpen = tasksByStatus.aguardando.length + tasksByStatus.resolvendo.length
+  const isFiltering = Boolean(searchQuery.trim()) || typeFilter !== filterAll || creatorFilter !== filterAll || responsibleFilter !== filterAll;
+  const totalOpen = tasksByStatus.aguardando.length + tasksByStatus.resolvendo.length;
 
   return (
     <div className="flex h-screen flex-1 flex-col bg-background">
@@ -775,30 +661,14 @@ export function KanbanBoard() {
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="relative w-full xl:max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por assunto, paciente, responsável..."
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                className="h-10 bg-background pl-9"
-              />
+              <Input placeholder="Buscar por assunto, paciente, responsável..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="h-10 bg-background pl-9" />
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
               <FilterMenu label="Tipo" value={typeFilter} options={typeOptions} onChange={setTypeFilter} />
               <FilterMenu label="Criador" value={creatorFilter} options={creatorOptions} onChange={setCreatorFilter} />
-              <FilterMenu
-                label="Responsável"
-                value={responsibleFilter}
-                options={responsibleOptions}
-                onChange={setResponsibleFilter}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                className="bg-background"
-                onClick={() => loadTasks({ refresh: true })}
-                disabled={isLoading || isRefreshing}
-              >
+              <FilterMenu label="Responsável" value={responsibleFilter} options={responsibleOptions} onChange={setResponsibleFilter} />
+              <Button type="button" variant="outline" className="bg-background" onClick={() => loadTasks({ refresh: true })} disabled={isLoading || isRefreshing}>
                 {isLoading || isRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 {isRefreshing ? "Atualizando" : "Atualizar"}
               </Button>
@@ -849,8 +719,8 @@ export function KanbanBoard() {
                     tasks={tasksByStatus[status]}
                     isFiltering={isFiltering}
                     onSelectTask={(task) => {
-                      setTaskActionError("")
-                      setSelectedTask(task)
+                      setTaskActionError("");
+                      setSelectedTask(task);
                     }}
                   />
                 ))
@@ -860,8 +730,8 @@ export function KanbanBoard() {
                   tasks={tasksByStatus[view.value]}
                   isFiltering={isFiltering}
                   onSelectTask={(task) => {
-                    setTaskActionError("")
-                    setSelectedTask(task)
+                    setTaskActionError("");
+                    setSelectedTask(task);
                   }}
                 />
               )}
@@ -872,8 +742,8 @@ export function KanbanBoard() {
       <Dialog
         open={isCreateDialogOpen}
         onOpenChange={(open) => {
-          setIsCreateDialogOpen(open)
-          if (!open) setCreateTaskError("")
+          setIsCreateDialogOpen(open);
+          if (!open) setCreateTaskError("");
         }}
       >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
@@ -950,13 +820,7 @@ export function KanbanBoard() {
 
               <div className="space-y-1.5">
                 <FieldLabel>Telefone do contato</FieldLabel>
-                <Input
-                  className="h-10"
-                  value={taskContactPhone}
-                  onChange={(event) => setTaskContactPhone(event.target.value)}
-                  placeholder="DDD + número"
-                  required
-                />
+                <Input className="h-10" value={taskContactPhone} onChange={(event) => setTaskContactPhone(event.target.value)} placeholder="DDD + número" required />
               </div>
             </div>
 
@@ -994,8 +858,8 @@ export function KanbanBoard() {
         open={Boolean(selectedTask)}
         onOpenChange={(open) => {
           if (!open) {
-            setTaskActionError("")
-            setSelectedTask(null)
+            setTaskActionError("");
+            setSelectedTask(null);
           }
         }}
         onDelete={handleDeleteTask}
@@ -1003,5 +867,5 @@ export function KanbanBoard() {
         errorMessage={taskActionError}
       />
     </div>
-  )
+  );
 }
