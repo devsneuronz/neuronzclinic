@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bolt, CircleEllipsis, Loader2, Users } from "lucide-react";
-import Pallete from "./color-scheme";
+import { useEffect, useMemo, useState } from "react";
+import { BackgroundOptions } from "./background-options";
+import ColorScheme from "./color-scheme";
 
 type SettingsUser = {
   email: string;
@@ -14,14 +15,7 @@ type SettingsUser = {
   tags?: string[];
 };
 
-const tagStyles = [
-  "bg-emerald-600 text-white",
-  "bg-violet-600 text-white",
-  "bg-yellow-600 text-white",
-  "bg-sky-600 text-white",
-  "bg-indigo-500 text-white",
-  "bg-rose-600 text-white",
-];
+const tagStyles = ["bg-emerald-600 text-white", "bg-violet-600 text-white", "bg-yellow-600 text-white", "bg-sky-600 text-white", "bg-indigo-500 text-white", "bg-rose-600 text-white"];
 
 function getTagClass(tag: string) {
   const value = tag.toLowerCase();
@@ -112,7 +106,8 @@ export default function SettingsPage() {
               <CardDescription className="text-sm text-muted-foreground">Personalize o esquema de cores do sistema para o seu conforto visual.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6 flex flex-row gap-4">
-              <Pallete />
+              <ColorScheme />
+              <BackgroundOptions />
             </CardContent>
           </Card>
         </TabsContent>
@@ -124,9 +119,7 @@ export default function SettingsPage() {
               Carregando usuários
             </div>
           ) : usersError ? (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-              {usersError}
-            </div>
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">{usersError}</div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {sortedUsers.map((user) => (
