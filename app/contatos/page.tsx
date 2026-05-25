@@ -1,22 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { ArrowRight, Maximize2, RefreshCw, Search, Users } from "lucide-react";
+import { ContactDetails } from "@/components/contact-details/contact-details";
+import type { ContactInfoValues } from "@/components/contact-details/profile-view";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ContactDetails } from "@/components/contact-details/contact-details";
-import type { ContactInfoValues } from "@/components/contact-details/profile-view";
-import { getAvatarInitials } from "@/lib/avatar-initials";
-import { getChatTags, getReadableTextColor, type ChatTag } from "@/lib/chat-tags";
-import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { cn } from "@/lib/utils";
+import { getAvatarInitials } from "@/lib/avatar-initials";
+import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
+import { getChatTags, getReadableTextColor, type ChatTag } from "@/lib/chat-tags";
 import { ChatRecord, fetchChats, updateChatDetails } from "@/lib/supabase-rest";
+import { cn } from "@/lib/utils";
+import { ArrowRight, Maximize2, RefreshCw, Search, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const PAGE_SIZE = 100;
 const SEARCH_PAGE_SIZE = 1000;
@@ -343,8 +343,11 @@ export default function ContatosPage() {
   }
 
   return (
-    <div className="min-h-screen bg-muted/30 p-6">
-      <div className="mx-auto flex max-w-7xl flex-col gap-5">
+    <div className="min-h-screen bg-background flex flex-col gap-6">
+      <header className="flex h-15.25 items-center justify-between border-b border-border bg-card px-6 ">
+        <h1 className="text-xl font-semibold text-foreground">Contatos</h1>
+      </header>
+      <div className="mx-auto flex max-w-7xl w-full flex-col gap-5 bg-card rounded-xl p-6 border border-border shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
@@ -352,24 +355,20 @@ export default function ContatosPage() {
               Contatos
             </div>
             <h1 className="mt-1 text-2xl font-semibold tracking-normal text-foreground">Contatos | Lista</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{filteredContacts.length} de {contacts.length} contatos carregados</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {filteredContacts.length} de {contacts.length} contatos carregados
+            </p>
           </div>
-
-          <Button type="button" variant="outline" onClick={() => void loadContacts({ refresh: true, searchTerm: debouncedSearch })} disabled={isLoading}>
-            <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
-            Atualizar
-          </Button>
         </div>
 
-        <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
-          <div className="grid gap-3 lg:grid-cols-[1fr_220px_220px]">
-            <div className="relative">
+        <div className="flex flex-row w-full justify-between">
+          <div className="flex flex-row gap-4 justify-between">
+            <div className="relative w-100">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome, telefone, cidade, email ou status" className="h-10 pl-9" />
             </div>
-
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-10">
+              <SelectTrigger className="h-10!">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -381,9 +380,8 @@ export default function ContatosPage() {
                 ))}
               </SelectContent>
             </Select>
-
             <Select value={cityFilter} onValueChange={setCityFilter}>
-              <SelectTrigger className="h-10">
+              <SelectTrigger className="h-10!">
                 <SelectValue placeholder="Cidade" />
               </SelectTrigger>
               <SelectContent>
@@ -396,13 +394,18 @@ export default function ContatosPage() {
               </SelectContent>
             </Select>
           </div>
+
+          <Button type="button" variant="outline" onClick={() => void loadContacts({ refresh: true, searchTerm: debouncedSearch })} disabled={isLoading}>
+            <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+            Atualizar
+          </Button>
         </div>
 
         {error && <p className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
 
-        <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-          <div className="overflow-x-auto">
-            <div className="grid min-w-[980px] grid-cols-[minmax(260px,1.4fr)_170px_180px_170px_120px] border-b border-border bg-muted/60 px-5 py-3 text-xs font-semibold uppercase text-muted-foreground">
+        <div className="rounded-lg border border-border bg-card shadow-sm">
+          <div className="overflow-x-auto flex flex-col">
+            <div className="grid w-full grid-cols-[minmax(260px,1.4fr)_170px_180px_170px_120px] border-b border-border bg-muted/60 px-5 py-3 text-xs font-semibold uppercase text-muted-foreground shrink-0">
               <span>Nome</span>
               <span>Status</span>
               <span>Cidade</span>
@@ -410,7 +413,7 @@ export default function ContatosPage() {
               <span className="text-right">Acoes</span>
             </div>
 
-            <div className="min-w-[980px]">
+            <div className="w-full max-h-[calc(100vh-418px)] overflow-y-auto split-scroll">
               {isLoading ? (
                 <p className="px-5 py-10 text-center text-sm text-muted-foreground">Carregando contatos...</p>
               ) : filteredContacts.length > 0 ? (
@@ -436,11 +439,7 @@ export default function ContatosPage() {
                           {tags.length > 0 && (
                             <span className="mt-1 flex gap-1">
                               {tags.map((tag) => (
-                                <Badge
-                                  key={tag.id || tag.label}
-                                  className="h-4 border-0 px-1.5 text-[9px] leading-none"
-                                  style={tag.color ? { backgroundColor: tag.color, color: getReadableTextColor(tag.color) } : undefined}
-                                >
+                                <Badge key={tag.id || tag.label} className="h-4 border-0 px-1.5 text-[9px] leading-none" style={tag.color ? { backgroundColor: tag.color, color: getReadableTextColor(tag.color) } : undefined}>
                                   {tag.label}
                                 </Badge>
                               ))}

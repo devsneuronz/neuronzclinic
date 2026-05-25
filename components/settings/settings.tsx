@@ -62,11 +62,10 @@ export default function SettingsPage() {
   const sortedUsers = useMemo(() => users.slice().sort((a, b) => a.name.localeCompare(b.name, "pt-BR")), [users]);
 
   return (
-    <div className="flex h-full w-full flex-col bg-background p-6 md:p-10">
-      <div className="space-y-1 pb-6">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Configurações</h1>
-        <p className="text-sm text-muted-foreground">Gerencie as preferências do sistema, usuários e aparência</p>
-      </div>
+    <div className="flex h-full w-full flex-col bg-background gap-6">
+      <header className="flex h-15.25 items-center justify-between border-b border-border bg-card px-6 ">
+        <h1 className="text-xl font-semibold text-foreground">Configurações</h1>
+      </header>
 
       <Tabs defaultValue="geral" className="mx-auto w-full max-w-7xl space-y-3">
         <TabsList className="w-full gap-2 rounded-full px-1 h-10!">

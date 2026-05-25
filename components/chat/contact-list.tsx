@@ -14,7 +14,7 @@ import { getChatTags, getReadableTextColor } from "@/lib/chat-tags";
 import { ChatRecord, LatestMessageStatus } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
-import { ChevronDown, ChevronUp, Feather, FilterX, HatGlasses, Repeat, Search, SquarePlus } from "lucide-react";
+import { ChevronDown, ChevronUp, Feather, FilterX, HatGlasses, Search, SquarePlus } from "lucide-react";
 import type { UIEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
@@ -336,12 +336,9 @@ export function ContactList({
         <Avatar className="h-9 w-9">
           <AvatarFallback className="bg-gradient-to-br from-teal-600 to-teal-800 text-xs text-white">P</AvatarFallback>
         </Avatar>
-        <span className="font-medium text-foreground">{isLoading ? "Carregando usuário..." : userName}</span>
+        <span className="font-medium text-foreground whitespace-nowrap">{isLoading ? "Carregando usuário..." : userName}</span>
 
         <div className="ml-auto flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
-            <Repeat className="h-4 w-4" />
-          </Button>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>

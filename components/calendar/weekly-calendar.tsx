@@ -522,7 +522,7 @@ export function WeeklyCalendar() {
 
   return (
     <div className="flex h-screen flex-1 flex-col bg-card overflow-hidden">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 py-4">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 h-15.25">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goToPrevious} aria-label="Periodo anterior">
             <ChevronLeft className="h-4 w-4" />
