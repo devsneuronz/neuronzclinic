@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { cn } from "@/lib/utils";
-import { Bolt, CircleEllipsis, FolderKanban, Loader2, Mail, Users } from "lucide-react";
+import { Bolt, CircleEllipsis, FolderKanban, HardHat, Loader2, Mail, Shield, User, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import { BackgroundOptions } from "./background-options";
@@ -127,14 +127,36 @@ export default function SettingsPage() {
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {sortedUsers.map((user) => {
                 return (
-                  <Card key={user.email} className="flex flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-xs hover:shadow-md hover:border-border transition-all duration-200 group py-0 gap-2">
-                    <CardHeader className="p-5 pb-3 flex flex-col">
+                  <Card key={user.email} className="flex flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-xs hover:shadow-md hover:border-border transition-all duration-200 group pt-6 pb-0 gap-2">
+                    <CardHeader className="flex flex-col">
                       <div className="w-full h-16 rounded-md bg-linear-to-tr to-theme-primary/80"></div>
-                      <div className="flex flex-row items-center gap-4 space-y-0 px-4 -mt-7.5">
+                      <div className="flex flex-row items-center gap-4 space-y-0 -mt-8 w-full px-2">
                         <Avatar className="h-11 w-11 rounded-full bg-[var(--sidebar-custom-primary)] text-[var(--sidebar-custom-primary-fg)] font-semibold shadow-xs">
                           <AvatarFallback className="rounded-xl bg-transparent">{getAvatarInitials(user.name)}</AvatarFallback>
                         </Avatar>
-                        <CardTitle className="text-base font-semibold leading-tight text-foreground truncate">{user.name}</CardTitle>
+                        <div className=" overflow-hidden flex flex-row justify-between  w-full">
+                          <CardTitle className="text-base font-semibold text-foreground truncate transition-colors">{user.name}</CardTitle>
+                          <div className="flex items-center px-2 text-[11px] font-medium text-muted-foreground bg-muted rounded-md">
+                            {(user.role === "admin" && (
+                              <div className="inline-flex items-center gap-1">
+                                <Shield className="h-3 w-3" />
+                                Admin
+                              </div>
+                            )) ||
+                              (user.role === "manager" && (
+                                <div className="inline-flex items-center gap-1">
+                                  <HardHat className="h-3 w-3" />
+                                  Admin
+                                </div>
+                              )) ||
+                              (user.role && (
+                                <div className="inline-flex items-center gap-1">
+                                  <User className="h-3 w-3" />
+                                  Usuário
+                                </div>
+                              ))}
+                          </div>
+                        </div>
                       </div>
                     </CardHeader>
 
@@ -148,7 +170,7 @@ export default function SettingsPage() {
                       </div>
                     </CardContent>
 
-                    <div className="mt-auto border-t border-border/60 bg-muted/10 px-5 py-4 space-y-3 h-[86px]">
+                    <div className="mt-auto border-t border-border/60 bg-muted/30  px-5 py-4 space-y-3 h-[86px]">
                       <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase flex items-center gap-1.5">
                         <FolderKanban className="h-3.5 w-3.5 opacity-70" />
                         Setores sob responsabilidade
