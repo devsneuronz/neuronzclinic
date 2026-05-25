@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
-import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { AUTH_SESSION_EVENT, hasValidSession } from "@/lib/auth-session";
+import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { MobileHeader } from "./mobile-header";
 
 interface AppShellProps {
   children: ReactNode;
@@ -12,10 +14,15 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   const [isCollapsed, setIsCollapsed] = useState(getSavedSidebarState);
+  const isMobile = useIsMobile();
 
   const pathname = usePathname();
   const router = useRouter();
-  const isHydrated = useSyncExternalStore(subscribeToHydration, () => true, () => false);
+  const isHydrated = useSyncExternalStore(
+    subscribeToHydration,
+    () => true,
+    () => false,
+  );
   const isAuthenticated = useSyncExternalStore(subscribeToAuthSession, hasValidSession, () => false);
 
   useEffect(() => {
@@ -44,11 +51,7 @@ export function AppShell({ children }: AppShellProps) {
   }
 
   if (pathname === "/login") {
-    return isAuthenticated ? (
-      <main className="flex min-h-screen w-full bg-background" />
-    ) : (
-      <main className="flex min-h-screen w-full bg-background">{children}</main>
-    );
+    return isAuthenticated ? <main className="flex min-h-screen w-full bg-background" /> : <main className="flex min-h-screen w-full bg-background">{children}</main>;
   }
 
   if (!isAuthenticated) {
@@ -56,10 +59,13 @@ export function AppShell({ children }: AppShellProps) {
   }
 
   return (
-    <>
-      <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
+    <div className="flex flex-col md:flex-row min-h-screen w-full bg-background">
+      {/* 🔄 Condicional baseada no seu Hook */}
+      {isMobile ? <MobileHeader /> : <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />}
+
+      {/* O espaçamento do topo (pt-14) só se aplica se for mobile para não quebrar o layout do desktop */}
       <main className="flex-1 overflow-y-auto bg-background">{children}</main>
-    </>
+    </div>
   );
 }
 
