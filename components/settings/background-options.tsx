@@ -18,7 +18,7 @@ const backgroundOptionsOpts = [
   {
     id: "3D ",
     name: "3D 2",
-    value: "url(https://img.magnific.com/free-photo/3d-rendering-holographic-layering_23-2150491114.jpg?t=st=1779742150~exp=1779745750~hmac=e1554fb9e3269a02581cf2ac79b1a42ea30a312a0df137a24ecd6a9ff6fe1964&w=1480)",
+    value: "url('/bgs/3D-2.jpg')",
   },
   {
     id: "abs3",
@@ -28,14 +28,12 @@ const backgroundOptionsOpts = [
   {
     id: "gradient",
     name: "Gradiente 1",
-    value:
-      "url(https://img.magnific.com/free-photo/abstract-gradient-background-with-grain-texture-captivating-noise-airbrush-minimalist-wallpaper_8048-560.jpg?t=st=1779741633~exp=1779745233~hmac=5405a4e210058f092507cd5092de0cdfeac261fe6b7c815dbad852dbac97ee4c&w=1480)",
+    value: "url(/bgs/gradient1.avif)",
   },
   {
     id: "gradient 2",
     name: "Gradiente 2",
-    value:
-      "url(https://img.magnific.com/free-photo/black-white-grainy-gradient-background-dark-monochromatic-noise-texture_474888-8014.jpg?t=st=1779741851~exp=1779745451~hmac=10490ab3862655f01aa826c4238154c106d18113188cc2de266c0fa21998c479&w=1060)",
+    value: "url('/bgs/gradient2.avif')",
   },
 ];
 
