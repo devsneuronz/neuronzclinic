@@ -89,19 +89,27 @@ function mergeMessages(currentMessages: MessageRecord[], incomingMessages: Messa
     return !realIncomingMessages.some((incomingMessage) => isMatchingSentMessage(incomingMessage, message));
   });
 
-  const indexedMessages = new Map<string, MessageRecord>();
+  const mergedMessages: MessageRecord[] = [];
+  const keyToIndex = new Map<string, number>();
 
   for (const message of [...filteredCurrentMessages, ...incomingMessages]) {
-    const keys = [message.id, message.message_id].filter(Boolean) as string[];
-    const existingMessage = keys.map((key) => indexedMessages.get(key)).find(Boolean);
-    const nextMessage = existingMessage ? { ...existingMessage, ...message } : message;
+    const keys = getMessageKeys(message);
+    const existingIndex = keys.map((key) => keyToIndex.get(key)).find((index) => index !== undefined);
 
-    for (const key of keys) {
-      indexedMessages.set(key, nextMessage);
+    if (existingIndex === undefined) {
+      const nextIndex = mergedMessages.length;
+      mergedMessages.push(message);
+      keys.forEach((key) => keyToIndex.set(key, nextIndex));
+      continue;
     }
+
+    const nextMessage = { ...mergedMessages[existingIndex], ...message };
+    const nextKeys = new Set([...getMessageKeys(mergedMessages[existingIndex]), ...keys]);
+    mergedMessages[existingIndex] = nextMessage;
+    nextKeys.forEach((key) => keyToIndex.set(key, existingIndex));
   }
 
-  return sortMessagesByTimestamp(Array.from(new Set(indexedMessages.values())));
+  return sortMessagesByTimestamp(mergedMessages);
 }
 
 function getMessageKeys(message: MessageRecord) {
@@ -542,7 +550,7 @@ export default function ChatsPage() {
         const currentIds = new Set(currentChatMessages.map((message) => message.id));
         return {
           ...current,
-          [selectedChatRemoteId]: [...olderMessages.filter((message) => !currentIds.has(message.id)), ...currentChatMessages],
+          [selectedChatRemoteId]: mergeMessages(olderMessages.filter((message) => !currentIds.has(message.id)), currentChatMessages),
         };
       });
       setChatHasMoreMessages(selectedChatRemoteId, data.length === MESSAGE_PAGE_SIZE);
@@ -558,7 +566,7 @@ export default function ChatsPage() {
   const replaceChatMessages = useCallback((chatId: string, nextMessages: MessageRecord[]) => {
     setMessagesByChatId((current) => ({
       ...current,
-      [chatId]: nextMessages,
+      [chatId]: mergeMessages([], nextMessages),
     }));
   }, []);
 
@@ -724,7 +732,7 @@ export default function ChatsPage() {
 
         return {
           ...current,
-          [chatId]: nextMessages,
+          [chatId]: mergeMessages([], nextMessages),
         };
       });
       setChatHasMoreMessages(chatId, data.length === MESSAGE_PAGE_SIZE);
