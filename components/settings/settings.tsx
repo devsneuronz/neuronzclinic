@@ -1,15 +1,12 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getAvatarInitials } from "@/lib/avatar-initials";
-import { cn } from "@/lib/utils";
-import { Bolt, CircleEllipsis, FolderKanban, HardHat, Loader2, Mail, Shield, User, Users } from "lucide-react";
+import { Bolt, CircleEllipsis, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Avatar, AvatarFallback } from "../ui/avatar";
 import { BackgroundOptions } from "./background-options";
 import ColorScheme from "./color-scheme";
+import { UsersGrid } from "./users";
 
 type SettingsUser = {
   email: string;
@@ -71,7 +68,7 @@ export default function SettingsPage() {
         <p className="text-sm text-muted-foreground">Gerencie as preferências do sistema, usuários e aparência</p>
       </div>
 
-      <Tabs defaultValue="geral" className="mx-auto w-full max-w-7xl space-y-6">
+      <Tabs defaultValue="geral" className="mx-auto w-full max-w-7xl space-y-3">
         <TabsList className="w-full gap-2 rounded-full px-1 h-10!">
           <TabsTrigger value="geral" className="group relative data-[state=active]:bg-card">
             <Bolt className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
@@ -113,86 +110,15 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="usuarios" className="outline-none">
-          {isLoadingUsers ? (
-            <div className="flex min-h-64 flex-col gap-3 items-center justify-center rounded-2xl border border-dashed bg-card/50 text-sm text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin text-[var(--sidebar-custom-primary)]" />
-              <span>Carregando usuários...</span>
-            </div>
-          ) : usersError ? (
-            <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
-              {usersError}
-            </div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {sortedUsers.map((user) => {
-                return (
-                  <Card key={user.email} className="flex flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-xs hover:shadow-md hover:border-border transition-all duration-200 group pt-6 pb-0 gap-2">
-                    <CardHeader className="flex flex-col">
-                      <div className="w-full h-16 rounded-md bg-linear-to-tr to-theme-primary/80"></div>
-                      <div className="flex flex-row items-center gap-4 space-y-0 -mt-8 w-full px-2">
-                        <Avatar className="h-11 w-11 rounded-full bg-[var(--sidebar-custom-primary)] text-[var(--sidebar-custom-primary-fg)] font-semibold shadow-xs">
-                          <AvatarFallback className="rounded-xl bg-transparent">{getAvatarInitials(user.name)}</AvatarFallback>
-                        </Avatar>
-                        <div className=" overflow-hidden flex flex-row justify-between  w-full">
-                          <CardTitle className="text-base font-semibold text-foreground truncate transition-colors">{user.name}</CardTitle>
-                          <div className="flex items-center px-2 text-[11px] font-medium text-muted-foreground bg-muted rounded-md">
-                            {(user.role === "admin" && (
-                              <div className="inline-flex items-center gap-1">
-                                <Shield className="h-3 w-3" />
-                                Admin
-                              </div>
-                            )) ||
-                              (user.role === "manager" && (
-                                <div className="inline-flex items-center gap-1">
-                                  <HardHat className="h-3 w-3" />
-                                  Admin
-                                </div>
-                              )) ||
-                              (user.role && (
-                                <div className="inline-flex items-center gap-1">
-                                  <User className="h-3 w-3" />
-                                  Usuário
-                                </div>
-                              ))}
-                          </div>
-                        </div>
-                      </div>
-                    </CardHeader>
-
-                    <CardContent className="px-5 py-2 space-y-3 flex-1">
-                      <div className="rounded-xl bg-muted/30 p-3 border border-border/40 space-y-1">
-                        <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
-                          <Mail className="h-3 w-3" />
-                          E-mail
-                        </span>
-                        <p className="break-all text-xs font-medium text-foreground/90">{user.email}</p>
-                      </div>
-                    </CardContent>
-
-                    <div className="mt-auto border-t border-border/60 bg-muted/30  px-5 py-4 space-y-3 h-[86px]">
-                      <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase flex items-center gap-1.5">
-                        <FolderKanban className="h-3.5 w-3.5 opacity-70" />
-                        Setores sob responsabilidade
-                      </span>
-
-                      {user.tags?.length ? (
-                        <div className="flex flex-wrap gap-1.5">
-                          {user.tags.map((tag) => (
-                            <Badge key={`${user.email}-${tag}`} className={cn(getTagClass(tag), "border-transparent px-2.5 py-1 text-xs font-medium rounded-lg transition-opacity hover:opacity-90 shadow-2xs")}>
-                              {tag}
-                            </Badge>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-muted-foreground/80 italic">Nenhum setor atribuído até o momento</p>
-                      )}
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
+          <Card className="border border-border bg-card shadow-sm">
+            <CardHeader className="space-y-1">
+              <CardTitle className="text-xl font-semibold text-foreground">Equipe e Permissões</CardTitle>
+              <CardDescription className="text-sm text-muted-foreground">Visualize os profissionais cadastrados na plataforma, seus e-mails e setores de atuação.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <UsersGrid sortedUsers={sortedUsers} isLoadingUsers={isLoadingUsers} usersError={usersError} />
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
