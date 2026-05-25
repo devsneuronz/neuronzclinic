@@ -343,6 +343,8 @@ export default function ChatsPage() {
   const isSearching = !!searchQuery;
   const isSearchingChats = !!normalizedSearch && (normalizedSearch !== searchQuery || searchChatsTerm !== searchQuery);
   const visibleChats = isSearching ? searchChats : chats;
+  const visibleChatRemoteIds = useMemo(() => Array.from(new Set(visibleChats.map((chat) => chat.chat_id).filter(Boolean))), [visibleChats]);
+  const visibleChatRemoteIdsKey = useMemo(() => visibleChatRemoteIds.join("\n"), [visibleChatRemoteIds]);
   const knownChats = useMemo(() => {
     const indexedChats = new Map<string, ChatRecord>();
     for (const chat of [...chats, ...searchChats]) indexedChats.set(chat.id, chat);
@@ -983,7 +985,7 @@ export default function ChatsPage() {
         const data = await fetchChats({ limit: CHAT_PAGE_SIZE, offset: 0 });
         if (!isMounted) return;
         mergeFreshChats(data);
-        setHasMoreChats((current) => current || data.length === CHAT_PAGE_SIZE);
+        setHasMoreChats((current) => current && data.length === CHAT_PAGE_SIZE);
       } catch (err) {
         if (!isMounted) return;
         setError(err instanceof Error ? err.message : "Não foi possível sincronizar os chats.");
@@ -1126,8 +1128,7 @@ export default function ChatsPage() {
   }, [latestMessageStatuses, visibleChats]);
 
   useEffect(() => {
-    const chatsNeedingPreview = visibleChats.filter((chat) => chat.chat_id);
-    const chatIds = chatsNeedingPreview.map((chat) => chat.chat_id);
+    const chatIds = visibleChatRemoteIdsKey ? visibleChatRemoteIdsKey.split("\n") : [];
 
     if (chatIds.length === 0) return;
 
@@ -1138,13 +1139,21 @@ export default function ChatsPage() {
         if (!isMounted) return;
         if (Object.keys(latestMessages).length === 0) return;
 
-        const updatePreviews = (list: ChatRecord[]) =>
-          sortChatsByLatestMessage(
-            list.map((chat) => {
-              const latestMessage = latestMessages[chat.chat_id];
-              return latestMessage ? updateChatPreview(chat, latestMessage) : chat;
-            }),
-          );
+        const updatePreviews = (list: ChatRecord[]) => {
+          let didUpdate = false;
+          const nextList = list.map((chat) => {
+            const latestMessage = latestMessages[chat.chat_id];
+            if (!latestMessage) return chat;
+
+            const nextChat = updateChatPreview(chat, latestMessage);
+            const hasChanged = nextChat.text_last_message !== chat.text_last_message || nextChat.last_message_time !== chat.last_message_time || nextChat.last_message_fromMe !== chat.last_message_fromMe;
+
+            if (hasChanged) didUpdate = true;
+            return hasChanged ? nextChat : chat;
+          });
+
+          return didUpdate ? sortChatsByLatestMessage(nextList) : list;
+        };
 
         setChats(updatePreviews);
         setSearchChats(updatePreviews);
@@ -1170,7 +1179,7 @@ export default function ChatsPage() {
     return () => {
       isMounted = false;
     };
-  }, [visibleChats]);
+  }, [visibleChatRemoteIdsKey]);
 
   const restoreSelectedChat = useCallback(
     (previousChat: ChatRecord) => {

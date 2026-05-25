@@ -114,7 +114,6 @@ function getSectorLabel(id: string, labels: Record<string, string>) {
 export function ContactList({
   chats,
   search,
-  isLoadingMessages,
   isLoadingMore,
   isSearching,
   hasMore,
@@ -139,6 +138,7 @@ export function ContactList({
   const [sectorCatalog, setSectorCatalog] = useState<string[]>([]);
   const [draftsByChatId, setDraftsByChatId] = useState<Record<string, string>>({});
   const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const autoLoadKeyRef = useRef("");
 
   const statusOptions = useMemo(() => getUniqueOptions(chats.map(getChatStatusLabel)), [chats]);
   const tagOptions = useMemo(() => getUniqueOptions(chats.flatMap((chat) => getChatTags(chat).map((tag) => tag.label))), [chats]);
@@ -319,12 +319,16 @@ export function ContactList({
 
       const hasFilledVisibleArea = target.scrollHeight > target.clientHeight + 24;
       if (!hasFilledVisibleArea) {
+        const autoLoadKey = [chats.length, visibleChats.length, scopeTab, stateTab, statusFilter, tagFilter, sectorFilter].join("|");
+        if (autoLoadKeyRef.current === autoLoadKey) return;
+
+        autoLoadKeyRef.current = autoLoadKey;
         onLoadMore?.();
       }
     });
 
     return () => window.cancelAnimationFrame(frameId);
-  }, [hasMore, isLoading, isLoadingMore, isSearching, onLoadMore, visibleChats.length]);
+  }, [chats.length, hasMore, isLoading, isLoadingMore, isSearching, onLoadMore, scopeTab, sectorFilter, stateTab, statusFilter, tagFilter, visibleChats.length]);
 
   return (
     <div className={cn("flex h-full shrink-0 flex-col border-r border-border bg-card", isMobile ? "w-full" : "w-[340px]")}>
@@ -566,9 +570,9 @@ export function ContactList({
         )}
         {!isLoading && (
           <div className="p-3">
-            {hasMore ? (
-              <p className="py-2 text-center text-xs text-muted-foreground">{isLoadingMore ? "Carregando mais conversas..." : "Role para carregar mais conversas"}</p>
-            ) : chats.length > 0 ? (
+            {hasMore && isLoadingMore ? (
+              <p className="py-2 text-center text-xs text-muted-foreground">Carregando mais conversas...</p>
+            ) : !hasActiveFilters && scopeTab === "all" && chats.length > 0 && !hasMore ? (
               <p className="py-2 text-center text-xs text-muted-foreground">Todas as conversas carregadas</p>
             ) : null}
           </div>

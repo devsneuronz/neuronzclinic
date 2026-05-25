@@ -3,6 +3,7 @@ import { buildEvolutionQuotedPayload } from "@/lib/message-replies"
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
 
 const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+const CHAT_ID_BATCH_SIZE = 40
 
 if (!SUPABASE_REST_URL || !SUPABASE_PUBLISHABLE_KEY) {
   throw new Error("Missing NEXT_PUBLIC_SUPABASE_REST_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
@@ -301,6 +302,12 @@ export function fetchLatestMessageStatuses(chatIds: string[]): Promise<Record<st
     return Promise.resolve({})
   }
 
+  if (uniqueChatIds.length > CHAT_ID_BATCH_SIZE) {
+    const batches = Array.from({ length: Math.ceil(uniqueChatIds.length / CHAT_ID_BATCH_SIZE) }, (_, index) => uniqueChatIds.slice(index * CHAT_ID_BATCH_SIZE, (index + 1) * CHAT_ID_BATCH_SIZE))
+
+    return Promise.all(batches.map((batch) => fetchLatestMessageStatuses(batch))).then((results) => Object.assign({}, ...results))
+  }
+
   const select = ["chat_id", "status", "timestamp_msg"].join(",")
   const encodedIds = uniqueChatIds.map((chatId) => encodeURIComponent(chatId)).join(",")
   const limit = Math.max(uniqueChatIds.length * 20, 1000)
@@ -332,6 +339,12 @@ export function fetchLatestMessagesForChats(chatIds: string[]): Promise<Record<s
 
   if (uniqueChatIds.length === 0) {
     return Promise.resolve({})
+  }
+
+  if (uniqueChatIds.length > CHAT_ID_BATCH_SIZE) {
+    const batches = Array.from({ length: Math.ceil(uniqueChatIds.length / CHAT_ID_BATCH_SIZE) }, (_, index) => uniqueChatIds.slice(index * CHAT_ID_BATCH_SIZE, (index + 1) * CHAT_ID_BATCH_SIZE))
+
+    return Promise.all(batches.map((batch) => fetchLatestMessagesForChats(batch))).then((results) => Object.assign({}, ...results))
   }
 
   const select = ["chat_id", "content", "message_type", "media_mime_type", "timestamp_msg", "from_me", "status"].join(",")
