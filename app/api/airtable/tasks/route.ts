@@ -19,6 +19,15 @@ type CreateTaskBody = {
   observations?: unknown
 }
 
+type UpdateTaskBody = {
+  type?: unknown
+  status?: unknown
+  dueDate?: unknown
+  responsibleUserId?: unknown
+  subject?: unknown
+  observations?: unknown
+}
+
 type AirtableRecord = {
   id: string
   createdTime?: string
@@ -139,6 +148,7 @@ function mapTaskRecord(record: AirtableRecord, linkedNames: { users: Map<string,
     creator: creator || "Sistema",
     creatorInitials: getInitials(creator || "Sistema"),
     responsible: responsibleName || "Sem responsável",
+    responsibleUserId: responsibleIds[0] || "",
     responsibleInitials: getInitials(responsibleName || "Sem responsável"),
     patient: patientName,
     createdAt,
@@ -370,6 +380,24 @@ async function createTask(fields: Record<string, unknown>) {
   return data.records?.[0]
 }
 
+async function updateTask(id: string, fields: Record<string, unknown>) {
+  const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TASK_TABLE)}/${id}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    cache: "no-store",
+    body: JSON.stringify({ fields }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await response.text())
+  }
+
+  return (await response.json()) as AirtableRecord
+}
+
 export async function GET(request: Request) {
   if (!AIRTABLE_TOKEN) {
     return NextResponse.json({ tasks: [], message: "Missing AIRTABLE_TOKEN or AIRTABLE_API_KEY" }, { status: 500 })
@@ -444,6 +472,62 @@ export async function DELETE(request: Request) {
   } catch (error) {
     return NextResponse.json(
       { message: error instanceof Error ? error.message : "Não foi possível excluir a tarefa no Airtable." },
+      { status: 500 },
+    )
+  }
+}
+
+export async function PATCH(request: Request) {
+  if (!AIRTABLE_TOKEN) {
+    return NextResponse.json({ message: "Missing AIRTABLE_TOKEN or AIRTABLE_API_KEY" }, { status: 500 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const id = getString(searchParams.get("id"))
+
+  if (!isAirtableRecordId(id)) {
+    return NextResponse.json({ message: "Tarefa inválida." }, { status: 400 })
+  }
+
+  const body = (await request.json()) as UpdateTaskBody
+  const type = getString(body.type)
+  const status = getString(body.status)
+  const dueDate = getString(body.dueDate)
+  const responsibleUserId = getString(body.responsibleUserId)
+  const subject = getString(body.subject)
+  const observations = getString(body.observations)
+
+  if (!type || !status || !dueDate || !responsibleUserId || !subject) {
+    return NextResponse.json({ message: "Preencha tipo, status, prazo, responsável e assunto." }, { status: 400 })
+  }
+
+  if (!isAirtableRecordId(responsibleUserId)) {
+    return NextResponse.json({ message: "Usuário responsável inválido." }, { status: 400 })
+  }
+
+  const dueDateValue = new Date(`${dueDate}T00:00:00`)
+  if (Number.isNaN(dueDateValue.getTime())) {
+    return NextResponse.json({ message: "Data invalida." }, { status: 400 })
+  }
+
+  try {
+    taskListCache = null
+
+    const record = await updateTask(id, {
+      Tipo: type,
+      Status: status,
+      Data_prazo: dueDate,
+      User: [responsibleUserId],
+      Assunto: subject,
+      Observações: observations,
+    })
+    const linkedNames = await getLinkedNames([record])
+    const task = mapTaskRecord(record, linkedNames)
+
+    return NextResponse.json({ task, message: "Tarefa atualizada." })
+  } catch (error) {
+    return NextResponse.json(
+      { message: error instanceof Error ? error.message : "Não foi possível atualizar a tarefa no Airtable." },
       { status: 500 },
     )
   }

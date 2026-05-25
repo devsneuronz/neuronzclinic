@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { AlertCircle, CalendarDays, CheckCircle2, Circle, CircleDashed, Clock3, Loader2, Plus, RefreshCw, Search, Timer, Trash2, UserRound } from "lucide-react";
+import { AlertCircle, CalendarDays, CheckCircle2, Circle, CircleDashed, Clock3, Loader2, Plus, RefreshCw, Save, Search, Timer, Trash2, UserRound } from "lucide-react";
 import type { ComponentType, FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -24,6 +24,7 @@ interface Task {
   creator: string;
   creatorInitials: string;
   responsible: string;
+  responsibleUserId: string;
   responsibleInitials: string;
   patient: string;
   type: string;
@@ -101,6 +102,19 @@ const fallbackTaskOptions: TaskOptions = {
 
 function getTodayDate() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function getDateInputValue(value: string) {
+  if (!value) return "";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return date.toISOString().slice(0, 10);
+}
+
+function mergeOptions(options: string[], currentValue: string) {
+  return Array.from(new Set([currentValue, ...options].map((option) => option.trim()).filter(Boolean)));
 }
 
 function formatDateTime(value: string, options: Intl.DateTimeFormatOptions) {
@@ -399,30 +413,35 @@ function FilterMenu({ label, value, options, onChange }: { label: string; value:
   );
 }
 
-function DetailRow({ label, value, className }: { label: string; value: string; className?: string }) {
-  return (
-    <div className={className}>
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-1 break-words text-sm text-foreground">{value || "Nao informado"}</p>
-    </div>
-  );
-}
-
 function TaskDetailsDialog({
   task,
   open,
   onOpenChange,
   onDelete,
+  onUpdate,
+  taskOptions,
+  isLoadingTaskOptions,
   isDeleting,
+  isSaving,
   errorMessage,
 }: {
   task: Task | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDelete: (task: Task) => void;
+  onUpdate: (task: Task, values: { type: string; status: string; dueDate: string; responsibleUserId: string; subject: string; observations: string }) => void;
+  taskOptions: TaskOptions;
+  isLoadingTaskOptions: boolean;
   isDeleting: boolean;
+  isSaving: boolean;
   errorMessage: string;
 }) {
+  const [type, setType] = useState(task?.type || fallbackTaskOptions.types[0]);
+  const [status, setStatus] = useState(task ? task.statusLabel || statusConfig[task.status].label : fallbackTaskOptions.statuses[0]);
+  const [dueDate, setDueDate] = useState(task ? getDateInputValue(task.dueDate) || getTodayDate() : getTodayDate());
+  const [responsibleUserId, setResponsibleUserId] = useState(task?.responsibleUserId || "");
+  const [subject, setSubject] = useState(task?.subject || "");
+  const [observations, setObservations] = useState(task?.description || "");
   const overdue = task ? isOverdue(task) : false;
   const createdAt = task
     ? formatDateTime(task.createdAt, {
@@ -433,13 +452,38 @@ function TaskDetailsDialog({
         minute: "2-digit",
       })
     : "";
-  const dueDate = task ? formatDateTime(task.dueDate, { day: "2-digit", month: "long", year: "numeric" }) : "";
+
+  const responsibleOptions = useMemo(() => {
+    const options = taskOptions.users;
+
+    if (!task?.responsibleUserId || options.some((user) => user.id === task.responsibleUserId)) {
+      return options;
+    }
+
+    return [{ id: task.responsibleUserId, label: task.responsible || "Responsável atual" }, ...options];
+  }, [task, taskOptions.users]);
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!task) return;
+
+    onUpdate(task, {
+      type,
+      status,
+      dueDate,
+      responsibleUserId,
+      subject,
+      observations,
+    });
+  };
+
+  const isBusy = isDeleting || isSaving;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         {task ? (
-          <>
+          <form className="space-y-4" onSubmit={handleSubmit}>
             <DialogHeader className="pr-6">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary">
@@ -449,25 +493,102 @@ function TaskDetailsDialog({
                   {overdue ? "Atrasada" : task.statusLabel || statusConfig[task.status].label}
                 </Badge>
               </div>
-              <DialogTitle className="pt-2 text-xl leading-7">{task.subject || "Tarefa sem assunto"}</DialogTitle>
-              <DialogDescription>Detalhes do encaminhamento registrado no Airtable.</DialogDescription>
+              <DialogTitle className="pt-2 text-xl leading-7">Editar tarefa</DialogTitle>
+              <DialogDescription>Atualize os campos do encaminhamento registrado no Airtable.</DialogDescription>
             </DialogHeader>
 
             <div className="grid gap-4 border-y py-4 sm:grid-cols-2">
-              <DetailRow label="Paciente" value={task.patient} />
-              <DetailRow label="Responsavel" value={task.responsible} />
-              <DetailRow label="Criado por" value={task.creator} />
-              <DetailRow label="Status" value={task.statusLabel || statusConfig[task.status].label} />
-              <DetailRow label="Criada em" value={createdAt} />
+              <div className="space-y-1.5">
+                <FieldLabel>Tipo</FieldLabel>
+                <Select value={type} onValueChange={setType} required>
+                  <SelectTrigger className="h-10 w-full">
+                    <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mergeOptions(taskOptions.types, task.type).map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <FieldLabel>Status</FieldLabel>
+                <Select value={status} onValueChange={setStatus} required>
+                  <SelectTrigger className="h-10 w-full">
+                    <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mergeOptions(taskOptions.statuses, task.statusLabel || statusConfig[task.status].label).map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <FieldLabel>Prazo</FieldLabel>
+                <Input type="date" className="h-10" value={dueDate} onChange={(event) => setDueDate(event.target.value)} required />
+              </div>
+
+              <div className="space-y-1.5">
+                <FieldLabel>Responsável</FieldLabel>
+                <Select value={responsibleUserId} onValueChange={setResponsibleUserId} required>
+                  <SelectTrigger className="h-10 w-full">
+                    <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {responsibleOptions.length > 0 ? (
+                      responsibleOptions.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.label}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-users" disabled>
+                        Nenhum usuário encontrado
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Prazo</p>
-                <p className={cn("mt-1 flex items-center gap-2 text-sm font-medium", overdue ? "text-destructive" : "text-foreground")}>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Paciente</p>
+                <p className="mt-1 break-words text-sm text-foreground">{task.patient || "Nao informado"}</p>
+              </div>
+
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Criada em</p>
+                <p className="mt-1 flex items-center gap-2 text-sm text-foreground">
                   <CalendarDays className="h-4 w-4" />
-                  {dueDate || "Sem prazo"}
+                  {createdAt || "Nao informado"}
                 </p>
               </div>
-              <DetailRow className="sm:col-span-2" label="Observacoes" value={task.description || "Sem observacoes registradas."} />
             </div>
+
+            <div className="space-y-1.5">
+              <FieldLabel>Assunto</FieldLabel>
+              <Input className="h-10" value={subject} onChange={(event) => setSubject(event.target.value)} required />
+            </div>
+
+            <div className="space-y-1.5">
+              <FieldLabel>Observações</FieldLabel>
+              <Textarea className="min-h-28 resize-y" value={observations} onChange={(event) => setObservations(event.target.value)} />
+            </div>
+
+            <div className="text-xs text-muted-foreground">Criado por {task.creator || "Sistema"}</div>
+
+            {overdue ? (
+              <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                Esta tarefa está atrasada.
+              </div>
+            ) : null}
 
             {errorMessage ? (
               <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
@@ -477,15 +598,19 @@ function TaskDetailsDialog({
             ) : null}
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isDeleting}>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isBusy}>
                 Fechar
               </Button>
-              <Button type="button" variant="destructive" onClick={() => onDelete(task)} disabled={isDeleting}>
+              <Button type="button" variant="destructive" onClick={() => onDelete(task)} disabled={isBusy}>
                 {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                 {isDeleting ? "Excluindo..." : "Excluir tarefa"}
               </Button>
+              <Button type="submit" disabled={isBusy || isLoadingTaskOptions || !responsibleUserId}>
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {isSaving ? "Salvando..." : "Salvar alterações"}
+              </Button>
             </DialogFooter>
-          </>
+          </form>
         ) : null}
       </DialogContent>
     </Dialog>
@@ -512,6 +637,7 @@ export function KanbanBoard() {
   const [errorMessage, setErrorMessage] = useState("");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [deletingTaskId, setDeletingTaskId] = useState("");
+  const [savingTaskId, setSavingTaskId] = useState("");
   const [taskActionError, setTaskActionError] = useState("");
   const [createTaskError, setCreateTaskError] = useState("");
   const [taskType, setTaskType] = useState(fallbackTaskOptions.types[0]);
@@ -582,6 +708,47 @@ export function KanbanBoard() {
       setTaskActionError(error instanceof Error ? error.message : "Nao foi possivel excluir a tarefa.");
     } finally {
       setDeletingTaskId("");
+    }
+  };
+
+  const handleSelectTask = (task: Task) => {
+    setTaskActionError("");
+    setSelectedTask(task);
+    setIsLoadingTaskOptions(true);
+
+    fetchTaskOptions()
+      .then((options) => setTaskOptions(options))
+      .catch((error) => {
+        setTaskActionError(error instanceof Error ? error.message : "Não foi possível carregar as opções de tarefas.");
+      })
+      .finally(() => setIsLoadingTaskOptions(false));
+  };
+
+  const handleUpdateTask = async (
+    task: Task,
+    values: { type: string; status: string; dueDate: string; responsibleUserId: string; subject: string; observations: string },
+  ) => {
+    setSavingTaskId(task.id);
+    setTaskActionError("");
+
+    try {
+      const response = await fetch(`/api/airtable/tasks?id=${encodeURIComponent(task.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
+      const data = (await response.json()) as { task?: Task; message?: string };
+
+      if (!response.ok || !data.task) {
+        throw new Error(data.message || "Não foi possível atualizar a tarefa.");
+      }
+
+      setTasks((current) => current.map((currentTask) => (currentTask.id === data.task?.id ? data.task : currentTask)));
+      setSelectedTask(data.task);
+    } catch (error) {
+      setTaskActionError(error instanceof Error ? error.message : "Não foi possível atualizar a tarefa.");
+    } finally {
+      setSavingTaskId("");
     }
   };
 
@@ -793,10 +960,7 @@ export function KanbanBoard() {
                     status={status}
                     tasks={tasksByStatus[status]}
                     isFiltering={isFiltering}
-                    onSelectTask={(task) => {
-                      setTaskActionError("");
-                      setSelectedTask(task);
-                    }}
+                    onSelectTask={handleSelectTask}
                   />
                 ))
               ) : (
@@ -804,10 +968,7 @@ export function KanbanBoard() {
                   status={view.value}
                   tasks={tasksByStatus[view.value]}
                   isFiltering={isFiltering}
-                  onSelectTask={(task) => {
-                    setTaskActionError("");
-                    setSelectedTask(task);
-                  }}
+                  onSelectTask={handleSelectTask}
                 />
               )}
             </main>
@@ -929,6 +1090,7 @@ export function KanbanBoard() {
         </DialogContent>
       </Dialog>
       <TaskDetailsDialog
+        key={selectedTask?.id || "no-task"}
         task={selectedTask}
         open={Boolean(selectedTask)}
         onOpenChange={(open) => {
@@ -938,7 +1100,11 @@ export function KanbanBoard() {
           }
         }}
         onDelete={handleDeleteTask}
+        onUpdate={handleUpdateTask}
+        taskOptions={taskOptions}
+        isLoadingTaskOptions={isLoadingTaskOptions}
         isDeleting={Boolean(selectedTask && deletingTaskId === selectedTask.id)}
+        isSaving={Boolean(selectedTask && savingTaskId === selectedTask.id)}
         errorMessage={taskActionError}
       />
     </div>
