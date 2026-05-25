@@ -28,12 +28,12 @@ const colorThemes = [
   //{ id: "theme-purple", name: "Roxo", primary: "#673ab7", secondary: "#d1c4e9", muted: "#9575cd" },
 ];
 
-export default function Pallete() {
+export default function ColorScheme() {
   const { theme, setTheme } = useTheme();
   const { colorTheme, setColorTheme } = useColorTheme();
 
   return (
-    <Card className="border border-border bg-card shadow-sm max-w-1/2">
+    <Card className="border border-border bg-card shadow-sm w-full mb-0">
       <CardContent className="space-y-6">
         {/* 1. SELETOR DE MODO (Claro / Escuro / Dispositivo) */}
         <div className="space-y-2">
@@ -64,12 +64,7 @@ export default function Pallete() {
 
           <div className="grid grid-cols-7 gap-4 bg-muted/20 p-4 rounded-xl border border-border/60 justify-items-center overflow-y-auto custom-scrollbar">
             {colorThemes.map((color) => (
-              <ThemeCircle
-                key={color.id}
-                {...color}
-                isActive={colorTheme === color.id} // Compara com o estado global do Provider
-                onClick={() => setColorTheme(color.id as any)} // Dispara a alteração global!
-              />
+              <ThemeCircle key={color.id} {...color} isActive={colorTheme === color.id} onClick={() => setColorTheme(color.id as any)} />
             ))}
           </div>
         </div>
