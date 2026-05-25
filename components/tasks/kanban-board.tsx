@@ -40,6 +40,15 @@ interface TaskOptions {
   users: Array<{ id: string; label: string }>;
 }
 
+interface TaskResolutionNote {
+  id: string;
+  task_id: string;
+  content: string;
+  status_snapshot: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 const statusOrder: TaskStatus[] = ["aguardando", "resolvendo", "finalizado"];
 const taskViewOptions: Array<{ value: TaskView; label: string }> = [
   { value: "todas", label: "Todas" },
@@ -219,6 +228,47 @@ async function fetchTaskOptions() {
     statuses: data.statuses?.length ? data.statuses : fallbackTaskOptions.statuses,
     users: data.users ?? [],
   };
+}
+
+async function fetchTaskResolutionNotes(taskId: string) {
+  const response = await fetch(`/api/task-resolution-notes?task_id=${encodeURIComponent(taskId)}`, { cache: "no-store" });
+  const data = (await response.json()) as { notes?: TaskResolutionNote[]; message?: string };
+
+  if (!response.ok) {
+    throw new Error(data.message || "Nao foi possivel carregar o historico da tarefa.");
+  }
+
+  return data.notes ?? [];
+}
+
+async function createTaskResolutionNote({ taskId, content, statusSnapshot }: { taskId: string; content: string; statusSnapshot: string }) {
+  const response = await fetch("/api/task-resolution-notes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      task_id: taskId,
+      content,
+      status_snapshot: statusSnapshot,
+    }),
+  });
+  const data = (await response.json()) as { note?: TaskResolutionNote; message?: string };
+
+  if (!response.ok || !data.note) {
+    throw new Error(data.message || "Nao foi possivel salvar a evolucao da tarefa.");
+  }
+
+  return data.note;
+}
+
+async function deleteTaskResolutionNote(noteId: string) {
+  const response = await fetch(`/api/task-resolution-notes?id=${encodeURIComponent(noteId)}`, {
+    method: "DELETE",
+  });
+  const data = (await response.json().catch(() => null)) as { message?: string } | null;
+
+  if (!response.ok) {
+    throw new Error(data?.message || "Nao foi possivel apagar a evolucao da tarefa.");
+  }
 }
 
 function TaskCard({ task, onSelect }: { task: Task; onSelect: (task: Task) => void }) {
@@ -419,22 +469,40 @@ function TaskDetailsDialog({
   onOpenChange,
   onDelete,
   onUpdate,
+  notes,
+  noteDraft,
+  onNoteDraftChange,
+  onCreateNote,
+  onDeleteNote,
   taskOptions,
   isLoadingTaskOptions,
+  isLoadingNotes,
+  isSavingNote,
+  deletingNoteId,
   isDeleting,
   isSaving,
   errorMessage,
+  noteErrorMessage,
 }: {
   task: Task | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDelete: (task: Task) => void;
   onUpdate: (task: Task, values: { type: string; status: string; dueDate: string; responsibleUserId: string; subject: string; observations: string }) => void;
+  notes: TaskResolutionNote[];
+  noteDraft: string;
+  onNoteDraftChange: (value: string) => void;
+  onCreateNote: (task: Task) => void;
+  onDeleteNote: (noteId: string) => void;
   taskOptions: TaskOptions;
   isLoadingTaskOptions: boolean;
+  isLoadingNotes: boolean;
+  isSavingNote: boolean;
+  deletingNoteId: string;
   isDeleting: boolean;
   isSaving: boolean;
   errorMessage: string;
+  noteErrorMessage: string;
 }) {
   const [type, setType] = useState(task?.type || fallbackTaskOptions.types[0]);
   const [status, setStatus] = useState(task ? task.statusLabel || statusConfig[task.status].label : fallbackTaskOptions.statuses[0]);
@@ -581,6 +649,57 @@ function TaskDetailsDialog({
               <Textarea className="min-h-28 resize-y" value={observations} onChange={(event) => setObservations(event.target.value)} />
             </div>
 
+            <section className="space-y-3 border-t pt-4">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Evolução / resolução</h3>
+                <p className="mt-1 text-xs text-muted-foreground">Registre o histórico de acompanhamento desta tarefa.</p>
+              </div>
+
+              <Textarea
+                className="min-h-24 resize-y"
+                value={noteDraft}
+                onChange={(event) => onNoteDraftChange(event.target.value)}
+                placeholder="Digite uma atualização sobre a resolução da tarefa"
+                disabled={isSavingNote}
+              />
+
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs text-muted-foreground">{isLoadingNotes ? "Carregando histórico..." : `${notes.length} registro${notes.length === 1 ? "" : "s"}`}</p>
+                <Button type="button" size="sm" disabled={!noteDraft.trim() || isSavingNote} onClick={() => onCreateNote(task)}>
+                  {isSavingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  {isSavingNote ? "Salvando..." : "Adicionar evolução"}
+                </Button>
+              </div>
+
+              {noteErrorMessage ? (
+                <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  {noteErrorMessage}
+                </div>
+              ) : null}
+
+              <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
+                {!isLoadingNotes && notes.length === 0 ? (
+                  <p className="rounded-md border border-dashed px-3 py-3 text-sm text-muted-foreground">Nenhuma evolução registrada.</p>
+                ) : (
+                  notes.map((note) => (
+                    <div key={note.id} className="rounded-md border bg-card px-3 py-2">
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <div className="min-w-0 text-[11px] text-muted-foreground">
+                          <span>{formatDateTime(note.updated_at || note.created_at, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                          {note.status_snapshot ? <span className="ml-2">Status: {note.status_snapshot}</span> : null}
+                        </div>
+                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => onDeleteNote(note.id)} aria-label="Apagar evolução" disabled={deletingNoteId === note.id}>
+                          {deletingNoteId === note.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                        </Button>
+                      </div>
+                      <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{note.content}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+
             <div className="text-xs text-muted-foreground">Criado por {task.creator || "Sistema"}</div>
 
             {overdue ? (
@@ -638,6 +757,12 @@ export function KanbanBoard() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [deletingTaskId, setDeletingTaskId] = useState("");
   const [savingTaskId, setSavingTaskId] = useState("");
+  const [taskResolutionNotes, setTaskResolutionNotes] = useState<TaskResolutionNote[]>([]);
+  const [taskResolutionNoteDraft, setTaskResolutionNoteDraft] = useState("");
+  const [isLoadingTaskResolutionNotes, setIsLoadingTaskResolutionNotes] = useState(false);
+  const [isSavingTaskResolutionNote, setIsSavingTaskResolutionNote] = useState(false);
+  const [deletingTaskResolutionNoteId, setDeletingTaskResolutionNoteId] = useState("");
+  const [taskResolutionNoteError, setTaskResolutionNoteError] = useState("");
   const [taskActionError, setTaskActionError] = useState("");
   const [createTaskError, setCreateTaskError] = useState("");
   const [taskType, setTaskType] = useState(fallbackTaskOptions.types[0]);
@@ -713,8 +838,12 @@ export function KanbanBoard() {
 
   const handleSelectTask = (task: Task) => {
     setTaskActionError("");
+    setTaskResolutionNoteError("");
+    setTaskResolutionNoteDraft("");
+    setTaskResolutionNotes([]);
     setSelectedTask(task);
     setIsLoadingTaskOptions(true);
+    setIsLoadingTaskResolutionNotes(true);
 
     fetchTaskOptions()
       .then((options) => setTaskOptions(options))
@@ -722,6 +851,13 @@ export function KanbanBoard() {
         setTaskActionError(error instanceof Error ? error.message : "Não foi possível carregar as opções de tarefas.");
       })
       .finally(() => setIsLoadingTaskOptions(false));
+
+    fetchTaskResolutionNotes(task.id)
+      .then((notes) => setTaskResolutionNotes(notes))
+      .catch((error) => {
+        setTaskResolutionNoteError(error instanceof Error ? error.message : "Não foi possível carregar o histórico da tarefa.");
+      })
+      .finally(() => setIsLoadingTaskResolutionNotes(false));
   };
 
   const handleUpdateTask = async (
@@ -749,6 +885,46 @@ export function KanbanBoard() {
       setTaskActionError(error instanceof Error ? error.message : "Não foi possível atualizar a tarefa.");
     } finally {
       setSavingTaskId("");
+    }
+  };
+
+  const handleCreateTaskResolutionNote = async (task: Task) => {
+    const content = taskResolutionNoteDraft.trim();
+    if (!content) return;
+
+    setIsSavingTaskResolutionNote(true);
+    setTaskResolutionNoteError("");
+
+    try {
+      const note = await createTaskResolutionNote({
+        taskId: task.id,
+        content,
+        statusSnapshot: task.statusLabel || statusConfig[task.status].label,
+      });
+
+      setTaskResolutionNotes((current) => [note, ...current.filter((currentNote) => currentNote.id !== note.id)]);
+      setTaskResolutionNoteDraft("");
+    } catch (error) {
+      setTaskResolutionNoteError(error instanceof Error ? error.message : "Não foi possível salvar a evolução da tarefa.");
+    } finally {
+      setIsSavingTaskResolutionNote(false);
+    }
+  };
+
+  const handleDeleteTaskResolutionNote = async (noteId: string) => {
+    const previousNotes = taskResolutionNotes;
+
+    setDeletingTaskResolutionNoteId(noteId);
+    setTaskResolutionNoteError("");
+    setTaskResolutionNotes((current) => current.filter((note) => note.id !== noteId));
+
+    try {
+      await deleteTaskResolutionNote(noteId);
+    } catch (error) {
+      setTaskResolutionNotes(previousNotes);
+      setTaskResolutionNoteError(error instanceof Error ? error.message : "Não foi possível apagar a evolução da tarefa.");
+    } finally {
+      setDeletingTaskResolutionNoteId("");
     }
   };
 
@@ -1096,16 +1272,28 @@ export function KanbanBoard() {
         onOpenChange={(open) => {
           if (!open) {
             setTaskActionError("");
+            setTaskResolutionNoteError("");
+            setTaskResolutionNoteDraft("");
+            setTaskResolutionNotes([]);
             setSelectedTask(null);
           }
         }}
         onDelete={handleDeleteTask}
         onUpdate={handleUpdateTask}
+        notes={taskResolutionNotes}
+        noteDraft={taskResolutionNoteDraft}
+        onNoteDraftChange={setTaskResolutionNoteDraft}
+        onCreateNote={handleCreateTaskResolutionNote}
+        onDeleteNote={handleDeleteTaskResolutionNote}
         taskOptions={taskOptions}
         isLoadingTaskOptions={isLoadingTaskOptions}
+        isLoadingNotes={isLoadingTaskResolutionNotes}
+        isSavingNote={isSavingTaskResolutionNote}
+        deletingNoteId={deletingTaskResolutionNoteId}
         isDeleting={Boolean(selectedTask && deletingTaskId === selectedTask.id)}
         isSaving={Boolean(selectedTask && savingTaskId === selectedTask.id)}
         errorMessage={taskActionError}
+        noteErrorMessage={taskResolutionNoteError}
       />
     </div>
   );
