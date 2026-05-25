@@ -3,8 +3,11 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bolt, CircleEllipsis, Loader2, Users } from "lucide-react";
+import { getAvatarInitials } from "@/lib/avatar-initials";
+import { cn } from "@/lib/utils";
+import { Bolt, CircleEllipsis, FolderKanban, Loader2, Mail, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { Avatar, AvatarFallback } from "../ui/avatar";
 import { BackgroundOptions } from "./background-options";
 import ColorScheme from "./color-scheme";
 
@@ -111,41 +114,61 @@ export default function SettingsPage() {
 
         <TabsContent value="usuarios" className="outline-none">
           {isLoadingUsers ? (
-            <div className="flex min-h-64 items-center justify-center rounded-lg border border-dashed bg-card/50 text-sm text-muted-foreground">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Carregando usuários
+            <div className="flex min-h-64 flex-col gap-3 items-center justify-center rounded-2xl border border-dashed bg-card/50 text-sm text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin text-[var(--sidebar-custom-primary)]" />
+              <span>Carregando usuários...</span>
             </div>
           ) : usersError ? (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">{usersError}</div>
+            <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
+              {usersError}
+            </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {sortedUsers.map((user) => (
-                <Card key={user.email} className="min-h-80 gap-0 overflow-hidden rounded-lg py-0 shadow-sm">
-                  <CardHeader className="px-4 py-6">
-                    <CardTitle className="text-2xl font-bold leading-tight">{user.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4 px-4 pb-5">
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium text-foreground">Email</p>
-                      <p className="break-words text-sm text-foreground">{user.email}</p>
-                    </div>
-                  </CardContent>
-                  <div className="mt-auto border-t px-4 py-4">
-                    <p className="mb-3 text-sm font-semibold text-foreground">Setores sob responsabilidade</p>
-                    {user.tags?.length ? (
-                      <div className="flex flex-wrap gap-2">
-                        {user.tags.map((tag) => (
-                          <Badge key={`${user.email}-${tag}`} className={`${getTagClass(tag)} border-transparent px-3 py-1 text-sm font-medium`}>
-                            {tag}
-                          </Badge>
-                        ))}
+              {sortedUsers.map((user) => {
+                return (
+                  <Card key={user.email} className="flex flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-xs hover:shadow-md hover:border-border transition-all duration-200 group py-0 gap-2">
+                    <CardHeader className="p-5 pb-3 flex flex-col">
+                      <div className="w-full h-16 rounded-md bg-linear-to-tr to-theme-primary/80"></div>
+                      <div className="flex flex-row items-center gap-4 space-y-0 px-4 -mt-7.5">
+                        <Avatar className="h-11 w-11 rounded-full bg-[var(--sidebar-custom-primary)] text-[var(--sidebar-custom-primary-fg)] font-semibold shadow-xs">
+                          <AvatarFallback className="rounded-xl bg-transparent">{getAvatarInitials(user.name)}</AvatarFallback>
+                        </Avatar>
+                        <CardTitle className="text-base font-semibold leading-tight text-foreground truncate">{user.name}</CardTitle>
                       </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">Nenhum setor atribuído</p>
-                    )}
-                  </div>
-                </Card>
-              ))}
+                    </CardHeader>
+
+                    <CardContent className="px-5 py-2 space-y-3 flex-1">
+                      <div className="rounded-xl bg-muted/30 p-3 border border-border/40 space-y-1">
+                        <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
+                          <Mail className="h-3 w-3" />
+                          E-mail
+                        </span>
+                        <p className="break-all text-xs font-medium text-foreground/90">{user.email}</p>
+                      </div>
+                    </CardContent>
+
+                    <div className="mt-auto border-t border-border/60 bg-muted/10 px-5 py-4 space-y-3 h-[86px]">
+                      <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase flex items-center gap-1.5">
+                        <FolderKanban className="h-3.5 w-3.5 opacity-70" />
+                        Setores sob responsabilidade
+                      </span>
+
+                      {user.tags?.length ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {user.tags.map((tag) => (
+                            <Badge key={`${user.email}-${tag}`} className={cn(getTagClass(tag), "border-transparent px-2.5 py-1 text-xs font-medium rounded-lg transition-opacity hover:opacity-90 shadow-2xs")}>
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground/80 italic">Nenhum setor atribuído até o momento</p>
+                      )}
+                    </div>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </TabsContent>
