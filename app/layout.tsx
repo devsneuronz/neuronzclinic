@@ -16,8 +16,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Neuronz Clinic",
-  description: "Painel de atendimento Neuronz Clinic",
+  title: {
+    default: "App Tornieux",
+    template: "App Tornieux | %s",
+  },
+  description: "Painel de atendimento App Tornieux",
 };
 
 export default function RootLayout({

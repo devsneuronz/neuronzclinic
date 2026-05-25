@@ -1,5 +1,9 @@
+import type { Metadata } from "next";
 import { WeeklyCalendar } from "@/components/calendar/weekly-calendar";
-import { Sidebar } from "@/components/sidebar";
+
+export const metadata: Metadata = {
+  title: "Agenda",
+};
 
 export default function AgendasPage() {
   return (
