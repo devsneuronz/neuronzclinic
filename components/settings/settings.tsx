@@ -63,13 +63,11 @@ export default function SettingsPage() {
 
   return (
     <div className="flex h-full w-full flex-col bg-background p-6 md:p-10">
-      {/* Cabeçalho Principal da Tela */}
       <div className="space-y-1 pb-6">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Configurações</h1>
         <p className="text-sm text-muted-foreground">Gerencie as preferências do sistema, usuários e aparência</p>
       </div>
 
-      {/* Navegação por Abas (Tabs) */}
       <Tabs defaultValue="geral" className="mx-auto w-full max-w-7xl space-y-6">
         <TabsList className="w-full gap-2 rounded-full px-1 h-10!">
           <TabsTrigger value="geral" className="group relative data-[state=active]:bg-card">
@@ -78,7 +76,7 @@ export default function SettingsPage() {
           </TabsTrigger>
 
           <TabsTrigger value="usuarios" className=" group relative data-[state=active]:bg-card">
-            <Users className="text-blue-400 w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
+            <Users className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
             <span className="truncate">Usuários</span>
           </TabsTrigger>
 
@@ -98,7 +96,6 @@ export default function SettingsPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Conteúdo da Aba Geral */}
         <TabsContent value="geral" className="space-y-6 outline-none">
           <Card className="border border-border bg-card shadow-sm">
             <CardHeader className="space-y-1">
