@@ -70,6 +70,45 @@ function getTimestampValue(value?: string | null) {
   return Number.isFinite(time) ? time : 0;
 }
 
+function wait(milliseconds: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function getPhoneDigits(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function normalizeNewContactChatId(phone: string) {
+  const trimmedPhone = phone.trim();
+
+  if (trimmedPhone.includes("@")) return trimmedPhone;
+
+  const digits = getPhoneDigits(trimmedPhone).replace(/^0+/, "");
+  const normalizedDigits = digits.startsWith("55") || (digits.length !== 10 && digits.length !== 11) ? digits : `55${digits}`;
+
+  if (normalizedDigits.length < 8) {
+    throw new Error("Informe um telefone válido.");
+  }
+
+  return `${normalizedDigits}@s.whatsapp.net`;
+}
+
+function getNewContactSearchTerms(phone: string, chatId: string) {
+  const phoneDigits = getPhoneDigits(phone);
+  const chatDigits = getPhoneDigits(chatId);
+  const localDigits = chatDigits.startsWith("55") ? chatDigits.slice(2) : chatDigits;
+
+  return Array.from(new Set([phoneDigits, chatDigits, localDigits, chatId].filter(Boolean)));
+}
+
+function chatMatchesNewContact(chat: ChatRecord, phone: string, chatId: string) {
+  const phoneDigits = getPhoneDigits(phone);
+  const chatDigits = getPhoneDigits(chatId);
+  const candidateDigits = getPhoneDigits(`${chat.chat_id || ""} ${chat.phone_contact || ""}`);
+
+  return chat.chat_id === chatId || (!!chatDigits && candidateDigits.includes(chatDigits)) || (!!phoneDigits && candidateDigits.includes(phoneDigits));
+}
+
 function sortChatsByLatestMessage(chatList: ChatRecord[]) {
   return [...chatList].sort((a, b) => getTimestampValue(b.last_message_time) - getTimestampValue(a.last_message_time));
 }
@@ -522,6 +561,66 @@ export default function ChatsPage() {
     setStoredTargetChatId("");
     setSelectedChatId(undefined);
   }, []);
+
+  const findNewContactChat = useCallback(async (phone: string, chatId: string) => {
+    for (const delay of [0, 1200, 2500, 5000]) {
+      if (delay) await wait(delay);
+
+      const searchResults = await Promise.all(
+        getNewContactSearchTerms(phone, chatId).map((term) =>
+          fetchChats({
+            limit: CHAT_PAGE_SIZE,
+            offset: 0,
+            search: term,
+          }).catch(() => [] as ChatRecord[]),
+        ),
+      );
+
+      const foundChat = searchResults.flat().find((chat) => chatMatchesNewContact(chat, phone, chatId));
+      if (foundChat) return foundChat;
+    }
+
+    return undefined;
+  }, []);
+
+  const handleCreateContact = useCallback(
+    async ({ name, phone, message }: { name: string; phone: string; message: string }) => {
+      const chatId = normalizeNewContactChatId(phone);
+      const contactName = name.trim();
+
+      setError(undefined);
+      await sendMessage({ chatId, text: message, contactName });
+
+      const createdChat = await findNewContactChat(phone, chatId);
+      if (!createdChat) {
+        setSearch(phone);
+        window.localStorage.setItem(LAST_OPEN_CHAT_STORAGE_KEY, chatId);
+        setStoredTargetChatId(chatId);
+        return;
+      }
+
+      const namedChat = contactName ? { ...createdChat, nome_contato: contactName } : createdChat;
+      const addCreatedChat = (list: ChatRecord[]) => mergeChats(list, [namedChat]);
+
+      setChats(addCreatedChat);
+      setSearchChats((current) => (search.trim() ? addCreatedChat(current) : current));
+      setSearch("");
+      setSearchChats([]);
+      setSearchChatsTerm("");
+      setHasMoreSearchChats(false);
+      window.localStorage.setItem(LAST_OPEN_CHAT_STORAGE_KEY, namedChat.chat_id);
+      setStoredTargetChatId(namedChat.chat_id);
+      setSelectedChatId(namedChat.id);
+
+      if (contactName) {
+        await updateChatDetails({
+          id: namedChat.id,
+          nome_contato: contactName,
+        });
+      }
+    },
+    [findNewContactChat, search],
+  );
 
   const setChatHasMoreMessages = useCallback((chatId: string, hasMore: boolean) => {
     setHasMoreMessagesByChatId((current) => ({
@@ -1546,6 +1645,7 @@ export default function ChatsPage() {
             setShowDetails(false);
           }}
           onLoadMore={loadMoreChats}
+          onCreateContact={handleCreateContact}
           isSignatureMode={isSignatureMode}
           onToggleAssinatura={setIsAssinaturaMode}
           isGhostMode={isGhostMode}
@@ -1617,6 +1717,7 @@ export default function ChatsPage() {
         onSearchChange={handleSearchChange}
         onSelect={handleSelectChat}
         onLoadMore={loadMoreChats}
+        onCreateContact={handleCreateContact}
         isSignatureMode={isSignatureMode}
         onToggleAssinatura={setIsAssinaturaMode}
         isGhostMode={isGhostMode}

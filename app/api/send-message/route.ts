@@ -149,6 +149,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
     const chatId = String(formData.get("chat_id") || "").trim()
+    const contactName = String(formData.get("contact_name") || "").trim()
     const text = String(formData.get("text") || "").trim()
     const replyToMessageId = String(formData.get("reply_to_message_id") || "").trim()
     const replyToContent = String(formData.get("reply_to_content") || "").trim()
@@ -183,6 +184,9 @@ export async function POST(request: NextRequest) {
       ? {
           type: uploaded.mediaType,
           chat_id: chatId,
+          number: chatId,
+          contact_name: contactName,
+          nome_contato: contactName,
           caption: text,
           filename: uploaded.fileName,
           media_url: uploaded.mediaUrl,
@@ -192,6 +196,9 @@ export async function POST(request: NextRequest) {
       : {
           type: "text",
           chat_id: chatId,
+          number: chatId,
+          contact_name: contactName,
+          nome_contato: contactName,
           text,
           content: text,
           ...replyPayload,

@@ -80,6 +80,7 @@ export interface SendMessageInput {
   text?: string
   file?: File | null
   replyTo?: MessageRecord | null
+  contactName?: string | null
 }
 
 export interface ForwardMessageInput {
@@ -366,9 +367,14 @@ export function fetchLatestMessagesForChats(chatIds: string[]): Promise<Record<s
   })
 }
 
-export async function sendMessage({ chatId, text, file, replyTo }: SendMessageInput) {
+export async function sendMessage({ chatId, text, file, replyTo, contactName }: SendMessageInput) {
   const formData = new FormData()
   formData.append("chat_id", chatId)
+
+  const trimmedContactName = contactName?.trim()
+  if (trimmedContactName) {
+    formData.append("contact_name", trimmedContactName)
+  }
 
   const trimmedText = text?.trim()
   if (trimmedText) {

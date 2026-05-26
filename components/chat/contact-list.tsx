@@ -3,9 +3,12 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { CHAT_DRAFT_CHANGED_EVENT, CHAT_DRAFT_STORAGE_PREFIX, readChatDraft, type ChatDraftChangedDetail } from "@/lib/chat-drafts";
@@ -14,8 +17,8 @@ import { getChatTags, getReadableTextColor } from "@/lib/chat-tags";
 import { ChatRecord, LatestMessageStatus } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
-import { ChevronDown, ChevronUp, Feather, FilterX, HatGlasses, Repeat, Search, SquarePlus } from "lucide-react";
-import type { UIEvent } from "react";
+import { ChevronDown, ChevronUp, Feather, FilterX, HatGlasses, Loader2, Repeat, Search, Send, SquarePlus } from "lucide-react";
+import type { FormEvent, UIEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { MessageStatusIcon } from "./message-status-icon";
@@ -32,6 +35,7 @@ interface ContactListProps {
   onSearchChange?: (value: string) => void;
   onSelect?: (id: string) => void;
   onLoadMore?: () => void;
+  onCreateContact?: (input: { name: string; phone: string; message: string }) => Promise<void>;
 
   isSignatureMode: boolean;
   onToggleAssinatura: (checked: boolean) => void;
@@ -122,6 +126,7 @@ export function ContactList({
   onSearchChange,
   onSelect,
   onLoadMore,
+  onCreateContact,
   isSignatureMode,
   onToggleAssinatura,
   isGhostMode,
@@ -137,6 +142,12 @@ export function ContactList({
   const [sectorLabels, setSectorLabels] = useState<Record<string, string>>({});
   const [sectorCatalog, setSectorCatalog] = useState<string[]>([]);
   const [draftsByChatId, setDraftsByChatId] = useState<Record<string, string>>({});
+  const [isNewContactOpen, setIsNewContactOpen] = useState(false);
+  const [newContactName, setNewContactName] = useState("");
+  const [newContactPhone, setNewContactPhone] = useState("");
+  const [newContactMessage, setNewContactMessage] = useState("");
+  const [newContactError, setNewContactError] = useState("");
+  const [isCreatingContact, setIsCreatingContact] = useState(false);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const autoLoadKeyRef = useRef("");
 
@@ -301,6 +312,44 @@ export function ContactList({
     setSectorFilter(ALL_FILTERS);
   }
 
+  function resetNewContactForm() {
+    setNewContactName("");
+    setNewContactPhone("");
+    setNewContactMessage("");
+    setNewContactError("");
+  }
+
+  async function handleCreateContactSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const name = newContactName.trim();
+    const phone = newContactPhone.trim();
+    const message = newContactMessage.trim();
+
+    if (!phone) {
+      setNewContactError("Informe o telefone do contato.");
+      return;
+    }
+
+    if (!message) {
+      setNewContactError("Digite a primeira mensagem.");
+      return;
+    }
+
+    setIsCreatingContact(true);
+    setNewContactError("");
+
+    try {
+      await onCreateContact?.({ name, phone, message });
+      setIsNewContactOpen(false);
+      resetNewContactForm();
+    } catch (error) {
+      setNewContactError(error instanceof Error ? error.message : "Não foi possível adicionar o contato.");
+    } finally {
+      setIsCreatingContact(false);
+    }
+  }
+
   function handleListScroll(event: UIEvent<HTMLDivElement>) {
     const target = event.currentTarget;
     const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
@@ -376,7 +425,7 @@ export function ContactList({
             <Input value={search} onChange={(event) => onSearchChange?.(event.target.value)} placeholder="Procure a conversa" className="h-9 border-0 bg-secondary pl-9 text-sm" />
           </div>
 
-          <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground" title="Novo contato" aria-label="Novo contato">
+          <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground" title="Novo contato" aria-label="Novo contato" onClick={() => setIsNewContactOpen(true)}>
             <SquarePlus className="h-4 w-4" />
           </Button>
         </div>
@@ -578,6 +627,71 @@ export function ContactList({
           </div>
         )}
       </div>
+
+      <Dialog
+        open={isNewContactOpen}
+        onOpenChange={(open) => {
+          setIsNewContactOpen(open);
+          if (!open && !isCreatingContact) resetNewContactForm();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <form className="space-y-4" onSubmit={handleCreateContactSubmit}>
+            <DialogHeader>
+              <DialogTitle>Novo contato</DialogTitle>
+              <DialogDescription>Envie uma primeira mensagem para iniciar a conversa.</DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-2">
+              <Label htmlFor="new-contact-name">Nome</Label>
+              <Input
+                id="new-contact-name"
+                value={newContactName}
+                onChange={(event) => setNewContactName(event.target.value)}
+                placeholder="Nome do contato"
+                autoComplete="name"
+                disabled={isCreatingContact}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="new-contact-phone">Telefone</Label>
+              <Input
+                id="new-contact-phone"
+                value={newContactPhone}
+                onChange={(event) => setNewContactPhone(event.target.value)}
+                placeholder="(11) 99999-9999"
+                autoComplete="tel"
+                disabled={isCreatingContact}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="new-contact-message">Mensagem</Label>
+              <Textarea
+                id="new-contact-message"
+                value={newContactMessage}
+                onChange={(event) => setNewContactMessage(event.target.value)}
+                placeholder="Digite a mensagem"
+                className="min-h-28 resize-y"
+                disabled={isCreatingContact}
+              />
+            </div>
+
+            {newContactError && <p className="text-sm text-destructive">{newContactError}</p>}
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsNewContactOpen(false)} disabled={isCreatingContact}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isCreatingContact} className="bg-theme-primary text-white hover:bg-theme-primary/90">
+                {isCreatingContact ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                Enviar
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
