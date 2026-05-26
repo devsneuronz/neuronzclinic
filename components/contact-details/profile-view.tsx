@@ -1023,10 +1023,10 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
         </div>
 
         <div className="mb-4">
-          <Accordion type="single" collapsible defaultValue="contact-info">
+          <Accordion type="single" collapsible defaultValue="contact-info" className="">
             <AccordionItem value="contact-info" className="border-none rounded-xl bg-muted/60 px-3">
               <AccordionTrigger className="py-3 text-sm font-semibold text-foreground hover:no-underline">Informações do contato</AccordionTrigger>
-              <AccordionContent>
+              <AccordionContent className="h-full mb-4 pb-0">
                 <div className="grid grid-cols-2 gap-3 p-1">
                   <div className="min-w-0">
                     <label className="mb-1.5 block text-xs font-semibold text-foreground">Cidade residência</label>

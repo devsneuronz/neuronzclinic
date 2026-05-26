@@ -28,7 +28,7 @@ import {
 } from "@/lib/supabase-rest";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { Group, Panel, Separator } from "react-resizable-panels";
 
 const CHAT_PAGE_SIZE = 50;
 const MESSAGE_PAGE_SIZE = 50;
@@ -415,13 +415,6 @@ export default function ChatsPage() {
   const ghostUnreadCountByChatIdRef = useRef<Record<string, number>>({});
   const targetChatId = searchParams.get("chatId") || storedTargetChatId;
 
-  const [panelSizes, setPanelSizes] = useState({
-    chatDefault: 70,
-    detailsDefault: 30,
-    detailsMin: 25,
-    detailsMax: 40,
-  });
-
   const [isSignatureMode, setIsAssinaturaMode] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("neuronzclinic.chat.use-signature");
@@ -450,33 +443,6 @@ export default function ChatsPage() {
   useEffect(() => {
     localStorage.setItem("neuronzclinic.chat.ghost-mode", String(isGhostMode));
   }, [isGhostMode]);
-
-  useEffect(() => {
-    const calculateSizes = () => {
-      const width = window.innerWidth;
-
-      const idealDetailsWidthPx = 550;
-      const minDetailsWidthPx = 500;
-      const maxDetailsWidthPx = 700;
-
-      const detailsDefaultPercent = (idealDetailsWidthPx / width) * 100;
-      const detailsMinPercent = (minDetailsWidthPx / width) * 100;
-      const detailsMaxPercent = (maxDetailsWidthPx / width) * 100;
-
-      const chatDefaultPercent = 100 - detailsDefaultPercent;
-
-      setPanelSizes({
-        chatDefault: chatDefaultPercent,
-        detailsDefault: detailsDefaultPercent,
-        detailsMin: detailsMinPercent,
-        detailsMax: detailsMaxPercent,
-      });
-    };
-
-    calculateSizes();
-    window.addEventListener("resize", calculateSizes);
-    return () => window.removeEventListener("resize", calculateSizes);
-  }, []);
 
   useEffect(() => {
     selectedChatRemoteIdRef.current = selectedChatRemoteId;
@@ -654,7 +620,10 @@ export default function ChatsPage() {
         const currentIds = new Set(currentChatMessages.map((message) => message.id));
         return {
           ...current,
-          [selectedChatRemoteId]: mergeMessages(olderMessages.filter((message) => !currentIds.has(message.id)), currentChatMessages),
+          [selectedChatRemoteId]: mergeMessages(
+            olderMessages.filter((message) => !currentIds.has(message.id)),
+            currentChatMessages,
+          ),
         };
       });
       setChatHasMoreMessages(selectedChatRemoteId, data.length === MESSAGE_PAGE_SIZE);
@@ -1730,8 +1699,8 @@ export default function ChatsPage() {
         onToggleGhost={setIsGhostMode}
         canUseAdminChatModes={canUseAdminChatModes}
       />
-      <PanelGroup direction="horizontal" className="flex-1">
-        <Panel defaultSize={showDetails ? panelSizes.chatDefault : 100} minSize={50}>
+      <Group orientation="horizontal">
+        <Panel>
           <ChatWindow
             chat={selectedChat}
             messages={messages}
@@ -1757,8 +1726,8 @@ export default function ChatsPage() {
 
         {selectedChat && showDetails && (
           <>
-            <PanelResizeHandle className="w-1 bg-(--chat-muted)/50 transition-colors hover:bg-theme-primary/50" />
-            <Panel id="details-panel" defaultSize={panelSizes.detailsDefault} minSize={panelSizes.detailsMin} maxSize={panelSizes.detailsMax} className="bg-(--chat-card) border-l border-(--chat-muted)">
+            <Separator className="w-1 bg-(--chat-muted)/50 transition-colors hover:bg-theme-primary/50" />
+            <Panel id="details-panel" defaultSize="360px" minSize="360px" maxSize="600px" className="bg-(--chat-card) border-l border-(--chat-muted)">
               <ContactDetails
                 chat={selectedChat}
                 onClose={() => setShowDetails(false)}
@@ -1778,7 +1747,7 @@ export default function ChatsPage() {
             </Panel>
           </>
         )}
-      </PanelGroup>
+      </Group>
     </div>
   );
 }
