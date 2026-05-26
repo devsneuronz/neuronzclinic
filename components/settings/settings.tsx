@@ -2,10 +2,11 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bolt, CircleEllipsis, Users } from "lucide-react";
+import { Bolt, CircleEllipsis, Tags, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BackgroundOptions } from "./background-options";
 import ColorScheme from "./color-scheme";
+import { TagsManager } from "./tags-manager";
 import { UsersGrid } from "./users";
 
 type SettingsUser = {
@@ -14,21 +15,6 @@ type SettingsUser = {
   role: "admin" | "manager" | "user";
   tags?: string[];
 };
-
-const tagStyles = ["bg-emerald-600 text-white", "bg-violet-600 text-white", "bg-yellow-600 text-white", "bg-sky-600 text-white", "bg-indigo-500 text-white", "bg-rose-600 text-white"];
-
-function getTagClass(tag: string) {
-  const value = tag.toLowerCase();
-
-  if (value.includes("venda")) return tagStyles[0];
-  if (value.includes("compra")) return tagStyles[1];
-  if (value.includes("financeiro")) return tagStyles[2];
-  if (value.includes("adm") || value.includes("admin")) return tagStyles[3];
-  if (value.includes("clínica") || value.includes("clinica")) return tagStyles[4];
-
-  const index = Array.from(value).reduce((total, char) => total + char.charCodeAt(0), 0) % tagStyles.length;
-  return tagStyles[index];
-}
 
 export default function SettingsPage() {
   const [users, setUsers] = useState<SettingsUser[]>([]);
@@ -79,9 +65,9 @@ export default function SettingsPage() {
             <span className="truncate">Usuários</span>
           </TabsTrigger>
 
-          <TabsTrigger value="opção 3" className=" group relative data-[state=active]:bg-card">
-            <CircleEllipsis className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
-            <span className="truncate">Opção 3</span>
+          <TabsTrigger value="tags" className=" group relative data-[state=active]:bg-card">
+            <Tags className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
+            <span className="truncate">Tags</span>
           </TabsTrigger>
 
           <TabsTrigger value="opção 4" className=" group relative data-[state=active]:bg-card">
@@ -111,6 +97,18 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent>
               <UsersGrid sortedUsers={sortedUsers} isLoadingUsers={isLoadingUsers} usersError={usersError} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="tags" className="outline-none">
+          <Card className="border border-border bg-card shadow-sm">
+            <CardHeader className="space-y-1">
+              <CardTitle className="text-xl font-semibold text-foreground">Gerenciamento de Tags</CardTitle>
+              <CardDescription className="text-sm text-muted-foreground">Crie, edite cores e mantenha as tags usadas nos contatos e chats.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <TagsManager />
             </CardContent>
           </Card>
         </TabsContent>
