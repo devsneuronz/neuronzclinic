@@ -116,6 +116,14 @@ export function ChatComposer({
   const { user } = useCurrentUser();
   const userName = user?.name ?? "Usuário";
 
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+
+      event.currentTarget.form?.requestSubmit();
+    }
+  };
+
   return (
     <form onSubmit={onSubmit} className="border-t border-border bg-card px-4 py-3 h-full">
       {isInternalNoteOpen && (
@@ -318,15 +326,16 @@ export function ChatComposer({
                   </div>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <div className="relative flex flex-1 rounded-md items-center bg-input/50! transition-[color,box-shadow] focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px] h-full overflow-hidden">
-                {isSignatureMode && !attachment && <span className="shrink-0 select-none rounded-md text-xs font-semibold py-2 px-2 ml-2 bg-theme-primary text-theme-primary-fg">*{userName}*</span>}
+              <div className="relative flex flex-1 gap-2 items-center h-full">
+                {isSignatureMode && !attachment && <span className="shrink-0 select-none rounded-md text-xs py-1.5 px-2 ml-2 bg-theme-primary text-theme-primary-fg font-bold">{userName}</span>}
 
                 <Textarea
+                  onKeyDown={handleKeyDown}
                   value={draft}
                   onChange={(event) => onDraftChange(event.target.value)}
                   disabled={isSending}
                   placeholder={attachment ? "Legenda opcional" : "Digite uma mensagem..."}
-                  className="flex-1 border-0 bg-transparent! resize-none ring-0! h-full min-h-0"
+                  className="flex-1 border-0 bg-input/50 rounded-md resize-none transition-[color,box-shadow] h-full min-h-0"
                 />
               </div>
               <Button type="submit" disabled={isSending || (!draft.trim() && !attachment)} size="icon" className="shrink-0 rounded-full bg-teal-500 text-white hover:bg-teal-600" aria-label="Enviar mensagem">
