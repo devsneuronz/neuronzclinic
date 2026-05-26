@@ -9,6 +9,7 @@ import { fetchMentionableUsers } from "@/lib/user-mentions";
 import type { MentionableUser } from "@/lib/user-roles";
 import type { FormEvent, UIEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Group, Panel, Separator } from "react-resizable-panels";
 import { AttachmentPreviewModal } from "./attachment-preview-modal";
 import { getAttachmentType } from "./chat-attachment-utils";
 import { ChatComposer } from "./chat-composer";
@@ -927,73 +928,79 @@ export function ChatWindow({
           isMobile={isMobile}
           onCloseChat={onCloseChat}
         />
-
-        <MessageList
-          chat={chat}
-          groupedMessages={groupedMessages}
-          messagesByRemoteId={messagesByRemoteId}
-          selectedMessageIds={selectedMessageIds}
-          isSelectionMode={isSelectionMode}
-          highlightedMessageId={highlightedMessageId}
-          isLoading={isLoading}
-          isLoadingOlder={isLoadingOlder}
-          hasMoreMessages={hasMoreMessages}
-          error={error}
-          showScrollButton={showScrollButton}
-          scrollAreaRef={scrollAreaRef}
-          bottomRef={bottomRef}
-          onMessagesScroll={handleMessagesScroll}
-          onLoadOlderClick={async () => {
-            const scrollArea = scrollAreaRef.current;
-            if (scrollArea) previousScrollHeightRef.current = scrollArea.scrollHeight;
-            const addedCount = await onLoadOlderMessages?.();
-            if (!addedCount) previousScrollHeightRef.current = null;
-          }}
-          onScrollToLastMessage={handleScrollToLastMessage}
-          onToggleSelection={toggleMessageSelection}
-          onReply={beginReply}
-          onForward={beginForward}
-          onDelete={beginDelete}
-          onCreateNote={openInternalNote}
-          onDeleteNote={deleteInternalNote}
-          onExpandImage={(url: string, alt: string) => setExpandedImage({ url, alt })}
-          onScrollToMessage={handleScrollToMessage}
-        />
-        <ChatComposer
-          chat={chat}
-          draft={draft}
-          attachment={attachment}
-          replyTo={replyTo}
-          isSending={isSending}
-          isRecording={isRecording}
-          isRecordingPaused={isRecordingPaused}
-          recordingSeconds={recordingSeconds}
-          messageActionError={messageActionError}
-          recordingError={recordingError}
-          isInternalNoteOpen={isInternalNoteOpen}
-          noteDraft={noteDraft}
-          noteLinkedMessage={noteLinkedMessage}
-          noteMentionUsers={noteMentionUsers}
-          fileInputRef={fileInputRef}
-          photoInputRef={photoInputRef}
-          videoInputRef={videoInputRef}
-          cameraInputRef={cameraInputRef}
-          onSubmit={handleSubmit}
-          onDraftChange={setDraft}
-          onOpenAttachmentPreview={() => setIsAttachmentPreviewOpen(true)}
-          onRemoveAttachment={removeAttachment}
-          onCancelReply={() => setReplyTo(null)}
-          onAttachmentSelected={handleAttachmentSelected}
-          onStartRecording={startRecording}
-          onCancelRecording={cancelRecording}
-          onToggleRecordingPause={toggleRecordingPause}
-          onSendRecording={sendRecording}
-          onOpenInternalNote={() => openInternalNote()}
-          onCloseInternalNote={closeInternalNote}
-          onNoteDraftChange={setNoteDraft}
-          onSaveInternalNote={saveInternalNote}
-          isSignatureMode={isSignatureMode}
-        />
+        <Group orientation="vertical">
+          <Panel>
+            <MessageList
+              chat={chat}
+              groupedMessages={groupedMessages}
+              messagesByRemoteId={messagesByRemoteId}
+              selectedMessageIds={selectedMessageIds}
+              isSelectionMode={isSelectionMode}
+              highlightedMessageId={highlightedMessageId}
+              isLoading={isLoading}
+              isLoadingOlder={isLoadingOlder}
+              hasMoreMessages={hasMoreMessages}
+              error={error}
+              showScrollButton={showScrollButton}
+              scrollAreaRef={scrollAreaRef}
+              bottomRef={bottomRef}
+              onMessagesScroll={handleMessagesScroll}
+              onLoadOlderClick={async () => {
+                const scrollArea = scrollAreaRef.current;
+                if (scrollArea) previousScrollHeightRef.current = scrollArea.scrollHeight;
+                const addedCount = await onLoadOlderMessages?.();
+                if (!addedCount) previousScrollHeightRef.current = null;
+              }}
+              onScrollToLastMessage={handleScrollToLastMessage}
+              onToggleSelection={toggleMessageSelection}
+              onReply={beginReply}
+              onForward={beginForward}
+              onDelete={beginDelete}
+              onCreateNote={openInternalNote}
+              onDeleteNote={deleteInternalNote}
+              onExpandImage={(url: string, alt: string) => setExpandedImage({ url, alt })}
+              onScrollToMessage={handleScrollToMessage}
+            />
+          </Panel>
+          <Separator className="h-1 bg-(--chat-muted)/50 transition-colors hover:bg-theme-primary/50" />
+          <Panel id="message-panel" defaultSize="65px" minSize={isInternalNoteOpen ? "212px" : "65px"} maxSize={isInternalNoteOpen ? "300px" : "180px"} className="bg-(--chat-card) border-l border-(--chat-muted)">
+            <ChatComposer
+              chat={chat}
+              draft={draft}
+              attachment={attachment}
+              replyTo={replyTo}
+              isSending={isSending}
+              isRecording={isRecording}
+              isRecordingPaused={isRecordingPaused}
+              recordingSeconds={recordingSeconds}
+              messageActionError={messageActionError}
+              recordingError={recordingError}
+              isInternalNoteOpen={isInternalNoteOpen}
+              noteDraft={noteDraft}
+              noteLinkedMessage={noteLinkedMessage}
+              noteMentionUsers={noteMentionUsers}
+              fileInputRef={fileInputRef}
+              photoInputRef={photoInputRef}
+              videoInputRef={videoInputRef}
+              cameraInputRef={cameraInputRef}
+              onSubmit={handleSubmit}
+              onDraftChange={setDraft}
+              onOpenAttachmentPreview={() => setIsAttachmentPreviewOpen(true)}
+              onRemoveAttachment={removeAttachment}
+              onCancelReply={() => setReplyTo(null)}
+              onAttachmentSelected={handleAttachmentSelected}
+              onStartRecording={startRecording}
+              onCancelRecording={cancelRecording}
+              onToggleRecordingPause={toggleRecordingPause}
+              onSendRecording={sendRecording}
+              onOpenInternalNote={() => openInternalNote()}
+              onCloseInternalNote={closeInternalNote}
+              onNoteDraftChange={setNoteDraft}
+              onSaveInternalNote={saveInternalNote}
+              isSignatureMode={isSignatureMode}
+            />
+          </Panel>
+        </Group>
       </div>
 
       {attachment && isAttachmentPreviewOpen && (

@@ -16,6 +16,7 @@ import { getChatStatusColor, getChatStatusLabel } from "@/lib/chat-status";
 import { getChatTags, getReadableTextColor } from "@/lib/chat-tags";
 import { ChatRecord, LatestMessageStatus } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
+import { formatBoldText } from "@/utils/utils";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import { ChevronDown, ChevronUp, Feather, FilterX, HatGlasses, Loader2, Search, Send, SquarePlus } from "lucide-react";
 import type { FormEvent, UIEvent } from "react";
@@ -416,32 +417,32 @@ export function ContactList({
         <span className="font-medium text-foreground whitespace-nowrap">{isLoading ? "Carregando usuário..." : userName}</span>
 
         {canUseAdminChatModes && (
-        <div className="ml-auto flex items-center gap-3">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center ">
-                  <Feather className="mr-1 h-3.5 w-3.5 text-muted-foreground" />
-                  <Switch className="scale-75" checked={isSignatureMode} onCheckedChange={onToggleAssinatura} />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" align="start">
-                <p className="text-xs font-medium">Modo assinatura</p>
-              </TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center">
-                  <HatGlasses className="mr-1 h-4 w-4 text-muted-foreground" />
-                  <Switch className="scale-75" checked={isGhostMode} onCheckedChange={onToggleGhost} />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" align="start">
-                <p className="text-xs font-medium">Não visualizar mensagens</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
+          <div className="ml-auto flex items-center gap-3">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center ">
+                    <Feather className="mr-1 h-3.5 w-3.5 text-muted-foreground" />
+                    <Switch className="scale-75" checked={isSignatureMode} onCheckedChange={onToggleAssinatura} />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="start">
+                  <p className="text-xs font-medium">Modo assinatura</p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center">
+                    <HatGlasses className="mr-1 h-4 w-4 text-muted-foreground" />
+                    <Switch className="scale-75" checked={isGhostMode} onCheckedChange={onToggleGhost} />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="start">
+                  <p className="text-xs font-medium">Não visualizar mensagens</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         )}
       </div>
 
@@ -621,7 +622,7 @@ export function ContactList({
 
                     <p className="truncate text-sm text-muted-foreground">
                       {hasDraft && <span className="font-medium text-theme-primary">Rascunho: </span>}
-                      {previewText || chat.text_last_message || "Sem mensagens recentes"}
+                      {formatBoldText(previewText || chat.text_last_message || "Sem mensagens recentes")}
                     </p>
 
                     {!!chat.unread_count && <Badge className="ml-auto h-5 min-w-5 shrink-0 bg-green-500 px-1.5 text-[10px] font-medium text-white">{chat.unread_count <= 99 ? chat.unread_count : "+99"}</Badge>}
@@ -679,38 +680,17 @@ export function ContactList({
 
             <div className="space-y-2">
               <Label htmlFor="new-contact-name">Nome</Label>
-              <Input
-                id="new-contact-name"
-                value={newContactName}
-                onChange={(event) => setNewContactName(event.target.value)}
-                placeholder="Nome do contato"
-                autoComplete="name"
-                disabled={isCreatingContact}
-              />
+              <Input id="new-contact-name" value={newContactName} onChange={(event) => setNewContactName(event.target.value)} placeholder="Nome do contato" autoComplete="name" disabled={isCreatingContact} />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="new-contact-phone">Telefone</Label>
-              <Input
-                id="new-contact-phone"
-                value={newContactPhone}
-                onChange={(event) => setNewContactPhone(event.target.value)}
-                placeholder="(11) 99999-9999"
-                autoComplete="tel"
-                disabled={isCreatingContact}
-              />
+              <Input id="new-contact-phone" value={newContactPhone} onChange={(event) => setNewContactPhone(event.target.value)} placeholder="(11) 99999-9999" autoComplete="tel" disabled={isCreatingContact} />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="new-contact-message">Mensagem</Label>
-              <Textarea
-                id="new-contact-message"
-                value={newContactMessage}
-                onChange={(event) => setNewContactMessage(event.target.value)}
-                placeholder="Digite a mensagem"
-                className="min-h-28 resize-y"
-                disabled={isCreatingContact}
-              />
+              <Textarea id="new-contact-message" value={newContactMessage} onChange={(event) => setNewContactMessage(event.target.value)} placeholder="Digite a mensagem" className="min-h-28 resize-y" disabled={isCreatingContact} />
             </div>
 
             {newContactError && <p className="text-sm text-destructive">{newContactError}</p>}

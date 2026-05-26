@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import type { ChatRecord, MessageRecord } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
+import { formatBoldText } from "@/utils/utils";
 import { Check, CheckSquare, Download, FileImage, FileText, Forward, Mic, PenLine, Reply, Trash2, Video } from "lucide-react";
 import Image from "next/image";
 import { memo } from "react";
@@ -181,7 +182,7 @@ export const MessageBubble = memo(
                 )}
               </div>
             ) : (
-              <p className="whitespace-pre-wrap break-words text-sm text-(--chat-foreground)">{getMessageText(message)}</p>
+              <p className="whitespace-pre-wrap break-words text-sm text-(--chat-foreground)">{formatBoldText(getMessageText(message))}</p>
             )}
           </div>
 
