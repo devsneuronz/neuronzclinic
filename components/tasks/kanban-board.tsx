@@ -10,9 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { AlertCircle, CalendarDays, CheckCircle2, Circle, CircleDashed, Clock3, Loader2, Plus, RefreshCw, Save, Search, Timer, Trash2, UserRound } from "lucide-react";
-import type { ComponentType, FormEvent, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { AlertCircle, CalendarDays, CheckCircle2, Circle, CircleDashed, Clock3, ImageIcon, Loader2, Mic, Plus, RefreshCw, Save, Search, Square, Timer, Trash2, UserRound, X } from "lucide-react";
+import type { ChangeEvent, ComponentType, FormEvent, ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type TaskStatus = "aguardando" | "resolvendo" | "finalizado";
 type TaskView = "todas" | TaskStatus;
@@ -48,6 +48,16 @@ interface TaskResolutionNote {
   created_at: string;
   updated_at: string;
 }
+
+interface ParsedTaskResolutionNote {
+  type: "text" | "image" | "audio";
+  content: string;
+  mediaUrl: string;
+  fileName: string;
+  mimeType: string;
+}
+
+const taskNoteMediaPrefix = "task-note-media:";
 
 const statusOrder: TaskStatus[] = ["aguardando", "resolvendo", "finalizado"];
 const taskViewOptions: Array<{ value: TaskView; label: string }> = [
@@ -133,6 +143,62 @@ function formatDateTime(value: string, options: Intl.DateTimeFormatOptions) {
   if (Number.isNaN(date.getTime())) return "";
 
   return new Intl.DateTimeFormat("pt-BR", options).format(date);
+}
+
+function getTaskNoteAttachmentType(file: File | null) {
+  if (!file) return null;
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("audio/")) return "audio";
+  return "unsupported";
+}
+
+function getTaskNoteAttachmentLabel(file: File) {
+  const type = getTaskNoteAttachmentType(file);
+  if (type === "image") return "Imagem";
+  if (type === "audio") return "Audio";
+  return "Arquivo";
+}
+
+function parseTaskResolutionNoteContent(content: string): ParsedTaskResolutionNote {
+  if (!content.startsWith(taskNoteMediaPrefix)) {
+    return {
+      type: "text",
+      content,
+      mediaUrl: "",
+      fileName: "",
+      mimeType: "",
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(content.slice(taskNoteMediaPrefix.length)) as Partial<{
+      type: "image" | "audio";
+      caption: string;
+      mediaUrl: string;
+      fileName: string;
+      mimeType: string;
+    }>;
+
+    if ((parsed.type === "image" || parsed.type === "audio") && parsed.mediaUrl) {
+      return {
+        type: parsed.type,
+        content: typeof parsed.caption === "string" ? parsed.caption : "",
+        mediaUrl: parsed.mediaUrl,
+        fileName: parsed.fileName || "Anexo",
+        mimeType: parsed.mimeType || "",
+      };
+    }
+  } catch {
+    // Legacy fallback: show the raw content if the saved metadata is malformed.
+  }
+
+  return {
+    type: "text",
+    content,
+    mediaUrl: "",
+    fileName: "",
+    mimeType: "",
+  };
 }
 
 function isOverdue(task: Task) {
@@ -241,15 +307,26 @@ async function fetchTaskResolutionNotes(taskId: string) {
   return data.notes ?? [];
 }
 
-async function createTaskResolutionNote({ taskId, content, statusSnapshot }: { taskId: string; content: string; statusSnapshot: string }) {
+async function createTaskResolutionNote({ taskId, content, statusSnapshot, attachment }: { taskId: string; content: string; statusSnapshot: string; attachment?: File | null }) {
+  const body = attachment
+    ? (() => {
+        const formData = new FormData();
+        formData.append("task_id", taskId);
+        formData.append("content", content);
+        formData.append("status_snapshot", statusSnapshot);
+        formData.append("file", attachment);
+        return formData;
+      })()
+    : JSON.stringify({
+        task_id: taskId,
+        content,
+        status_snapshot: statusSnapshot,
+      });
+
   const response = await fetch("/api/task-resolution-notes", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      task_id: taskId,
-      content,
-      status_snapshot: statusSnapshot,
-    }),
+    headers: attachment ? undefined : { "Content-Type": "application/json" },
+    body,
   });
   const data = (await response.json()) as { note?: TaskResolutionNote; message?: string };
 
@@ -471,7 +548,9 @@ function TaskDetailsDialog({
   onUpdate,
   notes,
   noteDraft,
+  noteAttachment,
   onNoteDraftChange,
+  onNoteAttachmentChange,
   onCreateNote,
   onDeleteNote,
   taskOptions,
@@ -491,7 +570,9 @@ function TaskDetailsDialog({
   onUpdate: (task: Task, values: { type: string; status: string; dueDate: string; responsibleUserId: string; subject: string; observations: string }) => void;
   notes: TaskResolutionNote[];
   noteDraft: string;
+  noteAttachment: File | null;
   onNoteDraftChange: (value: string) => void;
+  onNoteAttachmentChange: (file: File | null) => void;
   onCreateNote: (task: Task) => void;
   onDeleteNote: (noteId: string) => void;
   taskOptions: TaskOptions;
@@ -510,6 +591,12 @@ function TaskDetailsDialog({
   const [responsibleUserId, setResponsibleUserId] = useState(task?.responsibleUserId || "");
   const [subject, setSubject] = useState(task?.subject || "");
   const [observations, setObservations] = useState(task?.description || "");
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [audioRecordingError, setAudioRecordingError] = useState("");
+  const noteAttachmentInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioStreamRef = useRef<MediaStream | null>(null);
   const overdue = task ? isOverdue(task) : false;
   const createdAt = task
     ? formatDateTime(task.createdAt, {
@@ -546,6 +633,99 @@ function TaskDetailsDialog({
   };
 
   const isBusy = isDeleting || isSaving;
+  const attachmentType = getTaskNoteAttachmentType(noteAttachment);
+  const canCreateNote = Boolean(noteDraft.trim() || noteAttachment) && attachmentType !== "unsupported";
+  const noteMediaPreviewUrl = useMemo(() => (["image", "audio"].includes(attachmentType || "") && noteAttachment ? URL.createObjectURL(noteAttachment) : ""), [attachmentType, noteAttachment]);
+
+  useEffect(() => {
+    if (!noteMediaPreviewUrl) return;
+    return () => URL.revokeObjectURL(noteMediaPreviewUrl);
+  }, [noteMediaPreviewUrl]);
+
+  useEffect(() => {
+    return () => {
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== "inactive") {
+        recorder.onstop = null;
+        recorder.stop();
+      }
+      audioStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  const handleAttachmentChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    onNoteAttachmentChange(file);
+    setAudioRecordingError("");
+  };
+
+  const handleClearAttachment = () => {
+    onNoteAttachmentChange(null);
+    if (noteAttachmentInputRef.current) noteAttachmentInputRef.current.value = "";
+    setAudioRecordingError("");
+  };
+
+  const stopAudioRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+    }
+  };
+
+  const handleAudioRecording = async () => {
+    if (isRecordingAudio) {
+      stopAudioRecording();
+      return;
+    }
+
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setAudioRecordingError("Gravacao de audio nao suportada neste navegador.");
+      return;
+    }
+
+    try {
+      setAudioRecordingError("");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+
+      audioStreamRef.current = stream;
+      audioChunksRef.current = [];
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+
+      recorder.onstop = () => {
+        const mimeType = recorder.mimeType || "audio/webm";
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        const extension = mimeType.includes("mp4") ? "m4a" : mimeType.includes("ogg") ? "ogg" : "webm";
+        const audioFile = new File([audioBlob], `audio-tarefa-${Date.now()}.${extension}`, { type: mimeType });
+
+        onNoteAttachmentChange(audioFile);
+        audioChunksRef.current = [];
+        mediaRecorderRef.current = null;
+        audioStreamRef.current?.getTracks().forEach((track) => track.stop());
+        audioStreamRef.current = null;
+        setIsRecordingAudio(false);
+      };
+
+      recorder.onerror = () => {
+        setAudioRecordingError("Nao foi possivel gravar o audio.");
+        setIsRecordingAudio(false);
+        audioStreamRef.current?.getTracks().forEach((track) => track.stop());
+        audioStreamRef.current = null;
+      };
+
+      onNoteAttachmentChange(null);
+      if (noteAttachmentInputRef.current) noteAttachmentInputRef.current.value = "";
+      recorder.start();
+      setIsRecordingAudio(true);
+    } catch {
+      setAudioRecordingError("Permita o acesso ao microfone para gravar o audio.");
+      setIsRecordingAudio(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -655,11 +835,59 @@ function TaskDetailsDialog({
                 <p className="mt-1 text-xs text-muted-foreground">Registre o histórico de acompanhamento desta tarefa.</p>
               </div>
 
-              <Textarea className="min-h-24 resize-y" value={noteDraft} onChange={(event) => onNoteDraftChange(event.target.value)} placeholder="Digite uma atualização sobre a resolução da tarefa" disabled={isSavingNote} />
+              <div className="flex flex-wrap items-center gap-2">
+                <input ref={noteAttachmentInputRef} type="file" accept="image/*" className="hidden" onChange={handleAttachmentChange} disabled={isSavingNote || isRecordingAudio} />
+                <Button type="button" variant="outline" size="sm" className="transition hover:-translate-y-0.5 hover:border-sky-400/50 hover:bg-sky-400/10 hover:text-sky-600 hover:shadow-xs" onClick={() => noteAttachmentInputRef.current?.click()} disabled={isSavingNote || isRecordingAudio}>
+                  <ImageIcon className="h-4 w-4" />
+                  Imagem
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "transition hover:-translate-y-0.5 hover:shadow-xs",
+                    isRecordingAudio ? "border-rose-400/50 bg-rose-400/10 text-rose-600 hover:bg-rose-400/15" : "hover:border-teal-400/50 hover:bg-teal-400/10 hover:text-teal-600",
+                  )}
+                  onClick={handleAudioRecording}
+                  disabled={isSavingNote}
+                >
+                  {isRecordingAudio ? <Square className="h-4 w-4 fill-current" /> : <Mic className="h-4 w-4" />}
+                  {isRecordingAudio ? "Parar gravação" : "Gravar audio"}
+                </Button>
+                {noteAttachment ? (
+                  <div className={cn("flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs", attachmentType === "unsupported" ? "border-destructive/25 bg-destructive/5 text-destructive" : "bg-background text-muted-foreground")}>
+                    <span className="truncate">
+                      {attachmentType === "unsupported" ? "Formato nao suportado" : getTaskNoteAttachmentLabel(noteAttachment)}: {noteAttachment.name}
+                    </span>
+                    <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={handleClearAttachment} aria-label="Remover anexo">
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+
+              {audioRecordingError ? (
+                <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  {audioRecordingError}
+                </div>
+              ) : null}
+
+              {attachmentType === "image" && noteMediaPreviewUrl ? (
+                <div className="overflow-hidden rounded-md border bg-background">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={noteMediaPreviewUrl} alt={noteAttachment?.name || "Preview da imagem"} className="max-h-64 w-full object-contain" />
+                </div>
+              ) : null}
+
+              {attachmentType === "audio" && noteMediaPreviewUrl ? <audio controls className="w-full" src={noteMediaPreviewUrl} /> : null}
+
+              <Textarea className="min-h-24 resize-y" value={noteDraft} onChange={(event) => onNoteDraftChange(event.target.value)} placeholder={noteAttachment ? "Legenda opcional" : "Digite uma atualização sobre a resolução da tarefa"} disabled={isSavingNote} />
 
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs text-muted-foreground">{isLoadingNotes ? "Carregando histórico..." : `${notes.length} registro${notes.length === 1 ? "" : "s"}`}</p>
-                <Button type="button" size="sm" disabled={!noteDraft.trim() || isSavingNote} onClick={() => onCreateNote(task)}>
+                <Button type="button" size="sm" disabled={!canCreateNote || isSavingNote} onClick={() => onCreateNote(task)}>
                   {isSavingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                   {isSavingNote ? "Salvando..." : "Adicionar evolução"}
                 </Button>
@@ -676,28 +904,47 @@ function TaskDetailsDialog({
                 {!isLoadingNotes && notes.length === 0 ? (
                   <p className="rounded-md border border-dashed px-3 py-3 text-sm text-muted-foreground">Nenhuma evolução registrada.</p>
                 ) : (
-                  notes.map((note) => (
-                    <div key={note.id} className="rounded-md border bg-card px-3 py-2">
-                      <div className="mb-1 flex items-center justify-between gap-2">
-                        <div className="min-w-0 text-[11px] text-muted-foreground">
-                          <span>{formatDateTime(note.updated_at || note.created_at, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
-                          {note.status_snapshot ? <span className="ml-2">Status: {note.status_snapshot}</span> : null}
+                  notes.map((note) => {
+                    const parsedNote = parseTaskResolutionNoteContent(note.content);
+
+                    return (
+                      <div key={note.id} className="rounded-md border bg-card px-3 py-2">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <div className="min-w-0 text-[11px] text-muted-foreground">
+                            <span>{formatDateTime(note.updated_at || note.created_at, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                            {note.status_snapshot ? <span className="ml-2">Status: {note.status_snapshot}</span> : null}
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={() => onDeleteNote(note.id)}
+                            aria-label="Apagar evolução"
+                            disabled={deletingNoteId === note.id}
+                          >
+                            {deletingNoteId === note.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                          </Button>
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          onClick={() => onDeleteNote(note.id)}
-                          aria-label="Apagar evolução"
-                          disabled={deletingNoteId === note.id}
-                        >
-                          {deletingNoteId === note.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                        </Button>
+
+                        {parsedNote.type === "image" ? (
+                          <a href={parsedNote.mediaUrl} target="_blank" rel="noreferrer" className="mb-2 block overflow-hidden rounded-md border bg-background">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={parsedNote.mediaUrl} alt={parsedNote.content || parsedNote.fileName} className="max-h-72 w-full object-contain" />
+                          </a>
+                        ) : null}
+
+                        {parsedNote.type === "audio" ? (
+                          <audio controls className="mb-2 w-full" src={parsedNote.mediaUrl}>
+                            <a href={parsedNote.mediaUrl}>{parsedNote.fileName}</a>
+                          </audio>
+                        ) : null}
+
+                        {parsedNote.content ? <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{parsedNote.content}</p> : null}
+                        {parsedNote.type !== "text" ? <p className="mt-1 truncate text-[11px] text-muted-foreground">{parsedNote.fileName}</p> : null}
                       </div>
-                      <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{note.content}</p>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </section>
@@ -761,6 +1008,7 @@ export function KanbanBoard() {
   const [savingTaskId, setSavingTaskId] = useState("");
   const [taskResolutionNotes, setTaskResolutionNotes] = useState<TaskResolutionNote[]>([]);
   const [taskResolutionNoteDraft, setTaskResolutionNoteDraft] = useState("");
+  const [taskResolutionNoteAttachment, setTaskResolutionNoteAttachment] = useState<File | null>(null);
   const [isLoadingTaskResolutionNotes, setIsLoadingTaskResolutionNotes] = useState(false);
   const [isSavingTaskResolutionNote, setIsSavingTaskResolutionNote] = useState(false);
   const [deletingTaskResolutionNoteId, setDeletingTaskResolutionNoteId] = useState("");
@@ -842,6 +1090,7 @@ export function KanbanBoard() {
     setTaskActionError("");
     setTaskResolutionNoteError("");
     setTaskResolutionNoteDraft("");
+    setTaskResolutionNoteAttachment(null);
     setTaskResolutionNotes([]);
     setSelectedTask(task);
     setIsLoadingTaskOptions(true);
@@ -889,7 +1138,13 @@ export function KanbanBoard() {
 
   const handleCreateTaskResolutionNote = async (task: Task) => {
     const content = taskResolutionNoteDraft.trim();
-    if (!content) return;
+    if (!content && !taskResolutionNoteAttachment) return;
+
+    const attachmentType = getTaskNoteAttachmentType(taskResolutionNoteAttachment);
+    if (attachmentType === "unsupported") {
+      setTaskResolutionNoteError("Envie apenas imagens ou audios na evolucao da tarefa.");
+      return;
+    }
 
     setIsSavingTaskResolutionNote(true);
     setTaskResolutionNoteError("");
@@ -899,10 +1154,12 @@ export function KanbanBoard() {
         taskId: task.id,
         content,
         statusSnapshot: task.statusLabel || statusConfig[task.status].label,
+        attachment: taskResolutionNoteAttachment,
       });
 
       setTaskResolutionNotes((current) => [note, ...current.filter((currentNote) => currentNote.id !== note.id)]);
       setTaskResolutionNoteDraft("");
+      setTaskResolutionNoteAttachment(null);
     } catch (error) {
       setTaskResolutionNoteError(error instanceof Error ? error.message : "Não foi possível salvar a evolução da tarefa.");
     } finally {
@@ -1260,6 +1517,7 @@ export function KanbanBoard() {
             setTaskActionError("");
             setTaskResolutionNoteError("");
             setTaskResolutionNoteDraft("");
+            setTaskResolutionNoteAttachment(null);
             setTaskResolutionNotes([]);
             setSelectedTask(null);
           }
@@ -1268,7 +1526,9 @@ export function KanbanBoard() {
         onUpdate={handleUpdateTask}
         notes={taskResolutionNotes}
         noteDraft={taskResolutionNoteDraft}
+        noteAttachment={taskResolutionNoteAttachment}
         onNoteDraftChange={setTaskResolutionNoteDraft}
+        onNoteAttachmentChange={setTaskResolutionNoteAttachment}
         onCreateNote={handleCreateTaskResolutionNote}
         onDeleteNote={handleDeleteTaskResolutionNote}
         taskOptions={taskOptions}

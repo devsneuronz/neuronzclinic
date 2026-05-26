@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const STORAGE_BUCKET = process.env.SEND_MESSAGE_STORAGE_BUCKET || "file"
+const TASK_NOTE_MEDIA_PREFIX = "task-note-media:"
+const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024
 
 type RawTaskResolutionNote = Record<string, unknown>
 
@@ -12,6 +15,96 @@ function getString(value: unknown) {
 function getNullableString(value: unknown) {
   const text = getString(value)
   return text || null
+}
+
+function getSupabaseBaseUrl() {
+  return SUPABASE_REST_URL?.replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "")
+}
+
+function sanitizeFileName(fileName: string) {
+  return fileName
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 120) || "file"
+}
+
+function getPublicStorageUrl(baseUrl: string, objectPath: string) {
+  const encodedPath = objectPath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/")
+
+  return `${baseUrl}/storage/v1/object/public/${STORAGE_BUCKET}/${encodedPath}`
+}
+
+function getAttachmentKind(file: File) {
+  const mimeType = file.type.toLowerCase()
+  if (mimeType.startsWith("image/")) return "image"
+  if (mimeType.startsWith("audio/")) return "audio"
+  return ""
+}
+
+async function uploadTaskNoteFile(file: File, taskId: string) {
+  const baseUrl = getSupabaseBaseUrl()
+
+  if (!baseUrl || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("Configuracao do Supabase ausente para upload de anexos.")
+  }
+
+  const kind = getAttachmentKind(file)
+  if (!kind) {
+    throw new Error("Envie apenas imagens ou audios na evolucao da tarefa.")
+  }
+
+  if (file.size > MAX_ATTACHMENT_SIZE) {
+    throw new Error("O anexo deve ter no maximo 25 MB.")
+  }
+
+  const safeTaskId = taskId.replace(/[^a-zA-Z0-9@._-]/g, "-")
+  const objectPath = `task-resolution-notes/${safeTaskId}/${Date.now()}-${crypto.randomUUID()}-${sanitizeFileName(file.name)}`
+  const uploadUrl = `${baseUrl}/storage/v1/object/${STORAGE_BUCKET}/${objectPath}`
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": file.type || "application/octet-stream",
+      "x-upsert": "false",
+    },
+    body: file,
+  })
+
+  if (!response.ok) {
+    const details = await response.text()
+    throw new Error(details || `Falha no upload do anexo (${response.status}).`)
+  }
+
+  return {
+    kind,
+    url: getPublicStorageUrl(baseUrl, objectPath),
+    fileName: file.name || "arquivo",
+    mimeType: file.type || "application/octet-stream",
+  }
+}
+
+function serializeMediaNote({
+  caption,
+  file,
+}: {
+  caption: string
+  file: Awaited<ReturnType<typeof uploadTaskNoteFile>>
+}) {
+  return `${TASK_NOTE_MEDIA_PREFIX}${JSON.stringify({
+    version: 1,
+    type: file.kind,
+    caption,
+    mediaUrl: file.url,
+    fileName: file.fileName,
+    mimeType: file.mimeType,
+  })}`
 }
 
 async function supabaseRequest(path: string, init?: RequestInit) {
@@ -57,23 +150,28 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json().catch(() => null)) as RawTaskResolutionNote | null
+    const isMultipart = request.headers.get("content-type")?.toLowerCase().includes("multipart/form-data")
+    const body = isMultipart ? null : ((await request.json().catch(() => null)) as RawTaskResolutionNote | null)
+    const formData = isMultipart ? await request.formData() : null
 
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
+    if (!formData && (!body || typeof body !== "object" || Array.isArray(body))) {
       return NextResponse.json({ message: "Payload invalido." }, { status: 400 })
     }
 
-    const taskId = getString(body.task_id)
-    const content = getString(body.content)
+    const taskId = formData ? getString(formData.get("task_id")) : getString(body?.task_id)
+    const caption = formData ? getString(formData.get("content")) : getString(body?.content)
+    const fileValue = formData?.get("file")
+    const attachment = fileValue instanceof File && fileValue.size > 0 ? fileValue : null
 
-    if (!taskId || !content) {
+    if (!taskId || (!caption && !attachment)) {
       return NextResponse.json({ message: "task_id e content sao obrigatorios." }, { status: 400 })
     }
 
+    const uploaded = attachment ? await uploadTaskNoteFile(attachment, taskId) : null
     const note = {
       task_id: taskId,
-      content,
-      status_snapshot: getNullableString(body.status_snapshot),
+      content: uploaded ? serializeMediaNote({ caption, file: uploaded }) : caption,
+      status_snapshot: getNullableString(formData ? formData.get("status_snapshot") : body?.status_snapshot),
     }
 
     const response = await supabaseRequest("task_resolution_notes?select=*", {
