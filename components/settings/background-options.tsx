@@ -64,12 +64,12 @@ export function BackgroundOptions() {
   };
 
   return (
-    <Card className="border border-border bg-card shadow-sm w-7/10 h-full">
+    <Card className="border border-border bg-card shadow-sm w-full h-full">
       <CardContent className="space-y-6">
         <div className="space-y-2">
           <Label className="text-sm font-medium text-foreground">Fundo do Login</Label>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-3">
             {backgroundOptionsOpts.map((bg) => {
               const isSelected = currentBg === bg.id;
 

@@ -62,12 +62,12 @@ export default function SettingsPage() {
   const sortedUsers = useMemo(() => users.slice().sort((a, b) => a.name.localeCompare(b.name, "pt-BR")), [users]);
 
   return (
-    <div className="flex h-full w-full flex-col bg-background gap-6">
-      <header className="flex h-15.25 items-center justify-between border-b border-border bg-card px-6 ">
+    <div className="flex h-full w-full flex-col bg-background">
+      <header className="flex min-h-15.25 items-center justify-between border-b border-border bg-card px-6">
         <h1 className="text-xl font-semibold text-foreground">Configurações</h1>
       </header>
 
-      <Tabs defaultValue="geral" className="mx-auto w-full max-w-7xl space-y-3">
+      <Tabs defaultValue="geral" className="mx-auto w-full max-w-7xl gap-6 p-6">
         <TabsList className="w-full gap-2 rounded-full px-1 h-10!">
           <TabsTrigger value="geral" className="group relative data-[state=active]:bg-card">
             <Bolt className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
@@ -88,11 +88,6 @@ export default function SettingsPage() {
             <CircleEllipsis className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
             <span className="truncate">Opção 4</span>
           </TabsTrigger>
-
-          <TabsTrigger value="opção 5" className=" group relative data-[state=active]:bg-card">
-            <CircleEllipsis className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
-            <span className="truncate">Opção 5</span>
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="geral" className="space-y-6 outline-none">
@@ -101,7 +96,7 @@ export default function SettingsPage() {
               <CardTitle className="text-xl font-semibold text-foreground">Aparência</CardTitle>
               <CardDescription className="text-sm text-muted-foreground">Personalize o esquema de cores do sistema para o seu conforto visual.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6 flex flex-row gap-4">
+            <CardContent className="grid grid-cols-1 lg:grid-cols-[6fr_4fr] gap-4">
               <ColorScheme />
               <BackgroundOptions />
             </CardContent>
