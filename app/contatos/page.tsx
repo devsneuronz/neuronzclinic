@@ -102,6 +102,7 @@ function getStatusFields(chat: ChatRecord, status: ChatStatusOption) {
 export default function ContatosPage() {
   const router = useRouter();
   const [contacts, setContacts] = useState<ChatRecord[]>([]);
+  const contactsRef = useRef<ChatRecord[]>([]);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState(ALL_FILTERS);
   const [cityFilter, setCityFilter] = useState(ALL_FILTERS);
@@ -113,6 +114,11 @@ export default function ContatosPage() {
   const [statusOptions, setStatusOptions] = useState<ChatStatusOption[]>([]);
   const [tagOptions, setTagOptions] = useState<ChatTag[]>([]);
   const loadRequestIdRef = useRef(0);
+  const setContactsState = useCallback((updater: ChatRecord[] | ((current: ChatRecord[]) => ChatRecord[])) => {
+    const nextContacts = typeof updater === "function" ? updater(contactsRef.current) : updater;
+    contactsRef.current = nextContacts;
+    setContacts(nextContacts);
+  }, []);
 
   const selectedContact = contacts.find((contact) => contact.id === selectedContactId);
   const fallbackStatusOptions = useMemo(() => getFallbackStatusOptions(contacts), [contacts]);
@@ -147,7 +153,7 @@ export default function ContatosPage() {
       });
       if (requestId !== loadRequestIdRef.current) return;
 
-      setContacts((current) => {
+      setContactsState((current) => {
         if (refresh) return data;
         const knownIds = new Set(current.map((contact) => contact.id));
         return [...current, ...data.filter((contact) => !knownIds.has(contact.id))];
@@ -162,7 +168,7 @@ export default function ContatosPage() {
       setIsLoading(false);
       setIsLoadingMore(false);
     }
-  }, []);
+  }, [setContactsState]);
 
   useEffect(() => {
     window.queueMicrotask(() => void loadContacts({ refresh: true, searchTerm: debouncedSearch }));
@@ -196,7 +202,7 @@ export default function ContatosPage() {
   }
 
   function updateContactById(contactId: string, updater: (contact: ChatRecord) => ChatRecord) {
-    setContacts((current) => current.map((contact) => (contact.id === contactId ? updater(contact) : contact)));
+    setContactsState((current) => current.map((contact) => (contact.id === contactId ? updater(contact) : contact)));
   }
 
   function restoreContact(contact: ChatRecord) {
@@ -272,7 +278,8 @@ export default function ContatosPage() {
   }
 
   async function handleToggleContactTag(contact: ChatRecord, tag: ChatTag) {
-    const currentTags = getChatTags(contact);
+    const latestContact = contactsRef.current.find((current) => current.id === contact.id) ?? contact;
+    const currentTags = getChatTags(latestContact);
     const tagKey = getTagKey(tag);
     const hasTag = currentTags.some((currentTag) => getTagKey(currentTag) === tagKey);
     const nextTags = hasTag ? currentTags.filter((currentTag) => getTagKey(currentTag) !== tagKey) : [...currentTags, tag];
