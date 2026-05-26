@@ -1,27 +1,75 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Check } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const backgroundOptionsOpts = [
   {
-    id: "default",
-    name: "",
+    id: "solid",
+    name: "Cor sólida",
+    value: "var(--sidebar-custom-primary)",
+  },
+  {
+    id: "abs1",
+    name: "3D",
     value: "url(https://images.pexels.com/photos/33797647/pexels-photo-33797647.jpeg?_gl=1*1r1azh5*_ga*MjE3MDg1NjY4LjE3Nzk3MjQ0Nzk.*_ga_8JE65Q40S6*czE3Nzk3MjQ0NzkkbzEkZzAkdDE3Nzk3MjQ0NzkkajYwJGwwJGgw)",
-    isDarkBg: true,
+  },
+
+  {
+    id: "3D ",
+    name: "3D 2",
+    value: "url('/bgs/3D-2.jpg')",
+  },
+  {
+    id: "abs3",
+    name: "Formas",
+    value: "url(https://img.magnific.com/free-vector/realistic-3d-shapes-floating-background_23-2148907251.jpg?t=st=1779741447~exp=1779745047~hmac=4e4e0b7fd1d394e3996728748b4621783704f7d9ff5ad3acfbb39604532a7826&w=1480)",
+  },
+  {
+    id: "gradient",
+    name: "Gradiente 1",
+    value: "url(/bgs/gradient1.avif)",
+  },
+  {
+    id: "gradient 2",
+    name: "Gradiente 2",
+    value: "url('/bgs/gradient2.avif')",
   },
 ];
+
+const updateLoginBackground = (backgroundValue: string) => {
+  if (typeof window !== "undefined") {
+    document.documentElement.style.setProperty("--login-custom-bg", backgroundValue);
+
+    localStorage.setItem("selected-login-bg", backgroundValue);
+  }
+};
 
 export function BackgroundOptions() {
   const [currentBg, setCurrentBg] = useState("default");
 
+  useEffect(() => {
+    const savedBg = localStorage.getItem("selected-login-bg");
+    if (savedBg) {
+      const found = backgroundOptionsOpts.find((opt) => opt.value === savedBg);
+      if (found) setCurrentBg(found.id);
+
+      document.documentElement.style.setProperty("--login-custom-bg", savedBg);
+    }
+  }, []);
+
+  const handleSelectBackground = (id: string, value: string) => {
+    setCurrentBg(id);
+    updateLoginBackground(value);
+  };
+
   return (
-    <Card className="border border-border bg-card shadow-sm w-full h-full">
+    <Card className="border border-border bg-card shadow-sm w-7/10 h-full">
       <CardContent className="space-y-6">
         <div className="space-y-2">
           <Label className="text-sm font-medium text-foreground">Fundo do Login</Label>
 
-          <div className="grid grid-cols-3 gap-3 bg-muted/10 p-3 rounded-xl border border-border/40">
+          <div className="grid grid-cols-3 gap-3">
             {backgroundOptionsOpts.map((bg) => {
               const isSelected = currentBg === bg.id;
 
@@ -29,19 +77,19 @@ export function BackgroundOptions() {
                 <button
                   key={bg.id}
                   type="button"
-                  onClick={() => setCurrentBg(bg.id)}
+                  onClick={() => handleSelectBackground(bg.id, bg.value)}
                   className="relative overflow-hidden rounded-xl aspect-3/4 border-2 transition-all group select-none text-left cursor-pointer bg-popover"
                   style={{
                     borderColor: isSelected ? "var(--theme-primary)" : "transparent",
                   }}
                 >
                   <div
-                    className="absolute inset-0 top-1/2 left-1/2 -translate-1/2 w-[140%] h-[140%] bg-cover aspect-4/3 rotate-90 bg-center opacity-80"
+                    className="absolute inset-0 top-1/2 left-1/2 -translate-1/2 w-[140%] h-[140%] aspect-4/3 rotate-90 bg-cover bg-center opacity-80"
                     style={{
                       backgroundImage: bg.value,
                     }}
                   >
-                    <div className="absolute inset-0 mix-blend-color opacity-80 bg-theme-primary" />
+                    <div className="absolute inset-0 mix-blend-color opacity-90 bg-theme-primary" />
 
                     <div
                       className="absolute h-full backdrop-blur-md right-0 w-4/5"
@@ -96,4 +144,3 @@ export function BackgroundOptions() {
     </Card>
   );
 }
-

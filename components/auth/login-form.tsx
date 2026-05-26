@@ -155,12 +155,12 @@ export function LoginForm() {
       <div className="flex flex-row justify-center lg:h-full lg:bg-card text-foreground p-4 lg:pr-0 rounded-[48px] lg:border border-border/70">
         <section className="overflow-hidden relative hidden lg:block rounded-4xl aspect-3/4 bg-popover">
           <div
-            className="absolute inset-0 top-1/2 left-1/2 -translate-1/2 w-[calc(100vh-92px)] bg-cover aspect-4/3 rotate-90 bg-center opacity-80"
+            className="absolute inset-0 top-1/2 left-1/2 -translate-1/2 w-[calc(100vh-92px)] bg-cover aspect-4/3 rotate-90 bg-center opacity-90"
             style={{
               backgroundImage: "var(--login-background)",
             }}
           >
-            <div className="absolute inset-0 mix-blend-color opacity-80 bg-theme-primary" />
+            <div className="absolute inset-0 mix-blend-color opacity-90 bg-theme-primary" />
             <div
               className="absolute h-full backdrop-blur-xl right-0 w-4/5 "
               style={{
@@ -199,7 +199,7 @@ export function LoginForm() {
             <div className="mb-8 flex justify-center lg:hidden">
               <Image src="/logos/logo-full-light.png" alt="Neuronz Clinic" width={190} height={74} priority className="h-auto w-40 dark:invert" />
             </div>
-            <div className="rounded-xl border border-border/70 bg-theme-primary/1 lg:border-0 p-6 sm:p-8 lg:mx-10 shadow-xl lg:shadow-none">
+            <div className="rounded-xl border border-border/70 bg-card lg:border-0 p-6 sm:p-8 lg:mx-10 shadow-xl lg:shadow-none">
               <div className="space-y-1.5 text-center lg:text-left">
                 <h1 className="text-4xl font-semibold tracking-tight text-theme-fg">Entrar</h1>
                 <p className="text-sm text-muted-foreground">Faça login para acessar o painel da clínica.</p>

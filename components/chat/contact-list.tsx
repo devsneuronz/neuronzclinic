@@ -17,7 +17,7 @@ import { getChatTags, getReadableTextColor } from "@/lib/chat-tags";
 import { ChatRecord, LatestMessageStatus } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
-import { ChevronDown, ChevronUp, Feather, FilterX, HatGlasses, Loader2, Repeat, Search, Send, SquarePlus } from "lucide-react";
+import { ChevronDown, ChevronUp, Feather, FilterX, HatGlasses, Loader2, Search, Send, SquarePlus } from "lucide-react";
 import type { FormEvent, UIEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
@@ -306,6 +306,32 @@ export function ContactList({
     return stateFilteredChats;
   }, [filteredChats, scopeTab, stateTab]);
 
+  const tabCounts = useMemo(() => {
+    const counts = {
+      aguardando: 0,
+      entrada: 0,
+      finalizados: 0,
+    };
+
+    const chatsInScope = filteredChats.filter((chat) => {
+      if (scopeTab === "ia" && chat.ia_responde !== true) return false;
+      if (scopeTab === "mine" && chat.ia_responde === true) return false;
+      return true;
+    });
+
+    chatsInScope.forEach((chat) => {
+      if (chat.finalizada === true) {
+        counts.finalizados += 1;
+      } else if (chat.last_message_fromMe === true) {
+        counts.aguardando += 1;
+      } else {
+        counts.entrada += 1;
+      }
+    });
+
+    return counts;
+  }, [filteredChats, scopeTab]);
+
   function clearFilters() {
     setStatusFilter(ALL_FILTERS);
     setTagFilter(ALL_FILTERS);
@@ -385,12 +411,9 @@ export function ContactList({
         <Avatar className="h-9 w-9">
           <AvatarFallback className="bg-gradient-to-br from-teal-600 to-teal-800 text-xs text-white">P</AvatarFallback>
         </Avatar>
-        <span className="font-medium text-foreground">{isLoading ? "Carregando usuário..." : userName}</span>
+        <span className="font-medium text-foreground whitespace-nowrap">{isLoading ? "Carregando usuário..." : userName}</span>
 
         <div className="ml-auto flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
-            <Repeat className="h-4 w-4" />
-          </Button>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -530,12 +553,20 @@ export function ContactList({
                 key={tab.id}
                 type="button"
                 className={cn(
-                  "h-8 rounded-md text-xs font-medium text-muted-foreground transition-colors",
+                  "h-8 rounded-md text-xs font-medium text-muted-foreground transition-colors flex flex-row items-center justify-center gap-1",
                   stateTab === tab.id ? "bg-theme-primary text-white shadow-sm ring-1 ring-border/70" : "hover:bg-theme-accent hover:text-foreground dark:hover:bg-theme-primary/20",
                 )}
                 onClick={() => setStateTab(tab.id)}
               >
-                {tab.label}
+                <span>{tab.label}</span>
+                <span
+                  className={cn(
+                    "inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[8px] font-semibold transition-colors",
+                    stateTab === tab.id ? "bg-white/20 text-white" : "bg-muted-foreground/15 text-muted-foreground",
+                  )}
+                >
+                  {tabCounts[tab.id]}
+                </span>
               </button>
             ))}
           </div>

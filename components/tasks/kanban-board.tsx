@@ -655,13 +655,7 @@ function TaskDetailsDialog({
                 <p className="mt-1 text-xs text-muted-foreground">Registre o histórico de acompanhamento desta tarefa.</p>
               </div>
 
-              <Textarea
-                className="min-h-24 resize-y"
-                value={noteDraft}
-                onChange={(event) => onNoteDraftChange(event.target.value)}
-                placeholder="Digite uma atualização sobre a resolução da tarefa"
-                disabled={isSavingNote}
-              />
+              <Textarea className="min-h-24 resize-y" value={noteDraft} onChange={(event) => onNoteDraftChange(event.target.value)} placeholder="Digite uma atualização sobre a resolução da tarefa" disabled={isSavingNote} />
 
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs text-muted-foreground">{isLoadingNotes ? "Carregando histórico..." : `${notes.length} registro${notes.length === 1 ? "" : "s"}`}</p>
@@ -689,7 +683,15 @@ function TaskDetailsDialog({
                           <span>{formatDateTime(note.updated_at || note.created_at, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
                           {note.status_snapshot ? <span className="ml-2">Status: {note.status_snapshot}</span> : null}
                         </div>
-                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => onDeleteNote(note.id)} aria-label="Apagar evolução" disabled={deletingNoteId === note.id}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          onClick={() => onDeleteNote(note.id)}
+                          aria-label="Apagar evolução"
+                          disabled={deletingNoteId === note.id}
+                        >
                           {deletingNoteId === note.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                         </Button>
                       </div>
@@ -860,10 +862,7 @@ export function KanbanBoard() {
       .finally(() => setIsLoadingTaskResolutionNotes(false));
   };
 
-  const handleUpdateTask = async (
-    task: Task,
-    values: { type: string; status: string; dueDate: string; responsibleUserId: string; subject: string; observations: string },
-  ) => {
+  const handleUpdateTask = async (task: Task, values: { type: string; status: string; dueDate: string; responsibleUserId: string; subject: string; observations: string }) => {
     setSavingTaskId(task.id);
     setTaskActionError("");
 
@@ -1029,7 +1028,7 @@ export function KanbanBoard() {
 
   return (
     <div className="flex h-screen flex-1 flex-col bg-background">
-      <header className="border-b bg-card px-6 py-5">
+      <header className="border-b bg-card px-6 py-2">
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -1037,7 +1036,7 @@ export function KanbanBoard() {
                 <span className="h-2 w-2 rounded-full bg-cyan-600" />
                 Airtable / Encaminhamentos
               </div>
-              <h1 className="mt-1 text-2xl font-semibold tracking-normal text-foreground">Tarefas</h1>
+              <h1 className="text-xl font-semibold text-foreground">Tarefas</h1>
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -1130,22 +1129,9 @@ export function KanbanBoard() {
                   </div>
                 </div>
               ) : view.value === "todas" ? (
-                statusOrder.map((status) => (
-                  <KanbanColumn
-                    key={status}
-                    status={status}
-                    tasks={tasksByStatus[status]}
-                    isFiltering={isFiltering}
-                    onSelectTask={handleSelectTask}
-                  />
-                ))
+                statusOrder.map((status) => <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} isFiltering={isFiltering} onSelectTask={handleSelectTask} />)
               ) : (
-                <TaskStatusGrid
-                  status={view.value}
-                  tasks={tasksByStatus[view.value]}
-                  isFiltering={isFiltering}
-                  onSelectTask={handleSelectTask}
-                />
+                <TaskStatusGrid status={view.value} tasks={tasksByStatus[view.value]} isFiltering={isFiltering} onSelectTask={handleSelectTask} />
               )}
             </main>
           </TabsContent>
