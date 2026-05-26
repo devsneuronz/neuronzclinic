@@ -295,6 +295,32 @@ export function ContactList({
     return stateFilteredChats;
   }, [filteredChats, scopeTab, stateTab]);
 
+  const tabCounts = useMemo(() => {
+    const counts = {
+      aguardando: 0,
+      entrada: 0,
+      finalizados: 0,
+    };
+
+    const chatsInScope = filteredChats.filter((chat) => {
+      if (scopeTab === "ia" && chat.ia_responde !== true) return false;
+      if (scopeTab === "mine" && chat.ia_responde === true) return false;
+      return true;
+    });
+
+    chatsInScope.forEach((chat) => {
+      if (chat.finalizada === true) {
+        counts.finalizados += 1;
+      } else if (chat.last_message_fromMe === true) {
+        counts.aguardando += 1;
+      } else {
+        counts.entrada += 1;
+      }
+    });
+
+    return counts;
+  }, [filteredChats, scopeTab]);
+
   function clearFilters() {
     setStatusFilter(ALL_FILTERS);
     setTagFilter(ALL_FILTERS);
@@ -478,12 +504,20 @@ export function ContactList({
                 key={tab.id}
                 type="button"
                 className={cn(
-                  "h-8 rounded-md text-xs font-medium text-muted-foreground transition-colors",
+                  "h-8 rounded-md text-xs font-medium text-muted-foreground transition-colors flex flex-row items-center justify-center gap-1",
                   stateTab === tab.id ? "bg-theme-primary text-white shadow-sm ring-1 ring-border/70" : "hover:bg-theme-accent hover:text-foreground dark:hover:bg-theme-primary/20",
                 )}
                 onClick={() => setStateTab(tab.id)}
               >
-                {tab.label}
+                <span>{tab.label}</span>
+                <span
+                  className={cn(
+                    "inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[8px] font-semibold transition-colors",
+                    stateTab === tab.id ? "bg-white/20 text-white" : "bg-muted-foreground/15 text-muted-foreground",
+                  )}
+                >
+                  {tabCounts[tab.id]}
+                </span>
               </button>
             ))}
           </div>
