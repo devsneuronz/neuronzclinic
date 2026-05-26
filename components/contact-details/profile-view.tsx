@@ -1,18 +1,18 @@
-import { createContactNote, deleteContactNote, fetchContactNotes, type ChatRecord, type ContactNoteRecord } from "@/lib/supabase-rest";
-import { Input } from "../ui/input";
-import { Calendar, ChevronDown, FileText, GripVertical, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getChatTags, getReadableTextColor } from "@/lib/chat-tags";
-import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
+import { createContactNote, deleteContactNote, fetchContactNotes, type ChatRecord, type ContactNoteRecord } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import { Calendar, ChevronDown, FileText, GripVertical, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
-import { Textarea } from "../ui/textarea";
-import { Field, FieldDescription, FieldLabel } from "../ui/fields";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import { Field, FieldDescription, FieldLabel } from "../ui/fields";
+import { Input } from "../ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { Textarea } from "../ui/textarea";
 
 type AppointmentOptions = {
   types: string[];
@@ -283,9 +283,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
   const contactTasks = contactTaskResult?.key === latestAppointmentKey ? contactTaskResult.tasks : [];
   const isLoadingContactTasks = Boolean(latestAppointmentKey && contactTaskResult?.key !== latestAppointmentKey);
   const appointmentStatusLabel = isLoadingLatestAppointment ? "Carregando..." : latestAppointment?.status || "Nenhum";
-  const hasUnsavedContactInfo = (Object.keys(contactInfo) as ContactInfoField[]).some(
-    (field) => normalizeContactInfoValues(contactInfo)[field] !== normalizeContactInfoValues(getContactInfoValues(chat))[field],
-  );
+  const hasUnsavedContactInfo = (Object.keys(contactInfo) as ContactInfoField[]).some((field) => normalizeContactInfoValues(contactInfo)[field] !== normalizeContactInfoValues(getContactInfoValues(chat))[field]);
 
   function handleChangeContactInfoField(field: ContactInfoField, value: string) {
     setContactInfo((current) => ({ ...current, [field]: value }));
@@ -890,9 +888,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                 </div>
 
                 {appointmentFeedback && (
-                  <p className={cn("rounded-md px-3 py-2 text-sm", appointmentFeedback.type === "success" ? "bg-emerald-500/10 text-emerald-700" : "bg-destructive/10 text-destructive")}>
-                    {appointmentFeedback.message}
-                  </p>
+                  <p className={cn("rounded-md px-3 py-2 text-sm", appointmentFeedback.type === "success" ? "bg-emerald-500/10 text-emerald-700" : "bg-destructive/10 text-destructive")}>{appointmentFeedback.message}</p>
                 )}
 
                 <DialogFooter className="border-t border-border pt-3">
@@ -1010,11 +1006,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                   <Textarea className="min-h-20 resize-y rounded-md" value={taskObservations} onChange={(event) => setTaskObservations(event.target.value)} />
                 </div>
 
-                {taskFeedback && (
-                  <p className={cn("rounded-md px-3 py-2 text-sm", taskFeedback.type === "success" ? "bg-emerald-500/10 text-emerald-700" : "bg-destructive/10 text-destructive")}>
-                    {taskFeedback.message}
-                  </p>
-                )}
+                {taskFeedback && <p className={cn("rounded-md px-3 py-2 text-sm", taskFeedback.type === "success" ? "bg-emerald-500/10 text-emerald-700" : "bg-destructive/10 text-destructive")}>{taskFeedback.message}</p>}
 
                 <DialogFooter className="border-t border-border pt-3">
                   <Button
@@ -1038,21 +1030,11 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                 <div className="grid grid-cols-2 gap-3 p-1">
                   <div className="min-w-0">
                     <label className="mb-1.5 block text-xs font-semibold text-foreground">Cidade residência</label>
-                    <Input
-                      className="h-8 max-w-full bg-background text-sm"
-                      value={contactInfo.cidade_residencia}
-                      onChange={(event) => handleChangeContactInfoField("cidade_residencia", event.target.value)}
-                      disabled={isSavingContactInfo}
-                    />
+                    <Input className="h-8 max-w-full bg-background text-sm" value={contactInfo.cidade_residencia} onChange={(event) => handleChangeContactInfoField("cidade_residencia", event.target.value)} disabled={isSavingContactInfo} />
                   </div>
                   <div className="min-w-0">
                     <label className="mb-1.5 block text-xs font-semibold text-foreground">Cidade desejada</label>
-                    <Input
-                      className="h-8 max-w-full bg-background text-sm"
-                      value={contactInfo.cidade_desejada}
-                      onChange={(event) => handleChangeContactInfoField("cidade_desejada", event.target.value)}
-                      disabled={isSavingContactInfo}
-                    />
+                    <Input className="h-8 max-w-full bg-background text-sm" value={contactInfo.cidade_desejada} onChange={(event) => handleChangeContactInfoField("cidade_desejada", event.target.value)} disabled={isSavingContactInfo} />
                   </div>
                   <div className="min-w-0">
                     <label className="mb-1.5 block text-xs font-semibold text-foreground">Email</label>
@@ -1067,12 +1049,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                   </div>
                   <div className="min-w-0">
                     <label className="mb-1.5 block text-xs font-semibold text-foreground">Celular</label>
-                    <Input
-                      className="h-8 max-w-full bg-background text-sm"
-                      value={contactInfo.phone_contact}
-                      onChange={(event) => handleChangeContactInfoField("phone_contact", event.target.value)}
-                      disabled={isSavingContactInfo}
-                    />
+                    <Input className="h-8 max-w-full bg-background text-sm" value={contactInfo.phone_contact} onChange={(event) => handleChangeContactInfoField("phone_contact", event.target.value)} disabled={isSavingContactInfo} />
                   </div>
                 </div>
                 <div className="mx-1 mt-3 flex items-center justify-between gap-3">
@@ -1228,18 +1205,14 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
           </Field>
 
           <div className="mt-3 flex items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground">
-              {isLoadingContactNotes ? "Carregando anotações..." : `${contactNotes.length} anotação${contactNotes.length === 1 ? "" : "es"}`}
-            </p>
+            <p className="text-xs text-muted-foreground">{isLoadingContactNotes ? "Carregando anotações..." : contactNotes?.length ? `${contactNotes.length} anotaç${contactNotes.length === 1 ? "ão" : "ões"}` : "Nenhuma anotação"}</p>
             <Button type="button" size="sm" disabled={!chat?.chat_id || !contactNoteDraft.trim() || isSavingContactNote} onClick={() => void handleCreateContactNote()}>
               {isSavingContactNote ? "Salvando..." : "Salvar anotação"}
             </Button>
           </div>
 
           {contactNoteFeedback && (
-            <p className={cn("mt-3 rounded-md px-3 py-2 text-sm", contactNoteFeedback.type === "success" ? "bg-emerald-500/10 text-emerald-700" : "bg-destructive/10 text-destructive")}>
-              {contactNoteFeedback.message}
-            </p>
+            <p className={cn("mt-3 rounded-md px-3 py-2 text-sm", contactNoteFeedback.type === "success" ? "bg-emerald-500/10 text-emerald-700" : "bg-destructive/10 text-destructive")}>{contactNoteFeedback.message}</p>
           )}
 
           <div className="mt-3 space-y-2">
@@ -1301,65 +1274,59 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
             ) : (
               <p className="text-sm text-muted-foreground">Nenhuma consulta registrada</p>
             )
-          ) : (
-            isLoadingContactTasks ? (
-              <p className="text-sm text-muted-foreground">Carregando avisos e tarefas...</p>
-            ) : contactTasks.length > 0 ? (
-              <div className="space-y-2">
-                {taskFeedback?.type === "error" && (
-                  <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{taskFeedback.message}</p>
-                )}
-                {contactTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    role="button"
-                    tabIndex={0}
-                    className="cursor-pointer rounded-md border border-border bg-card px-3 py-2 text-left transition hover:border-primary/40 hover:bg-muted/40"
-                    onClick={() => setSelectedContactTask(task)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setSelectedContactTask(task);
-                      }
-                    }}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">{task.subject || task.type || "Aviso / tarefa"}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">Prazo: {getTaskDateLabel(task.dueDate)}</p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <span className={cn("rounded-sm px-2 py-0.5 text-[11px] font-medium", getTaskStatusClassName(task.status))}>
-                          {task.statusLabel || "Sem status"}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          disabled={deletingTaskId === task.id}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void handleDeleteTask(task);
-                          }}
-                          aria-label="Excluir tarefa"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+          ) : isLoadingContactTasks ? (
+            <p className="text-sm text-muted-foreground">Carregando avisos e tarefas...</p>
+          ) : contactTasks.length > 0 ? (
+            <div className="space-y-2">
+              {taskFeedback?.type === "error" && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{taskFeedback.message}</p>}
+              {contactTasks.map((task) => (
+                <div
+                  key={task.id}
+                  role="button"
+                  tabIndex={0}
+                  className="cursor-pointer rounded-md border border-border bg-card px-3 py-2 text-left transition hover:border-primary/40 hover:bg-muted/40"
+                  onClick={() => setSelectedContactTask(task)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedContactTask(task);
+                    }
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">{task.subject || task.type || "Aviso / tarefa"}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">Prazo: {getTaskDateLabel(task.dueDate)}</p>
                     </div>
-                    <div className="mt-2 grid gap-1 text-xs text-muted-foreground">
-                      {task.type && <p className="truncate">Tipo: {task.type}</p>}
-                      {task.responsible && <p className="truncate">Responsável: {task.responsible}</p>}
-                      {task.createdAt && <p className="truncate">Criada em: {getAppointmentDateLabel(task.createdAt)}</p>}
-                      {task.description && <p className="line-clamp-2 break-words">Obs.: {task.description}</p>}
+                    <div className="flex shrink-0 items-center gap-1">
+                      <span className={cn("rounded-sm px-2 py-0.5 text-[11px] font-medium", getTaskStatusClassName(task.status))}>{task.statusLabel || "Sem status"}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        disabled={deletingTaskId === task.id}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleDeleteTask(task);
+                        }}
+                        aria-label="Excluir tarefa"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Nenhum aviso ou tarefa</p>
-            )
+                  <div className="mt-2 grid gap-1 text-xs text-muted-foreground">
+                    {task.type && <p className="truncate">Tipo: {task.type}</p>}
+                    {task.responsible && <p className="truncate">Responsável: {task.responsible}</p>}
+                    {task.createdAt && <p className="truncate">Criada em: {getAppointmentDateLabel(task.createdAt)}</p>}
+                    {task.description && <p className="line-clamp-2 break-words">Obs.: {task.description}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Nenhum aviso ou tarefa</p>
           )}
         </div>
       </div>
@@ -1370,14 +1337,8 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
             <>
               <DialogHeader>
                 <div className="flex flex-wrap items-center gap-2">
-                  {selectedContactTask.type && (
-                    <span className="rounded-sm border border-primary/20 bg-primary/5 px-2 py-0.5 text-xs font-medium text-primary">
-                      {selectedContactTask.type}
-                    </span>
-                  )}
-                  <span className={cn("rounded-sm px-2 py-0.5 text-xs font-medium", getTaskStatusClassName(selectedContactTask.status))}>
-                    {selectedContactTask.statusLabel || "Sem status"}
-                  </span>
+                  {selectedContactTask.type && <span className="rounded-sm border border-primary/20 bg-primary/5 px-2 py-0.5 text-xs font-medium text-primary">{selectedContactTask.type}</span>}
+                  <span className={cn("rounded-sm px-2 py-0.5 text-xs font-medium", getTaskStatusClassName(selectedContactTask.status))}>{selectedContactTask.statusLabel || "Sem status"}</span>
                 </div>
                 <DialogTitle className="pt-2 text-xl leading-7">{selectedContactTask.subject || "Aviso / tarefa"}</DialogTitle>
               </DialogHeader>
@@ -1404,9 +1365,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
 
                 <div>
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Observações</p>
-                  <p className="min-h-24 whitespace-pre-wrap rounded-md border border-border bg-card p-3 text-sm leading-relaxed text-foreground">
-                    {selectedContactTask.description || "Sem observações registradas."}
-                  </p>
+                  <p className="min-h-24 whitespace-pre-wrap rounded-md border border-border bg-card p-3 text-sm leading-relaxed text-foreground">{selectedContactTask.description || "Sem observações registradas."}</p>
                 </div>
               </div>
 
@@ -1414,12 +1373,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                 <Button type="button" variant="ghost" onClick={() => setSelectedContactTask(null)}>
                   Fechar
                 </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  disabled={deletingTaskId === selectedContactTask.id}
-                  onClick={() => void handleDeleteTask(selectedContactTask)}
-                >
+                <Button type="button" variant="destructive" disabled={deletingTaskId === selectedContactTask.id} onClick={() => void handleDeleteTask(selectedContactTask)}>
                   <Trash2 className="h-4 w-4" />
                   {deletingTaskId === selectedContactTask.id ? "Excluindo..." : "Excluir tarefa"}
                 </Button>
