@@ -4,6 +4,7 @@ import { ChatWindow } from "@/components/chat/chat-window";
 import { ContactList } from "@/components/chat/contact-list";
 import { ContactDetails } from "@/components/contact-details/contact-details";
 import type { ContactInfoValues } from "@/components/contact-details/profile-view";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
 import { getChatTags, type ChatTag } from "@/lib/chat-tags";
@@ -363,6 +364,7 @@ function getFallbackTagOptions(chats: ChatRecord[]) {
 export default function ChatsPage() {
   const [showDetails, setShowDetails] = useState(false);
   const searchParams = useSearchParams();
+  const { user, isLoading: isCurrentUserLoading } = useCurrentUser();
 
   const [chats, setChats] = useState<ChatRecord[]>([]);
   const [searchChats, setSearchChats] = useState<ChatRecord[]>([]);
@@ -423,20 +425,23 @@ export default function ChatsPage() {
   const [isSignatureMode, setIsAssinaturaMode] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("neuronzclinic.chat.use-signature");
-      return saved === "true"; // Converte a string "true" para o booleano true. Qualquer outra coisa vira false.
+      return saved === null ? true : saved === "true";
     }
-    return false;
+    return true;
   });
 
   const [isGhostMode, setIsGhostMode] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("neuronzclinic.chat.ghost-mode");
-      return saved === "true";
+      return saved === null ? true : saved === "true";
     }
-    return false;
+    return true;
   });
 
-  const isGhostModeRef = useRef(isGhostMode);
+  const canUseAdminChatModes = user?.role === "admin";
+  const effectiveSignatureMode = canUseAdminChatModes ? isSignatureMode : true;
+  const effectiveGhostMode = isCurrentUserLoading ? true : canUseAdminChatModes ? isGhostMode : false;
+  const isGhostModeRef = useRef(effectiveGhostMode);
 
   useEffect(() => {
     localStorage.setItem("neuronzclinic.chat.use-signature", String(isSignatureMode));
@@ -478,8 +483,8 @@ export default function ChatsPage() {
   }, [selectedChatRemoteId]);
 
   useEffect(() => {
-    isGhostModeRef.current = isGhostMode;
-  }, [isGhostMode]);
+    isGhostModeRef.current = effectiveGhostMode;
+  }, [effectiveGhostMode]);
 
   useEffect(() => {
     messagesByChatIdRef.current = messagesByChatId;
@@ -1406,18 +1411,18 @@ export default function ChatsPage() {
   }, []);
 
   useEffect(() => {
-    if (selectedChatId && !isGhostMode) {
+    if (selectedChatId && !effectiveGhostMode) {
       window.queueMicrotask(handleMarkAsRead);
     }
-  }, [selectedChatId, isGhostMode, handleMarkAsRead]);
+  }, [selectedChatId, effectiveGhostMode, handleMarkAsRead]);
 
   useEffect(() => {
-    if (!selectedChatRemoteId || isGhostMode || !hasLoadedSelectedMessages) return;
+    if (!selectedChatRemoteId || effectiveGhostMode || !hasLoadedSelectedMessages) return;
 
     window.queueMicrotask(() => {
       void sendReadReceiptForChat(selectedChatRemoteId, messages);
     });
-  }, [hasLoadedSelectedMessages, isGhostMode, messages, selectedChatRemoteId, sendReadReceiptForChat]);
+  }, [hasLoadedSelectedMessages, effectiveGhostMode, messages, selectedChatRemoteId, sendReadReceiptForChat]);
 
   const handleMarkAsUnread = useCallback(async () => {
     if (!selectedChat) return;
@@ -1437,7 +1442,7 @@ export default function ChatsPage() {
   }, [persistSelectedChatUnreadCount, restoreSelectedChat, selectedChat, updateSelectedChatUnreadCount]);
 
   useEffect(() => {
-    if (!selectedChat || !isGhostMode) return;
+    if (!selectedChat || !effectiveGhostMode) return;
 
     const rememberedUnreadCount = ghostUnreadCountByChatIdRef.current[selectedChat.id] ?? 0;
     const currentUnreadCount = selectedChat.unread_count ?? 0;
@@ -1456,7 +1461,7 @@ export default function ChatsPage() {
     }).catch((err) => {
       setError(err instanceof Error ? err.message : "Não foi possível manter a conversa como não lida no modo espião.");
     });
-  }, [isGhostMode, selectedChat, updateSelectedChatUnreadCount]);
+  }, [effectiveGhostMode, selectedChat, updateSelectedChatUnreadCount]);
 
   const updateSelectedChatTags = useCallback(
     (tags: ChatTag[]) => {
@@ -1646,10 +1651,11 @@ export default function ChatsPage() {
           }}
           onLoadMore={loadMoreChats}
           onCreateContact={handleCreateContact}
-          isSignatureMode={isSignatureMode}
+          isSignatureMode={effectiveSignatureMode}
           onToggleAssinatura={setIsAssinaturaMode}
-          isGhostMode={isGhostMode}
+          isGhostMode={effectiveGhostMode}
           onToggleGhost={setIsGhostMode}
+          canUseAdminChatModes={canUseAdminChatModes}
           isMobile={isMobile}
         />
       );
@@ -1697,7 +1703,7 @@ export default function ChatsPage() {
         isDetailsOpen={showDetails}
         onToggleStatus={handleToggleStatus}
         isMobile={true}
-        isSignatureMode={isSignatureMode}
+        isSignatureMode={effectiveSignatureMode}
       />
     );
   }
@@ -1718,10 +1724,11 @@ export default function ChatsPage() {
         onSelect={handleSelectChat}
         onLoadMore={loadMoreChats}
         onCreateContact={handleCreateContact}
-        isSignatureMode={isSignatureMode}
+        isSignatureMode={effectiveSignatureMode}
         onToggleAssinatura={setIsAssinaturaMode}
-        isGhostMode={isGhostMode}
+        isGhostMode={effectiveGhostMode}
         onToggleGhost={setIsGhostMode}
+        canUseAdminChatModes={canUseAdminChatModes}
       />
       <PanelGroup direction="horizontal" className="flex-1">
         <Panel defaultSize={showDetails ? panelSizes.chatDefault : 100} minSize={50}>
@@ -1744,7 +1751,7 @@ export default function ChatsPage() {
             onToggleDetails={() => setShowDetails(!showDetails)}
             isDetailsOpen={showDetails}
             onToggleStatus={handleToggleStatus}
-            isSignatureMode={isSignatureMode}
+            isSignatureMode={effectiveSignatureMode}
           />
         </Panel>
 

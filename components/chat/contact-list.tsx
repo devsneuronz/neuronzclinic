@@ -41,6 +41,7 @@ interface ContactListProps {
   onToggleAssinatura: (checked: boolean) => void;
   isGhostMode: boolean;
   onToggleGhost: (checked: boolean) => void;
+  canUseAdminChatModes?: boolean;
 
   isMobile?: boolean;
 }
@@ -131,6 +132,7 @@ export function ContactList({
   onToggleAssinatura,
   isGhostMode,
   onToggleGhost,
+  canUseAdminChatModes = false,
   isMobile,
 }: ContactListProps) {
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
@@ -413,6 +415,7 @@ export function ContactList({
         </Avatar>
         <span className="font-medium text-foreground whitespace-nowrap">{isLoading ? "Carregando usuário..." : userName}</span>
 
+        {canUseAdminChatModes && (
         <div className="ml-auto flex items-center gap-3">
           <TooltipProvider>
             <Tooltip>
@@ -439,6 +442,7 @@ export function ContactList({
             </Tooltip>
           </TooltipProvider>
         </div>
+        )}
       </div>
 
       <div className="border-b border-border p-3">

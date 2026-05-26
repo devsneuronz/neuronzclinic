@@ -21,7 +21,7 @@ export function normalizeUserRole(value: unknown): UserRole {
 
   const role = value.trim().toLowerCase()
 
-  if (["admin", "administrador", "administrator", "owner", "dono"].includes(role)) {
+  if (["adm", "admin", "administrador", "administrator", "owner", "dono"].includes(role)) {
     return "admin"
   }
 

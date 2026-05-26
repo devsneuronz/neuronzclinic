@@ -60,6 +60,12 @@ function getName(fields: Record<string, unknown>, fallbackEmail: string) {
 }
 
 function getRole(fields: Record<string, unknown>) {
+  const statusRole = normalizeUserRole(getStringField(fields, ["Status", "status"]))
+
+  if (statusRole === "admin") {
+    return statusRole
+  }
+
   return normalizeUserRole(
     getStringField(fields, ["Role", "role", "Perfil", "perfil", "Cargo", "cargo", "Tipo", "tipo", "Permissão", "Permissao"]),
   )
