@@ -48,7 +48,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
       <Button
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className="absolute top-1/2 right-0 h-14 w-4 translate-x-[50%] translate-y-[50%] rounded-sm p-0! shadow-md z-95 bg-[var(--sidebar-custom-primary)] text-[var(--sidebar-custom-primary-fg)] border border-[var(--sidebar-custom-border)] hover:bg-(--sidebar-custom-primary)/70"
+        className="absolute top-1/2 right-0 h-14 w-4 translate-x-[50%] translate-y-[50%] rounded-sm p-0! shadow-md z-41 bg-[var(--sidebar-custom-primary)] text-[var(--sidebar-custom-primary-fg)] border border-[var(--sidebar-custom-border)] hover:bg-(--sidebar-custom-primary)/70"
       >
         {isCollapsed ? <ChevronRight /> : <ChevronLeft />}
       </Button>

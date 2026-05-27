@@ -23,7 +23,7 @@ type ChatHeaderProps = {
 
 export function ChatHeader({ chat, isSelectionMode, selectedMessagesCount, canDeleteSelectedMessages, onClearSelection, onForwardSelected, onDeleteSelected, onToggleDetails, onToggleStatus, isMobile, onCloseChat }: ChatHeaderProps) {
   return (
-    <div className="flex items-center justify-between border-b border-border bg-card px-4 h-15.25">
+    <div className="flex items-center justify-between border-b border-border bg-card px-4 min-h-15.25">
       {isSelectionMode ? (
         <>
           <div className="flex min-w-0 items-center gap-3">
