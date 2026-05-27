@@ -60,10 +60,8 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen w-full bg-background">
-      {/* 🔄 Condicional baseada no seu Hook */}
       {isMobile ? <MobileHeader /> : <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />}
 
-      {/* O espaçamento do topo (pt-14) só se aplica se for mobile para não quebrar o layout do desktop */}
       <main className="flex-1 overflow-y-auto bg-background">{children}</main>
     </div>
   );

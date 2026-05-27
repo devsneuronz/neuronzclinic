@@ -71,19 +71,20 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
             </Link>
           );
         })}
-        <NoteMentionNotifications user={user} isCollapsed={isCollapsed} />
       </nav>
+
+      <div className="p-4 w-full overflow-clip">
+        <NoteMentionNotifications user={user} isCollapsed={isCollapsed} />
+      </div>
 
       <div className="border-t border-[var(--sidebar-custom-border)] p-4">
         <div className="flex items-center gap-3">
           <Avatar className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-[var(--sidebar-custom-primary)] text-sm font-semibold text-[var(--sidebar-custom-primary-fg)]">{isLoading ? "" : userInitial}</Avatar>
 
-          {!isCollapsed && (
-            <div className="flex-1 overflow-hidden">
-              <p className="truncate text-sm font-medium text-[var(--sidebar-custom-fg)]">{isLoading ? "Carregando usuário..." : userName}</p>
-              <p className="truncate text-xs text-[var(--sidebar-custom-fg)]/70">{isLoading ? "" : getRoleLabel(role)}</p>
-            </div>
-          )}
+          <div className="flex-1 overflow-hidden">
+            <p className={cn("transition-all whitespace-nowraptext-sm font-medium text-[var(--sidebar-custom-fg)]", isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100")}>{isLoading ? "Carregando usuário..." : userName}</p>
+            <p className={cn("transition-all whitespace-nowrap text-xs text-[var(--sidebar-custom-fg)]/70", isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100")}>{isLoading ? "" : getRoleLabel(role)}</p>
+          </div>
         </div>
       </div>
     </aside>

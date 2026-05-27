@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Bell, CheckCheck, MessageSquareText } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { createSupabaseRealtimeSubscription } from "@/lib/supabase-realtime";
-import type { CurrentUser, MentionableUser } from "@/lib/user-roles";
 import { fetchMentionableUsers, isUserMentioned } from "@/lib/user-mentions";
+import type { CurrentUser, MentionableUser } from "@/lib/user-roles";
 import { cn } from "@/lib/utils";
+import { Bell, CheckCheck, MessageSquareText } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Badge } from "../ui/badge";
 
 type NoteNotification = {
   id: string;
@@ -114,6 +115,7 @@ export function NoteMentionNotifications({ user, isCollapsed }: NoteMentionNotif
   const [notifications, setNotifications] = useState<NoteNotification[]>([]);
   const userEmail = user?.email ?? "";
   const unreadCount = useMemo(() => notifications.filter((notification) => !notification.read).length, [notifications]);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -182,18 +184,26 @@ export function NoteMentionNotifications({ user, isCollapsed }: NoteMentionNotif
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
-          variant="ghost"
-          title={isCollapsed ? "Notificações" : undefined}
-          className={cn("relative w-full justify-start gap-3 px-3 py-2.5 text-muted-foreground hover:text-foreground", isCollapsed && "justify-center px-0")}
+          title={isCollapsed ? "Notificações" : ""}
+          className="ring-0! relative flex items-start justify-baseline gap-3 rounded-sm w-full transition-all p-2.5! bg-transparent text-theme-fg hover:bg-theme-accent/90 data-[state=open]:bg-theme-primary/30"
         >
           <Bell className="h-5 w-5 shrink-0" />
-          {!isCollapsed && <span className="truncate">Notificações</span>}
+
+          <span className={cn("-mt-0.5 transition-all whitespace-nowrap text-sm font-normal", isCollapsed ? "opacity-0 pointer-events-none" : "w-auto opacity-100")}>Notificações</span>
+
           {unreadCount > 0 && (
-            <Badge className={cn("ml-auto h-5 min-w-5 rounded-full px-1.5 text-[10px]", isCollapsed && "absolute right-1 top-1")}>{unreadCount}</Badge>
+            <Badge
+              className={cn(
+                "relative overflow-hidden -mt-px h-4.5 w-4.5 rounded-full text-[10px] flex items-center justify-center text-background bg-[#c14533] text-white shadow-2xl",
+                isCollapsed ? "absolute top-0 right-0 translate-x-1/3 -translate-y-1/3" : "ml-auto",
+              )}
+            >
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </Badge>
           )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-80 p-2">
+      <DropdownMenuContent side={isMobile ? "bottom" : "right"} sideOffset={22} className="w-80">
         <div className="flex items-center justify-between gap-2 px-2 py-1">
           <DropdownMenuLabel className="px-0 py-0">Menções em notas</DropdownMenuLabel>
           {unreadCount > 0 && (
