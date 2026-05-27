@@ -83,6 +83,44 @@ export interface SendMessageInput {
   contactName?: string | null
 }
 
+export interface ScheduledMessageRecord {
+  id: string
+  chat_id: string
+  contact_name: string | null
+  type: string | null
+  text: string | null
+  content: string | null
+  caption: string | null
+  media_url: string | null
+  media_type: string | null
+  media_mime_type: string | null
+  filename: string | null
+  reply_payload: unknown
+  payload: unknown
+  scheduled_at: string
+  timezone: string | null
+  status: "scheduled" | "processing" | "sent" | "failed" | "canceled"
+  attempts: number | null
+  max_attempts: number | null
+  next_attempt_at: string | null
+  sent_at: string | null
+  canceled_at: string | null
+  last_error: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ScheduleMessageInput {
+  chatId: string
+  scheduledAt: string
+  text?: string
+  file?: File | null
+  replyTo?: MessageRecord | null
+  contactName?: string | null
+  createdBy?: string | null
+}
+
 export interface ForwardMessageInput {
   targetChatId: string
   message: MessageRecord
@@ -411,6 +449,143 @@ export async function sendMessage({ chatId, text, file, replyTo, contactName }: 
   }
 
   return response.json()
+}
+
+export async function fetchScheduledMessages({
+  chatId,
+  includeHistory = false,
+  search,
+}: {
+  chatId?: string
+  includeHistory?: boolean
+  search?: string
+} = {}) {
+  const params = new URLSearchParams()
+  if (chatId) params.set("chat_id", chatId)
+  if (includeHistory) params.set("include_history", "true")
+  if (search?.trim()) params.set("search", search.trim())
+
+  const response = await fetch(`/api/scheduled-messages?${params.toString()}`, {
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || `Nao foi possivel carregar os agendamentos (${response.status}).`)
+  }
+
+  const data = (await response.json()) as { messages?: ScheduledMessageRecord[] }
+  return data.messages ?? []
+}
+
+export async function scheduleMessage({ chatId, scheduledAt, text, file, replyTo, contactName, createdBy }: ScheduleMessageInput) {
+  const formData = new FormData()
+  formData.append("chat_id", chatId)
+  formData.append("scheduled_at", scheduledAt)
+
+  const trimmedContactName = contactName?.trim()
+  if (trimmedContactName) formData.append("contact_name", trimmedContactName)
+
+  const trimmedText = text?.trim()
+  if (trimmedText) formData.append("text", trimmedText)
+  if (file) formData.append("file", file)
+  if (createdBy?.trim()) formData.append("created_by", createdBy.trim())
+
+  if (replyTo) {
+    const quotedPayload = buildEvolutionQuotedPayload(replyTo)
+    if (quotedPayload) {
+      formData.append("reply_payload", JSON.stringify(getReplyPayloadForSchedule(replyTo, quotedPayload as unknown as Record<string, unknown>)))
+    }
+  }
+
+  const response = await fetch("/api/scheduled-messages", {
+    method: "POST",
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || `Nao foi possivel agendar a mensagem (${response.status}).`)
+  }
+
+  const data = (await response.json()) as { message?: ScheduledMessageRecord }
+  if (!data.message) throw new Error("O agendamento foi salvo, mas a API nao retornou o registro.")
+  return data.message
+}
+
+function getReplyPayloadForSchedule(message: MessageRecord, quotedPayload: Record<string, unknown>) {
+  const messageId = message.message_id || message.id
+
+  return {
+    reply_to: {
+      message_id: messageId,
+      content: message.content || "",
+      type: message.message_type || "",
+      from_me: !!message.from_me,
+      chat_id: message.chat_id || "",
+      participant: message.participant || "",
+    },
+    reply_to_message_id: messageId,
+    replyToMessageId: messageId,
+    quoted_message_id: messageId,
+    quotedMessageId: messageId,
+    quoted_content: message.content || "",
+    quoted_message_type: message.message_type || "",
+    quoted_from_me: !!message.from_me,
+    quoted_remote_jid: message.chat_id || "",
+    quoted_participant: message.participant || "",
+    quoted_key: quotedPayload.key,
+    quoted: quotedPayload,
+    quotedMessage: quotedPayload,
+    quoted_message: quotedPayload,
+    options: {
+      quoted: quotedPayload,
+    },
+  }
+}
+
+export async function cancelScheduledMessage(id: string) {
+  const response = await fetch("/api/scheduled-messages", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ id, action: "cancel" }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || `Nao foi possivel cancelar o agendamento (${response.status}).`)
+  }
+
+  return response.json() as Promise<{ message?: ScheduledMessageRecord | null }>
+}
+
+export async function updateScheduledMessage({
+  id,
+  text,
+  scheduledAt,
+}: {
+  id: string
+  text: string
+  scheduledAt: string
+}) {
+  const response = await fetch("/api/scheduled-messages", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ id, action: "update", text, scheduled_at: scheduledAt }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || `Nao foi possivel editar o agendamento (${response.status}).`)
+  }
+
+  const data = (await response.json()) as { message?: ScheduledMessageRecord | null }
+  if (!data.message) throw new Error("O agendamento foi editado, mas a API nao retornou o registro.")
+  return data.message
 }
 
 function getForwardMessagePayload(message: MessageRecord) {

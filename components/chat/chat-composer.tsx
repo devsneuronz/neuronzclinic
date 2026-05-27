@@ -2,14 +2,15 @@
 
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import type { ChatRecord, MessageRecord } from "@/lib/supabase-rest";
 import { getMentionLabel, getMentionSlug } from "@/lib/user-mentions";
 import type { MentionableUser } from "@/lib/user-roles";
 import { cn } from "@/lib/utils";
-import { Camera, Check, FileImage, FileText, MapPin, Mic, Paperclip, Pause, PenLine, Reply, Send, Trash2, UserRound, Video, X } from "lucide-react";
+import { CalendarClock, Camera, Check, Clock, FileImage, FileText, MapPin, Mic, Paperclip, Pause, PenLine, Reply, Send, Trash2, UserRound, Video, X } from "lucide-react";
 import type { FormEvent, RefObject } from "react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Textarea } from "../ui/textarea";
 import { getAttachmentLabel } from "./chat-attachment-utils";
 import { formatTime, getDisplayName, getMediaKind, getMessagePreviewText } from "./message-utils";
@@ -53,7 +54,14 @@ type ChatComposerProps = {
   onCloseInternalNote: () => void;
   onNoteDraftChange: (value: string) => void;
   onSaveInternalNote: () => void;
+  onScheduleMessage: (scheduledAt: string) => Promise<void>;
 };
+
+function getLocalDateTimeValue(date = new Date(Date.now() + 10 * 60 * 1000)) {
+  const offset = date.getTimezoneOffset()
+  const localDate = new Date(date.getTime() - offset * 60 * 1000)
+  return localDate.toISOString().slice(0, 16)
+}
 
 export function ChatComposer({
   chat,
@@ -88,8 +96,13 @@ export function ChatComposer({
   onCloseInternalNote,
   onNoteDraftChange,
   onSaveInternalNote,
+  onScheduleMessage,
   isSignatureMode,
 }: ChatComposerProps) {
+  const [isScheduleOpen, setIsScheduleOpen] = useState(false);
+  const [scheduleDateTime, setScheduleDateTime] = useState(() => getLocalDateTimeValue());
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [isScheduling, setIsScheduling] = useState(false);
   const mentionMatch = noteDraft.match(/(^|\s)@([\p{L}\p{N}._-]*)$/u);
   const mentionQuery = mentionMatch?.[2] ?? "";
   const mentionSuggestions = useMemo(() => {
@@ -124,8 +137,39 @@ export function ChatComposer({
     }
   };
 
+  async function handleScheduleSubmit() {
+    const date = new Date(scheduleDateTime);
+    setScheduleError(null);
+
+    if (!draft.trim() && !attachment) {
+      setScheduleError("Digite uma mensagem ou selecione um anexo.");
+      return;
+    }
+
+    if (Number.isNaN(date.getTime())) {
+      setScheduleError("Escolha uma data valida.");
+      return;
+    }
+
+    if (date.getTime() < Date.now() + 30000) {
+      setScheduleError("Escolha um horario futuro.");
+      return;
+    }
+
+    setIsScheduling(true);
+    try {
+      await onScheduleMessage(date.toISOString());
+      setIsScheduleOpen(false);
+      setScheduleDateTime(getLocalDateTimeValue());
+    } catch (error) {
+      setScheduleError(error instanceof Error ? error.message : "Nao foi possivel agendar.");
+    } finally {
+      setIsScheduling(false);
+    }
+  }
+
   return (
-    <form onSubmit={onSubmit} className="border-t border-border bg-card px-4 py-3 h-full">
+    <form onSubmit={onSubmit} className="flex h-full flex-col border-t border-border bg-card px-4 py-3">
       {isInternalNoteOpen && (
         <div className="mb-4 max-w-5xl">
           <div className="mb-2">
@@ -214,7 +258,7 @@ export function ChatComposer({
       {recordingError && <p className="mb-2 rounded-md bg-red-500/10 px-3 py-2 text-xs text-red-500">{recordingError}</p>}
 
       {!isInternalNoteOpen && (
-        <div className="flex items-center gap-3 h-full">
+        <div className="flex min-h-10 flex-1 items-center gap-3">
           {isRecording ? (
             <div className="flex min-w-0 flex-1 items-center gap-3 rounded-full bg-secondary px-2 py-2 shadow-sm">
               <Button type="button" variant="ghost" size="icon" className="shrink-0 rounded-full text-muted-foreground hover:text-red-500" onClick={onCancelRecording} disabled={isSending} aria-label="Cancelar gravação">
@@ -338,6 +382,37 @@ export function ChatComposer({
                   className="flex-1 border-0 bg-input/50 rounded-md resize-none transition-[color,box-shadow] h-full min-h-0"
                 />
               </div>
+              <Popover open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
+                <PopoverTrigger asChild>
+                  <Button type="button" variant="ghost" size="icon" className="shrink-0 text-teal-500 hover:text-teal-600" disabled={isSending} aria-label="Agendar mensagem" title="Agendar mensagem">
+                    <Clock className="h-5 w-5" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" side="top" sideOffset={12} className="w-80 rounded-md border-border bg-card p-3 shadow-xl">
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Agendar mensagem</p>
+                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{attachment ? attachment.name : draft.trim() || "Mensagem"}</p>
+                    </div>
+                    <input
+                      type="datetime-local"
+                      value={scheduleDateTime}
+                      onChange={(event) => setScheduleDateTime(event.target.value)}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                    {scheduleError && <p className="rounded-md bg-red-500/10 px-2 py-1.5 text-xs text-red-500">{scheduleError}</p>}
+                    <div className="flex justify-end gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={() => setIsScheduleOpen(false)}>
+                        Cancelar
+                      </Button>
+                      <Button type="button" size="sm" className="bg-teal-500 text-white hover:bg-teal-600" onClick={handleScheduleSubmit} disabled={isScheduling}>
+                        <CalendarClock className="h-4 w-4" />
+                        Agendar
+                      </Button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
               <Button type="submit" disabled={isSending || (!draft.trim() && !attachment)} size="icon" className="shrink-0 rounded-full bg-teal-500 text-white hover:bg-teal-600" aria-label="Enviar mensagem">
                 <Send className="h-5 w-5" />
               </Button>

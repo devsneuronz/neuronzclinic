@@ -1,11 +1,12 @@
-"use client";
+﻿"use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bolt, CircleEllipsis, Tags, Users } from "lucide-react";
+import { Bolt, CalendarClock, Tags, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BackgroundOptions } from "./background-options";
 import ColorScheme from "./color-scheme";
+import { ScheduledMessagesManager } from "./scheduled-messages-manager";
 import { TagsManager } from "./tags-manager";
 import { UsersGrid } from "./users";
 
@@ -26,7 +27,7 @@ export default function SettingsPage() {
 
     fetch("/api/airtable/users", { cache: "no-store" })
       .then(async (response) => {
-        if (!response.ok) throw new Error("Não foi possível carregar os usuários.");
+        if (!response.ok) throw new Error("NÃ£o foi possÃ­vel carregar os usuÃ¡rios.");
 
         return (await response.json()) as { users?: SettingsUser[] };
       })
@@ -34,7 +35,7 @@ export default function SettingsPage() {
         if (isMounted) setUsers(data.users ?? []);
       })
       .catch((error) => {
-        if (isMounted) setUsersError(error instanceof Error ? error.message : "Não foi possível carregar os usuários.");
+        if (isMounted) setUsersError(error instanceof Error ? error.message : "NÃ£o foi possÃ­vel carregar os usuÃ¡rios.");
       })
       .finally(() => {
         if (isMounted) setIsLoadingUsers(false);
@@ -50,7 +51,7 @@ export default function SettingsPage() {
   return (
     <div className="flex h-full w-full flex-col bg-background">
       <header className="flex min-h-15.25 items-center justify-between border-b border-border bg-card px-6">
-        <h1 className="text-xl font-semibold text-foreground">Configurações</h1>
+        <h1 className="text-xl font-semibold text-foreground">ConfiguraÃ§Ãµes</h1>
       </header>
 
       <Tabs defaultValue="geral" className="mx-auto w-full max-w-7xl gap-6 p-6">
@@ -62,7 +63,7 @@ export default function SettingsPage() {
 
           <TabsTrigger value="usuarios" className=" group relative data-[state=active]:bg-card">
             <Users className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
-            <span className="truncate">Usuários</span>
+            <span className="truncate">UsuÃ¡rios</span>
           </TabsTrigger>
 
           <TabsTrigger value="tags" className=" group relative data-[state=active]:bg-card">
@@ -70,16 +71,16 @@ export default function SettingsPage() {
             <span className="truncate">Tags</span>
           </TabsTrigger>
 
-          <TabsTrigger value="opção 4" className=" group relative data-[state=active]:bg-card">
-            <CircleEllipsis className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
-            <span className="truncate">Opção 4</span>
+          <TabsTrigger value="agendadas" className=" group relative data-[state=active]:bg-card">
+            <CalendarClock className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
+            <span className="truncate">Agendadas</span>
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="geral" className="space-y-6 outline-none">
           <Card className="border border-border bg-card shadow-sm">
             <CardHeader className="space-y-1">
-              <CardTitle className="text-xl font-semibold text-foreground">Aparência</CardTitle>
+              <CardTitle className="text-xl font-semibold text-foreground">AparÃªncia</CardTitle>
               <CardDescription className="text-sm text-muted-foreground">Personalize o esquema de cores do sistema para o seu conforto visual.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 lg:grid-cols-[6fr_4fr] gap-4">
@@ -92,8 +93,8 @@ export default function SettingsPage() {
         <TabsContent value="usuarios" className="outline-none">
           <Card className="border border-border bg-card shadow-sm">
             <CardHeader className="space-y-1">
-              <CardTitle className="text-xl font-semibold text-foreground">Equipe e Permissões</CardTitle>
-              <CardDescription className="text-sm text-muted-foreground">Visualize os profissionais cadastrados na plataforma, seus e-mails e setores de atuação.</CardDescription>
+              <CardTitle className="text-xl font-semibold text-foreground">Equipe e PermissÃµes</CardTitle>
+              <CardDescription className="text-sm text-muted-foreground">Visualize os profissionais cadastrados na plataforma, seus e-mails e setores de atuaÃ§Ã£o.</CardDescription>
             </CardHeader>
             <CardContent>
               <UsersGrid sortedUsers={sortedUsers} isLoadingUsers={isLoadingUsers} usersError={usersError} />
@@ -109,6 +110,18 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent>
               <TagsManager />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="agendadas" className="outline-none">
+          <Card className="border border-border bg-card shadow-sm">
+            <CardHeader className="space-y-1">
+              <CardTitle className="text-xl font-semibold text-foreground">Mensagens Agendadas</CardTitle>
+              <CardDescription className="text-sm text-muted-foreground">Acompanhe e cancele mensagens pendentes agrupadas por contato.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ScheduledMessagesManager />
             </CardContent>
           </Card>
         </TabsContent>

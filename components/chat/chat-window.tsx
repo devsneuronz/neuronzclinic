@@ -4,7 +4,20 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { readChatDraft, writeChatDraft } from "@/lib/chat-drafts";
 import { createSupabaseRealtimeSubscription } from "@/lib/supabase-realtime";
-import { ChatRecord, MessageRecord, createChatNote, deleteChatNote, fetchChatNotes, fetchChats, type ChatNoteRecord } from "@/lib/supabase-rest";
+import {
+  ChatRecord,
+  MessageRecord,
+  cancelScheduledMessage,
+  createChatNote,
+  deleteChatNote,
+  fetchChatNotes,
+  fetchChats,
+  fetchScheduledMessages,
+  scheduleMessage,
+  updateScheduledMessage,
+  type ChatNoteRecord,
+  type ScheduledMessageRecord,
+} from "@/lib/supabase-rest";
 import { fetchMentionableUsers } from "@/lib/user-mentions";
 import type { MentionableUser } from "@/lib/user-roles";
 import type { FormEvent, UIEvent } from "react";
@@ -19,6 +32,7 @@ import { ExpandedImageModal } from "./expanded-image-modal";
 import { ForwardMessageDialog } from "./forward-message-dialog";
 import { MessageList, type InternalNote, type TimelineItem } from "./message-list";
 import { getDateLabel, getMediaKind, getMessagePreviewText, isDeletedMessage } from "./message-utils";
+import { ScheduledMessagesStrip } from "./scheduled-messages-strip";
 
 const FORWARD_TARGET_PAGE_SIZE = 50;
 interface ChatWindowProps {
@@ -134,6 +148,7 @@ export function ChatWindow({
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [internalNotes, setInternalNotes] = useState<InternalNote[]>([]);
+  const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessageRecord[]>([]);
   const [noteMentionUsers, setNoteMentionUsers] = useState<MentionableUser[]>([]);
   const [isInternalNoteOpen, setIsInternalNoteOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
@@ -159,6 +174,8 @@ export function ChatWindow({
 
   const { user } = useCurrentUser();
   const userName = user?.name ?? "Usuário";
+  const composerMinSize = isInternalNoteOpen ? 212 : 65;
+  const composerMaxSize = isInternalNoteOpen ? 300 : 180;
 
   const messagesRef = useRef(messages);
   const currentChatIdRef = useRef(chat?.chat_id ?? null);
@@ -419,6 +436,60 @@ export function ChatWindow({
   }, [chat?.chat_id]);
 
   useEffect(() => {
+    const chatId = chat?.chat_id ?? null;
+
+    if (!chatId) {
+      const timeout = window.setTimeout(() => {
+        setScheduledMessages([]);
+      }, 0);
+
+      return () => window.clearTimeout(timeout);
+    }
+
+    let isMounted = true;
+
+    fetchScheduledMessages({ chatId })
+      .then((messages) => {
+        if (isMounted) setScheduledMessages(messages);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setScheduledMessages([]);
+        setMessageActionError(error instanceof Error ? error.message : "Nao foi possivel carregar os agendamentos.");
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [chat?.chat_id]);
+
+  useEffect(() => {
+    const unsubscribe = createSupabaseRealtimeSubscription([{ table: "scheduled_messages" }], (payload) => {
+      if (payload.table !== "scheduled_messages") return;
+
+      if ((payload.eventType === "INSERT" || payload.eventType === "UPDATE") && payload.record) {
+        const message = payload.record as unknown as ScheduledMessageRecord;
+        if (message.chat_id !== chat?.chat_id) return;
+        setScheduledMessages((current) => {
+          const withoutMessage = current.filter((currentMessage) => currentMessage.id !== message.id);
+          if (message.status === "canceled" || message.status === "sent") return withoutMessage;
+          return [...withoutMessage, message].sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at));
+        });
+        return;
+      }
+
+      if (payload.eventType === "DELETE" && payload.oldRecord?.id) {
+        const deletedId = String(payload.oldRecord.id);
+        setScheduledMessages((current) => current.filter((message) => message.id !== deletedId));
+      }
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [chat?.chat_id]);
+
+  useEffect(() => {
     const unsubscribe = createSupabaseRealtimeSubscription([{ table: "chat_notes" }], (payload) => {
       if (payload.table !== "chat_notes") return;
 
@@ -525,6 +596,49 @@ export function ChatWindow({
     } finally {
       setIsSending(false);
     }
+  }
+
+  async function handleScheduleMessage(scheduledAt: string) {
+    if (!chat?.chat_id) return;
+
+    const text = draft.trim();
+    if (!text && !attachment) return;
+
+    const textToSchedule = isSignatureMode && text ? `*${userName}*\n${text}` : text;
+
+    setMessageActionError(null);
+    const scheduledMessage = await scheduleMessage({
+      chatId: chat.chat_id,
+      contactName: chat.nome_contato || chat.pushname,
+      text: textToSchedule,
+      file: attachment,
+      replyTo,
+      scheduledAt,
+      createdBy: user?.email || userName,
+    });
+
+    setScheduledMessages((current) => [...current.filter((message) => message.id !== scheduledMessage.id), scheduledMessage].sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at)));
+    setDraft("");
+    setReplyTo(null);
+    removeAttachment();
+  }
+
+  async function handleCancelScheduledMessage(messageId: string) {
+    const previousMessages = scheduledMessages;
+    setScheduledMessages((current) => current.filter((message) => message.id !== messageId));
+    setMessageActionError(null);
+
+    try {
+      await cancelScheduledMessage(messageId);
+    } catch (error) {
+      setScheduledMessages(previousMessages);
+      setMessageActionError(error instanceof Error ? error.message : "Nao foi possivel cancelar o agendamento.");
+    }
+  }
+
+  async function handleUpdateScheduledMessage({ id, text, scheduledAt }: { id: string; text: string; scheduledAt: string }) {
+    const updatedMessage = await updateScheduledMessage({ id, text, scheduledAt });
+    setScheduledMessages((current) => [...current.filter((message) => message.id !== updatedMessage.id), updatedMessage].sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at)));
   }
 
   function handleAttachmentSelected(file?: File | null) {
@@ -928,6 +1042,7 @@ export function ChatWindow({
           isMobile={isMobile}
           onCloseChat={onCloseChat}
         />
+        {!isInternalNoteOpen && <ScheduledMessagesStrip messages={scheduledMessages} onCancel={handleCancelScheduledMessage} onUpdate={handleUpdateScheduledMessage} />}
         <Group orientation="vertical">
           <Panel>
             <MessageList
@@ -963,7 +1078,7 @@ export function ChatWindow({
             />
           </Panel>
           <Separator className="h-1 bg-(--chat-muted)/50 transition-colors hover:bg-theme-primary/50" />
-          <Panel id="message-panel" defaultSize="65px" minSize={isInternalNoteOpen ? "212px" : "65px"} maxSize={isInternalNoteOpen ? "300px" : "180px"} className="bg-(--chat-card) border-l border-(--chat-muted)">
+          <Panel id="message-panel" defaultSize={composerMinSize} minSize={composerMinSize} maxSize={composerMaxSize} className="bg-(--chat-card) border-l border-(--chat-muted)">
             <ChatComposer
               chat={chat}
               draft={draft}
@@ -997,6 +1112,7 @@ export function ChatWindow({
               onCloseInternalNote={closeInternalNote}
               onNoteDraftChange={setNoteDraft}
               onSaveInternalNote={saveInternalNote}
+              onScheduleMessage={handleScheduleMessage}
               isSignatureMode={isSignatureMode}
             />
           </Panel>
