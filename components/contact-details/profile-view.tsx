@@ -1,7 +1,7 @@
 import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getChatTags, getReadableTextColor } from "@/lib/chat-tags";
-import { createContactNote, deleteContactNote, fetchContactNotes, type ChatRecord, type ContactNoteRecord } from "@/lib/supabase-rest";
+import { createContactNote, deleteContactNote, fetchContactNotes, importAirtableContactNotes, type ChatRecord, type ContactNoteRecord } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 import { Calendar, ChevronDown, FileText, GripVertical, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -214,6 +214,10 @@ function getTaskStatusClassName(status: ContactTask["status"]) {
   return "bg-amber-500/10 text-amber-700 dark:text-amber-300";
 }
 
+function getDisplayNoteContent(content: string) {
+  return content.replace(/^\[Historico Airtable\][^\n]*\n/i, "").trim();
+}
+
 export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions = [], onChangeStatus, onToggleTag, onReorderTags, onCommitTagOrder, onChangeContactInfo }: ProfileViewProps) {
   const [bottomTab, setBottomTab] = useState<"consultas" | "avisos">("consultas");
   const [draggedTagId, setDraggedTagId] = useState<string | null>(null);
@@ -250,6 +254,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
   const [contactNoteDraft, setContactNoteDraft] = useState("");
   const [isLoadingContactNotes, setIsLoadingContactNotes] = useState(false);
   const [isSavingContactNote, setIsSavingContactNote] = useState(false);
+  const [isImportingContactNotes, setIsImportingContactNotes] = useState(false);
   const [contactNoteFeedback, setContactNoteFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [contactInfo, setContactInfo] = useState(() => getContactInfoValues(chat));
   const [isSavingContactInfo, setIsSavingContactInfo] = useState(false);
@@ -456,16 +461,42 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
         setContactNoteDraft("");
         setContactNoteFeedback(null);
         setIsLoadingContactNotes(false);
+        setIsImportingContactNotes(false);
         return;
       }
 
       setIsLoadingContactNotes(true);
+      setIsImportingContactNotes(false);
       setContactNoteFeedback(null);
 
       fetchContactNotes(chatId)
         .then((notes) => {
           if (!isMounted) return;
           setContactNotes(notes);
+          setIsImportingContactNotes(true);
+
+          void importAirtableContactNotes({
+            chatId,
+            contactPhone: contactPhone || chat?.phone_contact || null,
+          })
+            .then((result) => {
+              if (!isMounted) return;
+
+              if (result.notes.length > 0) {
+                setContactNotes((current) => [...result.notes, ...current.filter((currentNote) => !result.notes.some((note) => note.id === currentNote.id))]);
+                setContactNoteFeedback({
+                  type: "success",
+                  message: `${result.imported} anotaç${result.imported === 1 ? "ão" : "ões"} antiga${result.imported === 1 ? "" : "s"} recuperada${result.imported === 1 ? "" : "s"} do Airtable.`,
+                });
+              }
+            })
+            .catch(() => {
+              if (!isMounted) return;
+            })
+            .finally(() => {
+              if (!isMounted) return;
+              setIsImportingContactNotes(false);
+            });
         })
         .catch((error) => {
           if (!isMounted) return;
@@ -485,7 +516,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
       isMounted = false;
       window.clearTimeout(timeoutId);
     };
-  }, [chat?.chat_id]);
+  }, [chat?.chat_id, chat?.phone_contact, contactPhone]);
 
   async function handleCreateAppointment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1206,9 +1237,11 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
 
           <div className="mt-3 flex items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">{isLoadingContactNotes ? "Carregando anotações..." : contactNotes?.length ? `${contactNotes.length} anotaç${contactNotes.length === 1 ? "ão" : "ões"}` : "Nenhuma anotação"}</p>
-            <Button type="button" size="sm" disabled={!chat?.chat_id || !contactNoteDraft.trim() || isSavingContactNote} onClick={() => void handleCreateContactNote()}>
-              {isSavingContactNote ? "Salvando..." : "Salvar anotação"}
-            </Button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button type="button" size="sm" disabled={!chat?.chat_id || !contactNoteDraft.trim() || isSavingContactNote} onClick={() => void handleCreateContactNote()}>
+                {isSavingContactNote ? "Salvando..." : "Salvar anotação"}
+              </Button>
+            </div>
           </div>
 
           {contactNoteFeedback && (
@@ -1216,7 +1249,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
           )}
 
           <div className="mt-3 space-y-2">
-            {!isLoadingContactNotes && contactNotes.length === 0 ? (
+            {!isLoadingContactNotes && !isImportingContactNotes && contactNotes.length === 0 ? (
               <p className="rounded-md border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">Nenhuma anotação registrada.</p>
             ) : (
               contactNotes.map((note) => (
@@ -1227,7 +1260,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
-                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{note.content}</p>
+                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{getDisplayNoteContent(note.content)}</p>
                 </div>
               ))
             )}

@@ -215,6 +215,19 @@ export interface CreateContactNoteInput {
   content: string
 }
 
+export interface ImportAirtableContactNotesInput {
+  chatId: string
+  contactPhone?: string | null
+}
+
+export interface ImportAirtableContactNotesResult {
+  imported: number
+  skipped: number
+  notes: ContactNoteRecord[]
+  message?: string
+  fields?: string[]
+}
+
 function getTimestampValue(value?: string | null) {
   if (!value) return 0
   const time = Date.parse(value)
@@ -813,4 +826,31 @@ export async function deleteContactNote(noteId: string) {
   }
 
   return response.json() as Promise<{ ok: true }>
+}
+
+export async function importAirtableContactNotes({ chatId, contactPhone = null }: ImportAirtableContactNotesInput) {
+  const response = await fetch("/api/airtable/contact-notes/import", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      chatId,
+      contactPhone,
+    }),
+  })
+
+  const data = (await response.json().catch(() => null)) as ImportAirtableContactNotesResult | { message?: string } | null
+
+  if (!response.ok) {
+    throw new Error(data?.message || `Nao foi possivel importar as anotacoes antigas (${response.status}).`)
+  }
+
+  return {
+    imported: "imported" in (data ?? {}) ? Number((data as ImportAirtableContactNotesResult).imported) : 0,
+    skipped: "skipped" in (data ?? {}) ? Number((data as ImportAirtableContactNotesResult).skipped) : 0,
+    notes: "notes" in (data ?? {}) && Array.isArray((data as ImportAirtableContactNotesResult).notes) ? (data as ImportAirtableContactNotesResult).notes : [],
+    message: data?.message,
+    fields: "fields" in (data ?? {}) ? (data as ImportAirtableContactNotesResult).fields : undefined,
+  } satisfies ImportAirtableContactNotesResult
 }
