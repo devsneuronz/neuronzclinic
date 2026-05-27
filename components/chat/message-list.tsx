@@ -122,7 +122,7 @@ export function MessageList({
     <>
       <div
         ref={scrollAreaRef}
-        className="relative flex-1 overflow-y-auto bg-theme-accent/10 bg-fixed"
+        className="relative flex-1 overflow-y-auto bg-theme-accent/10 bg-fixed h-full"
         onScroll={onMessagesScroll}
         style={{
           backgroundImage: "url(/bgs/bgdefault.png)",
