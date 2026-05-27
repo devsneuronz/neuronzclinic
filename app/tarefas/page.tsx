@@ -1,5 +1,5 @@
-import type { Metadata } from "next";
 import { KanbanBoard } from "@/components/tasks/kanban-board";
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Tarefas",
@@ -7,9 +7,8 @@ export const metadata: Metadata = {
 
 export default function TarefasPage() {
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-dvh bg-background">
       <KanbanBoard />
     </div>
   );
 }
-

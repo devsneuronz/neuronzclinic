@@ -528,7 +528,7 @@ export function WeeklyCalendar() {
   }
 
   return (
-    <div className="flex h-screen flex-1 flex-col bg-card overflow-hidden">
+    <div className="flex h-dvh flex-1 flex-col bg-card overflow-hidden">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border p-4 md:px-6 min-h-15.25">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-center min-w-0">
           <div className="flex items-center gap-1">
@@ -705,7 +705,7 @@ export function WeeklyCalendar() {
                     return (
                       <div
                         key={day.toISOString()}
-                        className={cn("relative flex-1 cursor-crosshair border-r border-border select-none last:border-r-0", isSameDay(day, new Date()) && "bg-primary/5")}
+                        className={cn("relative flex-1 border-r border-border last:border-r-0 select-none", isSameDay(day, new Date()) && "bg-primary/5", isTouchSelecting ? "touch-none cursor-crosshair" : "touch-pan-y md:touch-auto")}
                         onMouseDown={(event) => handleGridMouseDown(day, event)}
                         onMouseMove={(event) => handleGridMouseMove(day, event)}
                         onMouseUp={(event) => handleGridMouseUp(day, event)}
@@ -949,8 +949,8 @@ export function WeeklyCalendar() {
       </Dialog>
 
       <Dialog open={isAppointmentDialogOpen} onOpenChange={setIsAppointmentDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[85dvh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-2 shrink-0">
             <DialogTitle className="flex items-center gap-2 text-base">
               <CalendarPlus className="h-4 w-4 text-primary" />
               Novo agendamento
@@ -958,139 +958,141 @@ export function WeeklyCalendar() {
             <DialogDescription>{appointmentStartDateTime ? format(new Date(appointmentStartDateTime), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : "Selecione os dados do agendamento."}</DialogDescription>
           </DialogHeader>
 
-          <form className="space-y-4" onSubmit={handleCreateAppointment}>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">Status</label>
-                <Select value={appointmentStatus} onValueChange={setAppointmentStatus} required>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options.status.map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {status}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          <form className="flex flex-1 flex-col overflow-hidden" onSubmit={handleCreateAppointment}>
+            <div className="flex-1 overflow-y-auto p-6 pt-2 space-y-4 min-h-0">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">Status</label>
+                  <Select value={appointmentStatus} onValueChange={setAppointmentStatus} required>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {options.status.map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {status}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">Tipo</label>
+                  <Select value={appointmentType} onValueChange={setAppointmentType} required>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {options.types.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">Início</label>
+                  <Input type="datetime-local" value={appointmentStartDateTime} onChange={(event) => setAppointmentStartDateTime(event.target.value)} required />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">Fim</label>
+                  <Input type="datetime-local" value={appointmentEndDateTime} onChange={(event) => setAppointmentEndDateTime(event.target.value)} required />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">Presencial/Online</label>
+                  <Select value={appointmentAttendanceMode} onValueChange={setAppointmentAttendanceMode} required>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Formato" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {options.attendanceModes.map((mode) => (
+                        <SelectItem key={mode} value={mode}>
+                          {mode}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">Profissional</label>
+                  <Select value={appointmentProfessionalId} onValueChange={setAppointmentProfessionalId} required>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Profissional" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {options.professionals.map((professional) => (
+                        <SelectItem key={professional.id} value={professional.id}>
+                          {professional.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">Tipo</label>
-                <Select value={appointmentType} onValueChange={setAppointmentType} required>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options.types.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {type}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <label className="text-xs font-semibold text-foreground">Paciente</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="pl-9"
+                    value={appointmentPatientSearch}
+                    placeholder={selectedAppointmentPatient?.label || "Digite o nome do paciente"}
+                    onBlur={() => {
+                      window.setTimeout(() => setIsPatientSearchOpen(false), 120);
+                    }}
+                    onChange={(event) => {
+                      setAppointmentPatientSearch(event.target.value);
+                      setAppointmentPatientId("");
+                      setIsPatientSearchOpen(true);
+                    }}
+                    onFocus={() => {
+                      if (appointmentPatientSearch.trim()) setIsPatientSearchOpen(true);
+                    }}
+                  />
+                  {isPatientSearchOpen && appointmentPatientSearch.trim() && (
+                    <div className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md">
+                      {patientSearchResults.length > 0 ? (
+                        patientSearchResults.map((patient) => (
+                          <button
+                            key={patient.id}
+                            type="button"
+                            className={cn(
+                              "flex w-full items-center justify-between rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground",
+                              appointmentPatientId === patient.id && "bg-accent text-accent-foreground",
+                            )}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => {
+                              setAppointmentPatientId(patient.id);
+                              setAppointmentPatientSearch(patient.label);
+                              setIsPatientSearchOpen(false);
+                            }}
+                          >
+                            <span className="truncate">{patient.label}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-2 py-2 text-sm text-muted-foreground">Nenhum paciente encontrado</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {selectedAppointmentPatient && <p className="text-xs text-muted-foreground">Selecionado: {selectedAppointmentPatient.label}</p>}
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">Início</label>
-                <Input type="datetime-local" value={appointmentStartDateTime} onChange={(event) => setAppointmentStartDateTime(event.target.value)} required />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">Fim</label>
-                <Input type="datetime-local" value={appointmentEndDateTime} onChange={(event) => setAppointmentEndDateTime(event.target.value)} required />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">Presencial/Online</label>
-                <Select value={appointmentAttendanceMode} onValueChange={setAppointmentAttendanceMode} required>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Formato" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options.attendanceModes.map((mode) => (
-                      <SelectItem key={mode} value={mode}>
-                        {mode}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">Profissional</label>
-                <Select value={appointmentProfessionalId} onValueChange={setAppointmentProfessionalId} required>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Profissional" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options.professionals.map((professional) => (
-                      <SelectItem key={professional.id} value={professional.id}>
-                        {professional.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <label className="text-xs font-semibold text-foreground">Observações</label>
+                <Textarea className="min-h-20 resize-none" value={appointmentObservations} onChange={(event) => setAppointmentObservations(event.target.value)} />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-foreground">Paciente</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  className="pl-9"
-                  value={appointmentPatientSearch}
-                  placeholder={selectedAppointmentPatient?.label || "Digite o nome do paciente"}
-                  onBlur={() => {
-                    window.setTimeout(() => setIsPatientSearchOpen(false), 120);
-                  }}
-                  onChange={(event) => {
-                    setAppointmentPatientSearch(event.target.value);
-                    setAppointmentPatientId("");
-                    setIsPatientSearchOpen(true);
-                  }}
-                  onFocus={() => {
-                    if (appointmentPatientSearch.trim()) setIsPatientSearchOpen(true);
-                  }}
-                />
-                {isPatientSearchOpen && appointmentPatientSearch.trim() && (
-                  <div className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md">
-                    {patientSearchResults.length > 0 ? (
-                      patientSearchResults.map((patient) => (
-                        <button
-                          key={patient.id}
-                          type="button"
-                          className={cn(
-                            "flex w-full items-center justify-between rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground",
-                            appointmentPatientId === patient.id && "bg-accent text-accent-foreground",
-                          )}
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => {
-                            setAppointmentPatientId(patient.id);
-                            setAppointmentPatientSearch(patient.label);
-                            setIsPatientSearchOpen(false);
-                          }}
-                        >
-                          <span className="truncate">{patient.label}</span>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="px-2 py-2 text-sm text-muted-foreground">Nenhum paciente encontrado</div>
-                    )}
-                  </div>
-                )}
-              </div>
-              {selectedAppointmentPatient && <p className="text-xs text-muted-foreground">Selecionado: {selectedAppointmentPatient.label}</p>}
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-foreground">Observações</label>
-              <Textarea className="min-h-20 resize-none" value={appointmentObservations} onChange={(event) => setAppointmentObservations(event.target.value)} />
-            </div>
-
-            <DialogFooter>
+            <DialogFooter className="p-6 pt-4 border-t border-border bg-muted/20 shrink-0">
               <Button type="button" variant="outline" onClick={() => setIsAppointmentDialogOpen(false)}>
                 Cancelar
               </Button>

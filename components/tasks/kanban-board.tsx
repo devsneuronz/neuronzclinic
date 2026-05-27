@@ -837,7 +837,14 @@ function TaskDetailsDialog({
 
               <div className="flex flex-wrap items-center gap-2">
                 <input ref={noteAttachmentInputRef} type="file" accept="image/*" className="hidden" onChange={handleAttachmentChange} disabled={isSavingNote || isRecordingAudio} />
-                <Button type="button" variant="outline" size="sm" className="transition hover:-translate-y-0.5 hover:border-sky-400/50 hover:bg-sky-400/10 hover:text-sky-600 hover:shadow-xs" onClick={() => noteAttachmentInputRef.current?.click()} disabled={isSavingNote || isRecordingAudio}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="transition hover:-translate-y-0.5 hover:border-sky-400/50 hover:bg-sky-400/10 hover:text-sky-600 hover:shadow-xs"
+                  onClick={() => noteAttachmentInputRef.current?.click()}
+                  disabled={isSavingNote || isRecordingAudio}
+                >
                   <ImageIcon className="h-4 w-4" />
                   Imagem
                 </Button>
@@ -856,7 +863,12 @@ function TaskDetailsDialog({
                   {isRecordingAudio ? "Parar gravação" : "Gravar audio"}
                 </Button>
                 {noteAttachment ? (
-                  <div className={cn("flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs", attachmentType === "unsupported" ? "border-destructive/25 bg-destructive/5 text-destructive" : "bg-background text-muted-foreground")}>
+                  <div
+                    className={cn(
+                      "flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs",
+                      attachmentType === "unsupported" ? "border-destructive/25 bg-destructive/5 text-destructive" : "bg-background text-muted-foreground",
+                    )}
+                  >
                     <span className="truncate">
                       {attachmentType === "unsupported" ? "Formato nao suportado" : getTaskNoteAttachmentLabel(noteAttachment)}: {noteAttachment.name}
                     </span>
@@ -883,7 +895,13 @@ function TaskDetailsDialog({
 
               {attachmentType === "audio" && noteMediaPreviewUrl ? <audio controls className="w-full" src={noteMediaPreviewUrl} /> : null}
 
-              <Textarea className="min-h-24 resize-y" value={noteDraft} onChange={(event) => onNoteDraftChange(event.target.value)} placeholder={noteAttachment ? "Legenda opcional" : "Digite uma atualização sobre a resolução da tarefa"} disabled={isSavingNote} />
+              <Textarea
+                className="min-h-24 resize-y"
+                value={noteDraft}
+                onChange={(event) => onNoteDraftChange(event.target.value)}
+                placeholder={noteAttachment ? "Legenda opcional" : "Digite uma atualização sobre a resolução da tarefa"}
+                disabled={isSavingNote}
+              />
 
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs text-muted-foreground">{isLoadingNotes ? "Carregando histórico..." : `${notes.length} registro${notes.length === 1 ? "" : "s"}`}</p>
@@ -1284,7 +1302,7 @@ export function KanbanBoard() {
   const totalOpen = tasksByStatus.aguardando.length + tasksByStatus.resolvendo.length;
 
   return (
-    <div className="flex h-screen flex-1 flex-col bg-background">
+    <div className="flex h-dvh flex-1 flex-col bg-background">
       <header className="border-b bg-card px-6 py-2">
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

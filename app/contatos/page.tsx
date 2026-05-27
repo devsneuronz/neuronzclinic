@@ -137,38 +137,41 @@ export default function ContatosPage() {
     });
   }, [cityFilter, contacts, statusFilter]);
 
-  const loadContacts = useCallback(async ({ refresh = false, offset = 0, searchTerm = "" }: { refresh?: boolean; offset?: number; searchTerm?: string } = {}) => {
-    const requestId = ++loadRequestIdRef.current;
-    const trimmedSearch = searchTerm.trim();
+  const loadContacts = useCallback(
+    async ({ refresh = false, offset = 0, searchTerm = "" }: { refresh?: boolean; offset?: number; searchTerm?: string } = {}) => {
+      const requestId = ++loadRequestIdRef.current;
+      const trimmedSearch = searchTerm.trim();
 
-    if (refresh) {
-      setIsLoading(true);
-    }
+      if (refresh) {
+        setIsLoading(true);
+      }
 
-    try {
-      const data = await fetchChats({
-        limit: trimmedSearch ? SEARCH_PAGE_SIZE : PAGE_SIZE,
-        offset: refresh ? 0 : offset,
-        search: trimmedSearch || undefined,
-      });
-      if (requestId !== loadRequestIdRef.current) return;
+      try {
+        const data = await fetchChats({
+          limit: trimmedSearch ? SEARCH_PAGE_SIZE : PAGE_SIZE,
+          offset: refresh ? 0 : offset,
+          search: trimmedSearch || undefined,
+        });
+        if (requestId !== loadRequestIdRef.current) return;
 
-      setContactsState((current) => {
-        if (refresh) return data;
-        const knownIds = new Set(current.map((contact) => contact.id));
-        return [...current, ...data.filter((contact) => !knownIds.has(contact.id))];
-      });
-      setHasMore(!trimmedSearch && data.length === PAGE_SIZE);
-      setError(undefined);
-    } catch (err) {
-      if (requestId !== loadRequestIdRef.current) return;
-      setError(err instanceof Error ? err.message : "Nao foi possivel carregar os contatos.");
-    } finally {
-      if (requestId !== loadRequestIdRef.current) return;
-      setIsLoading(false);
-      setIsLoadingMore(false);
-    }
-  }, [setContactsState]);
+        setContactsState((current) => {
+          if (refresh) return data;
+          const knownIds = new Set(current.map((contact) => contact.id));
+          return [...current, ...data.filter((contact) => !knownIds.has(contact.id))];
+        });
+        setHasMore(!trimmedSearch && data.length === PAGE_SIZE);
+        setError(undefined);
+      } catch (err) {
+        if (requestId !== loadRequestIdRef.current) return;
+        setError(err instanceof Error ? err.message : "Nao foi possivel carregar os contatos.");
+      } finally {
+        if (requestId !== loadRequestIdRef.current) return;
+        setIsLoading(false);
+        setIsLoadingMore(false);
+      }
+    },
+    [setContactsState],
+  );
 
   useEffect(() => {
     window.queueMicrotask(() => void loadContacts({ refresh: true, searchTerm: debouncedSearch }));
@@ -350,7 +353,7 @@ export default function ContatosPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-dvh bg-background flex flex-col">
       <header className="flex h-15.25 items-center justify-between border-b border-border bg-card px-6 ">
         <h1 className="text-xl font-semibold text-foreground">Contatos</h1>
       </header>

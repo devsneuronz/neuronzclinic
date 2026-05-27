@@ -1,9 +1,9 @@
+import { AppShell } from "@/components/app-shell";
+import { ThemeProvider } from "@/components/theme-provider";
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
-import { ThemeProvider } from "@/components/theme-provider";
-import { AppShell } from "@/components/app-shell";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,7 +30,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-br" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body suppressHydrationWarning className="font-sans antialiased flex h-screen overflow-hidden">
+      <body suppressHydrationWarning className="font-sans antialiased flex h-dvh overflow-hidden">
         <ThemeProvider attribute="class" disableTransitionOnChange>
           <AppShell>{children}</AppShell>
         </ThemeProvider>

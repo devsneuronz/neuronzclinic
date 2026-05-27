@@ -703,7 +703,7 @@ export default function ChatsPage() {
       })
       .catch((err) => {
         if (!isMounted) return;
-        setError(err instanceof Error ? err.message : "NÃ£o foi possÃ­vel abrir o chat selecionado.");
+        setError(err instanceof Error ? err.message : "Não foi possível abrir o chat selecionado.");
       });
 
     return () => {
@@ -1679,7 +1679,7 @@ export default function ChatsPage() {
 
   // Desktop (original) layout
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-dvh overflow-hidden bg-background">
       <ContactList
         chats={visibleChats}
         search={search}

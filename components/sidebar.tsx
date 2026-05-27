@@ -41,7 +41,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const visibleNavItems = navItems.filter((item) => item.roles.includes(role));
 
   return (
-    <aside className={cn("relative flex h-screen flex-col transition-all duration-300 ease-in-out", "bg-[var(--sidebar-custom-bg)] border-r border-border", isCollapsed ? "w-[68px]" : "w-[200px]")}>
+    <aside className={cn("relative flex h-dvh flex-col transition-all duration-300 ease-in-out", "bg-[var(--sidebar-custom-bg)] border-r border-border", isCollapsed ? "w-[68px]" : "w-[200px]")}>
       <div className="max-w-full overflow-clip">
         <Logo isCollapsed={isCollapsed} />
       </div>
