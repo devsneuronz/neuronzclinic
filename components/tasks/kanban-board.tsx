@@ -145,6 +145,17 @@ function formatDateTime(value: string, options: Intl.DateTimeFormatOptions) {
   return new Intl.DateTimeFormat("pt-BR", options).format(date);
 }
 
+function getTaskSortTime(task: Task) {
+  const date = new Date(task.dueDate || task.createdAt || 0);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function sortTasksForStatus(status: TaskStatus, tasks: Task[]) {
+  if (status !== "finalizado") return tasks;
+
+  return [...tasks].sort((a, b) => getTaskSortTime(b) - getTaskSortTime(a));
+}
+
 function getTaskNoteAttachmentType(file: File | null) {
   if (!file) return null;
   if (file.type.startsWith("image/")) return "image";
@@ -1290,7 +1301,10 @@ export function KanbanBoard() {
     () =>
       statusOrder.reduce(
         (acc, status) => {
-          acc[status] = filteredTasks.filter((task) => task.status === status);
+          acc[status] = sortTasksForStatus(
+            status,
+            filteredTasks.filter((task) => task.status === status),
+          );
           return acc;
         },
         {} as Record<TaskStatus, Task[]>,
