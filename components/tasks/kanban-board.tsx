@@ -12,10 +12,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { fetchChats, type ChatRecord } from "@/lib/supabase-rest";
+import { canUserViewTask } from "@/lib/user-access";
 import { cn } from "@/lib/utils";
 import { AlertCircle, ArrowRight, CalendarDays, CheckCircle2, Circle, CircleDashed, Clock3, ImageIcon, Loader2, Mic, Plus, RefreshCw, Save, Search, Square, Timer, Trash2, X } from "lucide-react";
 import type { ChangeEvent, ComponentType, FormEvent, ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type TaskStatus = "aguardando" | "resolvendo" | "finalizado";
@@ -1151,13 +1152,18 @@ export function KanbanBoard() {
   const [taskSubject, setTaskSubject] = useState("");
   const [taskObservations, setTaskObservations] = useState("");
 
+  const applyTaskVisibility = useCallback((loadedTasks: Task[]) => loadedTasks.filter((task) => canUserViewTask(user, task)), [user]);
+
   useEffect(() => {
+    if (isCurrentUserLoading) return;
+
     const controller = new AbortController();
 
     void (async () => {
       try {
         setErrorMessage("");
-        setTasks(await fetchTaskRecords({ signal: controller.signal }));
+        const loadedTasks = await fetchTaskRecords({ signal: controller.signal });
+        setTasks(applyTaskVisibility(loadedTasks));
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setErrorMessage(error instanceof Error ? error.message : "Não foi possível carregar os encaminhamentos.");
@@ -1168,7 +1174,7 @@ export function KanbanBoard() {
     })();
 
     return () => controller.abort();
-  }, []);
+  }, [applyTaskVisibility, isCurrentUserLoading]);
 
   useEffect(() => {
     fetchChats({ limit: 1000 })
@@ -1183,7 +1189,8 @@ export function KanbanBoard() {
     setErrorMessage("");
 
     try {
-      setTasks(await fetchTaskRecords({ refresh }));
+      const loadedTasks = await fetchTaskRecords({ refresh });
+      setTasks(applyTaskVisibility(loadedTasks));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Não foi possível carregar os encaminhamentos.");
       if (tasks.length === 0) setTasks([]);

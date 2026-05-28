@@ -2,7 +2,9 @@
 
 import { Sidebar } from "@/components/sidebar";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { AUTH_SESSION_EVENT, hasValidSession } from "@/lib/auth-session";
+import { getUserHomePath, isDraTatianaUser } from "@/lib/user-access";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState, useSyncExternalStore } from "react";
@@ -18,6 +20,7 @@ export function AppShell({ children }: AppShellProps) {
 
   const pathname = usePathname();
   const router = useRouter();
+  const { user, isLoading: isCurrentUserLoading } = useCurrentUser();
   const isHydrated = useSyncExternalStore(
     subscribeToHydration,
     () => true,
@@ -31,14 +34,20 @@ export function AppShell({ children }: AppShellProps) {
     }
 
     if (pathname === "/login" && isAuthenticated) {
-      router.replace("/");
+      if (isCurrentUserLoading) return;
+      router.replace(getUserHomePath(user));
       return;
     }
 
     if (pathname !== "/login" && !isAuthenticated) {
       router.replace("/login");
+      return;
     }
-  }, [isAuthenticated, isHydrated, pathname, router]);
+
+    if (pathname === "/" && isAuthenticated && !isCurrentUserLoading && isDraTatianaUser(user)) {
+      router.replace("/tarefas");
+    }
+  }, [isAuthenticated, isCurrentUserLoading, isHydrated, pathname, router, user]);
 
   useEffect(() => {
     if (isHydrated) {
@@ -55,6 +64,10 @@ export function AppShell({ children }: AppShellProps) {
   }
 
   if (!isAuthenticated) {
+    return <main className="flex min-h-dvh w-full bg-background" />;
+  }
+
+  if (pathname === "/" && isCurrentUserLoading) {
     return <main className="flex min-h-dvh w-full bg-background" />;
   }
 

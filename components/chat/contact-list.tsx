@@ -66,13 +66,51 @@ function getDisplayName(chat: ChatRecord) {
   return chat.nome_contato || chat.pushname || chat.chat_id?.replace("@s.whatsapp.net", "") || "Contato sem nome";
 }
 
+const saoPauloDatePartsFormatter = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  timeZone: "America/Sao_Paulo",
+});
+
+const saoPauloTimeFormatter = new Intl.DateTimeFormat("pt-BR", {
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "America/Sao_Paulo",
+});
+
+const saoPauloShortDateFormatter = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "2-digit",
+  timeZone: "America/Sao_Paulo",
+});
+
+function getSaoPauloDayIndex(date: Date) {
+  const parts = Object.fromEntries(saoPauloDatePartsFormatter.formatToParts(date).map((part) => [part.type, part.value]));
+  const year = Number(parts.year);
+  const month = Number(parts.month);
+  const day = Number(parts.day);
+
+  if (!year || !month || !day) return null;
+
+  return Math.floor(Date.UTC(year, month - 1, day) / 86400000);
+}
+
 function getTime(chat: ChatRecord) {
   if (chat.last_message_time) {
-    return new Intl.DateTimeFormat("pt-BR", {
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: "America/Sao_Paulo",
-    }).format(new Date(chat.last_message_time));
+    const lastMessageDate = new Date(chat.last_message_time);
+    const lastMessageDay = getSaoPauloDayIndex(lastMessageDate);
+    const today = getSaoPauloDayIndex(new Date());
+
+    if (lastMessageDay === null || today === null) return chat.last_time_formatado ?? "";
+
+    const dayDifference = today - lastMessageDay;
+
+    if (dayDifference === 0) return saoPauloTimeFormatter.format(lastMessageDate);
+    if (dayDifference === 1) return "Ontem";
+
+    return saoPauloShortDateFormatter.format(lastMessageDate);
   }
 
   return chat.last_time_formatado ?? "";
