@@ -8,7 +8,7 @@ import type { ChatRecord, MessageRecord } from "@/lib/supabase-rest";
 import { getMentionLabel, getMentionSlug } from "@/lib/user-mentions";
 import type { MentionableUser } from "@/lib/user-roles";
 import { cn } from "@/lib/utils";
-import { CalendarClock, Camera, Check, Clock, FileImage, FileText, MapPin, Mic, Paperclip, Pause, PenLine, Reply, Send, Trash2, UserRound, Video, X } from "lucide-react";
+import { CalendarClock, Camera, Check, Clock, FileImage, FileText, Loader2, MapPin, Mic, Paperclip, Pause, PenLine, Reply, Send, Trash2, UserRound, Video, X } from "lucide-react";
 import type { FormEvent, RefObject } from "react";
 import { useMemo, useState } from "react";
 import { Textarea } from "../ui/textarea";
@@ -217,16 +217,27 @@ export function ChatComposer({
       )}
 
       {!isInternalNoteOpen && attachment && (
-        <div className="mb-2 flex items-center justify-between rounded-md border border-border bg-secondary px-3 py-2 text-sm">
-          <button type="button" className="min-w-0 text-left" onClick={onOpenAttachmentPreview}>
-            <p className="truncate font-medium text-foreground">{attachment.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {getAttachmentLabel(attachment)} · {(attachment.size / 1024 / 1024).toFixed(2)} MB
-            </p>
-          </button>
-          <Button type="button" variant="ghost" size="icon-sm" className="shrink-0 text-muted-foreground hover:text-foreground" onClick={onRemoveAttachment} aria-label="Remover anexo">
-            <X className="h-4 w-4" />
-          </Button>
+        <div className="mb-2 overflow-hidden rounded-md border border-border bg-secondary text-sm">
+          <div className="flex items-center justify-between px-3 py-2">
+            <button type="button" className="min-w-0 text-left" onClick={onOpenAttachmentPreview} disabled={isSending}>
+              <p className="truncate font-medium text-foreground">{attachment.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {isSending ? "Enviando arquivo" : getAttachmentLabel(attachment)} · {(attachment.size / 1024 / 1024).toFixed(2)} MB
+              </p>
+            </button>
+            {isSending ? (
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-teal-500" />
+            ) : (
+              <Button type="button" variant="ghost" size="icon-sm" className="shrink-0 text-muted-foreground hover:text-foreground" onClick={onRemoveAttachment} aria-label="Remover anexo">
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+          {isSending && (
+            <div className="h-1 w-full overflow-hidden bg-background/60">
+              <span className="block h-full w-1/2 animate-pulse bg-teal-500" />
+            </div>
+          )}
         </div>
       )}
 
@@ -414,7 +425,7 @@ export function ChatComposer({
                 </PopoverContent>
               </Popover>
               <Button type="submit" disabled={isSending || (!draft.trim() && !attachment)} size="icon" className="shrink-0 rounded-full bg-teal-500 text-white hover:bg-teal-600" aria-label="Enviar mensagem">
-                <Send className="h-5 w-5" />
+                {isSending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
               </Button>
             </>
           )}

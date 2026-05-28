@@ -20,7 +20,8 @@ import {
 } from "@/lib/supabase-rest";
 import { fetchMentionableUsers } from "@/lib/user-mentions";
 import type { MentionableUser } from "@/lib/user-roles";
-import type { FormEvent, UIEvent } from "react";
+import { Upload } from "lucide-react";
+import type { DragEvent, FormEvent, UIEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { AttachmentPreviewModal } from "./attachment-preview-modal";
@@ -153,6 +154,7 @@ export function ChatWindow({
   const [isInternalNoteOpen, setIsInternalNoteOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteLinkedMessage, setNoteLinkedMessage] = useState<MessageRecord | null>(null);
+  const [isDraggingAttachment, setIsDraggingAttachment] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const previousScrollHeightRef = useRef<number | null>(null);
@@ -167,6 +169,7 @@ export function ChatWindow({
   const shouldSendRecordingRef = useRef(false);
   const recordingPausedRef = useRef(false);
   const forwardSearchRequestIdRef = useRef(0);
+  const dragAttachmentDepthRef = useRef(0);
   const normalizedForwardSearch = forwardSearch.trim();
   const debouncedForwardSearch = useDebouncedValue(normalizedForwardSearch, 250);
   const forwardSearchQuery = normalizedForwardSearch ? debouncedForwardSearch.trim() : "";
@@ -647,6 +650,57 @@ export function ChatWindow({
     setIsAttachmentPreviewOpen(!!selectedFile);
   }
 
+  function isDraggingFiles(event: DragEvent<HTMLDivElement>) {
+    return Array.from(event.dataTransfer.types).includes("Files");
+  }
+
+  function canReceiveDroppedAttachment() {
+    return !isInternalNoteOpen && !isRecording && !isSending;
+  }
+
+  function handleAttachmentDragEnter(event: DragEvent<HTMLDivElement>) {
+    if (!isDraggingFiles(event)) return;
+
+    event.preventDefault();
+    dragAttachmentDepthRef.current += 1;
+
+    if (canReceiveDroppedAttachment()) {
+      event.dataTransfer.dropEffect = "copy";
+      setIsDraggingAttachment(true);
+    } else {
+      event.dataTransfer.dropEffect = "none";
+    }
+  }
+
+  function handleAttachmentDragOver(event: DragEvent<HTMLDivElement>) {
+    if (!isDraggingFiles(event)) return;
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = canReceiveDroppedAttachment() ? "copy" : "none";
+  }
+
+  function handleAttachmentDragLeave(event: DragEvent<HTMLDivElement>) {
+    if (!isDraggingFiles(event)) return;
+
+    dragAttachmentDepthRef.current = Math.max(0, dragAttachmentDepthRef.current - 1);
+    if (dragAttachmentDepthRef.current === 0) {
+      setIsDraggingAttachment(false);
+    }
+  }
+
+  function handleAttachmentDrop(event: DragEvent<HTMLDivElement>) {
+    if (!isDraggingFiles(event)) return;
+
+    event.preventDefault();
+    dragAttachmentDepthRef.current = 0;
+    setIsDraggingAttachment(false);
+
+    if (!canReceiveDroppedAttachment()) return;
+
+    const droppedFile = event.dataTransfer.files?.[0];
+    if (droppedFile) handleAttachmentSelected(droppedFile);
+  }
+
   function removeAttachment() {
     setAttachment(null);
     setIsAttachmentPreviewOpen(false);
@@ -1027,8 +1081,27 @@ export function ChatWindow({
   const attachmentKind = getAttachmentType(attachment);
 
   return (
-    <div className="flex h-full flex-1 overflow-hidden bg-background">
+    <div
+      className="flex h-full flex-1 overflow-hidden bg-background"
+      onDragEnter={handleAttachmentDragEnter}
+      onDragOver={handleAttachmentDragOver}
+      onDragLeave={handleAttachmentDragLeave}
+      onDrop={handleAttachmentDrop}
+    >
       <div className="flex flex-1 flex-col border-r border-border relative w-full">
+        {isDraggingAttachment && (
+          <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm">
+            <div className="flex min-h-52 w-full max-w-xl flex-col items-center justify-center gap-3 rounded-md border-2 border-dashed border-teal-500 bg-card/95 p-8 text-center shadow-2xl">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-teal-500 text-white shadow-sm">
+                <Upload className="h-7 w-7" />
+              </span>
+              <div>
+                <p className="text-base font-semibold text-foreground">Solte para anexar</p>
+                <p className="mt-1 text-sm text-muted-foreground">O tipo do arquivo sera identificado automaticamente.</p>
+              </div>
+            </div>
+          </div>
+        )}
         <ChatHeader
           chat={chat}
           isSelectionMode={isSelectionMode}

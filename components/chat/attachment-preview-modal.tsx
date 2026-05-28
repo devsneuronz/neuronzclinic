@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FileText, Mic, Send, X } from "lucide-react";
+import { FileText, Loader2, Mic, Send, X } from "lucide-react";
 import Image from "next/image";
 import type { FormEvent } from "react";
 import type { AttachmentPreviewKind } from "./chat-attachment-utils";
@@ -29,12 +29,12 @@ export function AttachmentPreviewModal({ attachment, attachmentKind, attachmentP
             {getAttachmentLabel(attachment)} · {(attachment.size / 1024 / 1024).toFixed(2)} MB
           </p>
         </div>
-        <Button type="button" variant="ghost" size="icon" onClick={onRemoveAttachment} aria-label="Fechar preview">
+        <Button type="button" variant="ghost" size="icon" onClick={onRemoveAttachment} disabled={isSending} aria-label="Fechar preview">
           <X className="h-5 w-5" />
         </Button>
       </div>
 
-      <div className="flex min-h-0 flex-1 items-center justify-center bg-black/5 p-4 sm:p-8">
+      <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black/5 p-4 sm:p-8">
         {attachmentPreviewUrl && attachmentKind === "image" && <Image src={attachmentPreviewUrl} alt={attachment.name} width={1200} height={900} className="max-h-full w-auto max-w-full rounded-md object-contain shadow-2xl" unoptimized />}
 
         {attachmentPreviewUrl && attachmentKind === "video" && <video src={attachmentPreviewUrl} className="max-h-full w-auto max-w-full rounded-md bg-black shadow-2xl" controls preload="metadata" />}
@@ -65,13 +65,28 @@ export function AttachmentPreviewModal({ attachment, attachmentKind, attachmentP
             </div>
           </div>
         )}
+
+        {isSending && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm">
+            <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-md border border-border bg-card p-6 text-center shadow-2xl">
+              <Loader2 className="h-9 w-9 animate-spin text-teal-500" />
+              <div>
+                <p className="text-sm font-semibold text-foreground">Enviando arquivo</p>
+                <p className="mt-1 text-xs text-muted-foreground">Arquivos grandes podem levar alguns instantes.</p>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                <span className="block h-full w-1/2 animate-pulse rounded-full bg-teal-500" />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <form onSubmit={onSubmit} className="border-t border-border bg-card p-4">
         <div className="mx-auto flex w-full max-w-4xl items-center gap-3">
           <Input value={draft} onChange={(event) => onDraftChange(event.target.value)} disabled={isSending} placeholder="Adicione uma legenda" className="h-11 flex-1 border-0 bg-secondary" />
           <Button type="submit" disabled={isSending} size="icon-lg" className="shrink-0 rounded-full bg-teal-500 text-white hover:bg-teal-600" aria-label="Enviar anexo">
-            <Send className="h-5 w-5" />
+            {isSending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
           </Button>
         </div>
       </form>
