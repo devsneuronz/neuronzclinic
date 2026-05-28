@@ -1,6 +1,7 @@
 import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getChatTags, getReadableTextColor } from "@/lib/chat-tags";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { createContactNote, deleteContactNote, fetchContactNotes, importAirtableContactNotes, type ChatRecord, type ContactNoteRecord } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 import { Calendar, ChevronDown, FileText, GripVertical, Trash2 } from "lucide-react";
@@ -219,6 +220,7 @@ function getDisplayNoteContent(content: string) {
 }
 
 export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions = [], onChangeStatus, onToggleTag, onReorderTags, onCommitTagOrder, onChangeContactInfo }: ProfileViewProps) {
+  const { user, isLoading: isCurrentUserLoading } = useCurrentUser();
   const [bottomTab, setBottomTab] = useState<"consultas" | "avisos">("consultas");
   const [draggedTagId, setDraggedTagId] = useState<string | null>(null);
   const [isAppointmentDialogOpen, setIsAppointmentDialogOpen] = useState(false);
@@ -600,6 +602,10 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
     setIsCreatingTask(true);
 
     try {
+      if (!user) {
+        throw new Error("Não foi possível identificar o usuário logado para criar a tarefa.");
+      }
+
       const response = await fetch("/api/airtable/tasks", {
         method: "POST",
         headers: {
@@ -616,6 +622,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
           chatId: chat?.chat_id || "",
           subject: taskSubject,
           observations: taskObservations,
+          creatorName: user.name,
         }),
       });
       const data = (await response.json()) as { id?: string; message?: string };
@@ -1043,7 +1050,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                   <Button
                     type="submit"
                     className="bg-black text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-zinc-800 hover:shadow-md dark:bg-white dark:text-black dark:hover:bg-zinc-200"
-                    disabled={isCreatingTask || isLoadingTaskOptions}
+                    disabled={isCreatingTask || isLoadingTaskOptions || isCurrentUserLoading || !user}
                   >
                     {isCreatingTask ? "Criando..." : "Criar Aviso/Tarefa"}
                   </Button>

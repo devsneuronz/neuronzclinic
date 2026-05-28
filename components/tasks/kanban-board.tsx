@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { cn } from "@/lib/utils";
 import { AlertCircle, CalendarDays, CheckCircle2, Circle, CircleDashed, Clock3, ImageIcon, Loader2, Mic, Plus, RefreshCw, Save, Search, Square, Timer, Trash2, UserRound, X } from "lucide-react";
 import type { ChangeEvent, ComponentType, FormEvent, ReactNode } from "react";
@@ -1019,6 +1020,7 @@ function FieldLabel({ children }: { children: ReactNode }) {
 }
 
 export function KanbanBoard() {
+  const { user, isLoading: isCurrentUserLoading } = useCurrentUser();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [activeView, setActiveView] = useState<TaskView>("todas");
   const [searchQuery, setSearchQuery] = useState("");
@@ -1249,6 +1251,10 @@ export function KanbanBoard() {
     setCreateTaskError("");
 
     try {
+      if (!user) {
+        throw new Error("Não foi possível identificar o usuário logado para criar a tarefa.");
+      }
+
       const response = await fetch("/api/airtable/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1262,6 +1268,7 @@ export function KanbanBoard() {
           contactPhone: taskContactPhone,
           subject: taskSubject,
           observations: taskObservations,
+          creatorName: user.name,
         }),
       });
       const data = (await response.json()) as { message?: string };
@@ -1532,7 +1539,7 @@ export function KanbanBoard() {
               <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isCreatingTask}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isCreatingTask || isLoadingTaskOptions || !taskResponsibleUserId}>
+              <Button type="submit" disabled={isCreatingTask || isLoadingTaskOptions || isCurrentUserLoading || !user || !taskResponsibleUserId}>
                 {isCreatingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 {isCreatingTask ? "Criando..." : "Criar tarefa"}
               </Button>

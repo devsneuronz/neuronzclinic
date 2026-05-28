@@ -17,6 +17,7 @@ type CreateTaskBody = {
   chatId?: unknown
   subject?: unknown
   observations?: unknown
+  creatorName?: unknown
 }
 
 type UpdateTaskBody = {
@@ -549,8 +550,9 @@ export async function POST(request: Request) {
   const chatId = getString(body.chatId)
   const subject = getString(body.subject)
   const observations = getString(body.observations)
+  const creatorName = getString(body.creatorName)
 
-  if (!type || !status || !createdAt || !dueDate || !responsibleUserId || !subject) {
+  if (!type || !status || !createdAt || !dueDate || !responsibleUserId || !subject || !creatorName) {
     return NextResponse.json({ message: "Preencha tipo, status, prazo, responsável e assunto." }, { status: 400 })
   }
 
@@ -580,6 +582,7 @@ export async function POST(request: Request) {
       Contato: [contactId],
       User: [responsibleUserId],
       Assunto: subject,
+      Criador: creatorName,
     }
 
     if (observations) fields["Observações"] = observations
