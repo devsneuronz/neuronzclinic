@@ -1,6 +1,6 @@
 "use client";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -10,10 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { getAvatarInitials } from "@/lib/avatar-initials";
+import { fetchChats, type ChatRecord } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
-import { AlertCircle, CalendarDays, CheckCircle2, Circle, CircleDashed, Clock3, ImageIcon, Loader2, Mic, Plus, RefreshCw, Save, Search, Square, Timer, Trash2, UserRound, X } from "lucide-react";
+import { AlertCircle, ArrowRight, CalendarDays, CheckCircle2, Circle, CircleDashed, Clock3, ImageIcon, Loader2, Mic, Plus, RefreshCw, Save, Search, Square, Timer, Trash2, X } from "lucide-react";
 import type { ChangeEvent, ComponentType, FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type TaskStatus = "aguardando" | "resolvendo" | "finalizado";
 type TaskView = "todas" | TaskStatus;
@@ -28,6 +31,9 @@ interface Task {
   responsibleUserId: string;
   responsibleInitials: string;
   patient: string;
+  patientChatId: string;
+  patientPhone: string;
+  patientPhotoUrl?: string;
   type: string;
   status: TaskStatus;
   statusLabel: string;
@@ -149,6 +155,32 @@ function formatDateTime(value: string, options: Intl.DateTimeFormatOptions) {
 function getTaskSortTime(task: Task) {
   const date = new Date(task.dueDate || task.createdAt || 0);
   return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function getDigits(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function isNonEmptyString(value: string | undefined): value is string {
+  return Boolean(value?.trim());
+}
+
+function getChatDisplayName(chat: ChatRecord) {
+  return chat.nome_contato || chat.pushname || chat.phone_contact || chat.chat_id?.replace(/@.+$/, "") || "Contato sem nome";
+}
+
+function getChatLookupKeys(chat: ChatRecord) {
+  const digits = getDigits(`${chat.chat_id || ""} ${chat.phone_contact || ""}`);
+  const localDigits = digits.startsWith("55") ? digits.slice(2) : "";
+
+  return [chat.chat_id, chat.phone_contact, digits, localDigits].map((value) => value?.trim()).filter(isNonEmptyString);
+}
+
+function getTaskPatientLookupKeys(task: Task) {
+  const digits = getDigits(`${task.patientChatId || ""} ${task.patientPhone || ""}`);
+  const localDigits = digits.startsWith("55") ? digits.slice(2) : "";
+
+  return [task.patientChatId, task.patientPhone, digits, localDigits].map((value) => value?.trim()).filter(isNonEmptyString);
 }
 
 function sortTasksForStatus(status: TaskStatus, tasks: Task[]) {
@@ -360,7 +392,7 @@ async function deleteTaskResolutionNote(noteId: string) {
   }
 }
 
-function TaskCard({ task, onSelect }: { task: Task; onSelect: (task: Task) => void }) {
+function TaskCard({ task, onSelect, onOpenPatientChat }: { task: Task; onSelect: (task: Task) => void; onOpenPatientChat: (task: Task) => void }) {
   const overdue = isOverdue(task);
   const dueDate = formatDateTime(task.dueDate, { day: "2-digit", month: "short", year: "numeric" });
   const createdAt = formatDateTime(task.createdAt, {
@@ -406,10 +438,25 @@ function TaskCard({ task, onSelect }: { task: Task; onSelect: (task: Task) => vo
 
       <div className="space-y-3 border-t pt-3">
         {task.patient ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <UserRound className="h-3.5 w-3.5" />
-            <span className="truncate">{task.patient}</span>
-          </div>
+          <button
+            type="button"
+            className={cn(
+              "group flex max-w-full items-center gap-2 rounded-md text-left text-xs text-muted-foreground transition-colors",
+              task.patientChatId ? "-mx-1 px-1.5 py-1 hover:bg-primary/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" : "cursor-default",
+            )}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (task.patientChatId) onOpenPatientChat(task);
+            }}
+            disabled={!task.patientChatId}
+          >
+            <Avatar className="h-7 w-7 shrink-0 border">
+              <AvatarImage src={task.patientPhotoUrl || undefined} alt={task.patient} />
+              <AvatarFallback className="bg-muted text-[10px] font-semibold text-muted-foreground">{getAvatarInitials(task.patient)}</AvatarFallback>
+            </Avatar>
+            <span className="min-w-0 truncate font-medium text-foreground">{task.patient}</span>
+            {task.patientChatId ? <ArrowRight className="h-3.5 w-3.5 shrink-0 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-70" /> : null}
+          </button>
         ) : null}
 
         <div className="flex items-center justify-between gap-3">
@@ -447,7 +494,19 @@ function EmptyColumn({ isFiltering }: { isFiltering: boolean }) {
   );
 }
 
-function KanbanColumn({ status, tasks, isFiltering, onSelectTask }: { status: TaskStatus; tasks: Task[]; isFiltering: boolean; onSelectTask: (task: Task) => void }) {
+function KanbanColumn({
+  status,
+  tasks,
+  isFiltering,
+  onSelectTask,
+  onOpenPatientChat,
+}: {
+  status: TaskStatus;
+  tasks: Task[];
+  isFiltering: boolean;
+  onSelectTask: (task: Task) => void;
+  onOpenPatientChat: (task: Task) => void;
+}) {
   const config = statusConfig[status];
   const Icon = config.icon;
 
@@ -479,7 +538,7 @@ function KanbanColumn({ status, tasks, isFiltering, onSelectTask }: { status: Ta
                 `hover:ring-${colorName} focus-visible:ring-${colorName}`,
               )}
             >
-              <TaskCard task={task} onSelect={onSelectTask} />
+              <TaskCard task={task} onSelect={onSelectTask} onOpenPatientChat={onOpenPatientChat} />
             </div>
           ))
         ) : (
@@ -490,7 +549,19 @@ function KanbanColumn({ status, tasks, isFiltering, onSelectTask }: { status: Ta
   );
 }
 
-function TaskStatusGrid({ status, tasks, isFiltering, onSelectTask }: { status: TaskStatus; tasks: Task[]; isFiltering: boolean; onSelectTask: (task: Task) => void }) {
+function TaskStatusGrid({
+  status,
+  tasks,
+  isFiltering,
+  onSelectTask,
+  onOpenPatientChat,
+}: {
+  status: TaskStatus;
+  tasks: Task[];
+  isFiltering: boolean;
+  onSelectTask: (task: Task) => void;
+  onOpenPatientChat: (task: Task) => void;
+}) {
   const config = statusConfig[status];
   const Icon = config.icon;
 
@@ -522,7 +593,7 @@ function TaskStatusGrid({ status, tasks, isFiltering, onSelectTask }: { status: 
                 `hover:ring-${colorName} focus-visible:ring-${colorName}`,
               )}
             >
-              <TaskCard task={task} onSelect={onSelectTask} />
+              <TaskCard task={task} onSelect={onSelectTask} onOpenPatientChat={onOpenPatientChat} />
             </div>
           ))}
         </div>
@@ -556,6 +627,7 @@ function TaskDetailsDialog({
   task,
   open,
   onOpenChange,
+  onOpenPatientChat,
   onDelete,
   onUpdate,
   notes,
@@ -578,6 +650,7 @@ function TaskDetailsDialog({
   task: Task | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onOpenPatientChat: (task: Task) => void;
   onDelete: (task: Task) => void;
   onUpdate: (task: Task, values: { type: string; status: string; dueDate: string; responsibleUserId: string; subject: string; observations: string }) => void;
   notes: TaskResolutionNote[];
@@ -819,7 +892,28 @@ function TaskDetailsDialog({
 
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Paciente</p>
-                <p className="mt-1 break-words text-sm text-foreground">{task.patient || "Nao informado"}</p>
+                {task.patient ? (
+                  <button
+                    type="button"
+                    className={cn(
+                      "group mt-1 flex max-w-full items-center gap-2 rounded-md text-left transition-colors",
+                      task.patientChatId ? "-mx-1 px-1.5 py-1 hover:bg-primary/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" : "cursor-default",
+                    )}
+                    onClick={() => {
+                      if (task.patientChatId) onOpenPatientChat(task);
+                    }}
+                    disabled={!task.patientChatId}
+                  >
+                    <Avatar className="h-8 w-8 shrink-0 border">
+                      <AvatarImage src={task.patientPhotoUrl || undefined} alt={task.patient} />
+                      <AvatarFallback className="bg-muted text-[10px] font-semibold text-muted-foreground">{getAvatarInitials(task.patient)}</AvatarFallback>
+                    </Avatar>
+                    <span className="min-w-0 break-words text-sm font-medium text-foreground">{task.patient}</span>
+                    {task.patientChatId ? <ArrowRight className="h-4 w-4 shrink-0 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-70" /> : null}
+                  </button>
+                ) : (
+                  <p className="mt-1 break-words text-sm text-foreground">Nao informado</p>
+                )}
               </div>
 
               <div>
@@ -1020,8 +1114,10 @@ function FieldLabel({ children }: { children: ReactNode }) {
 }
 
 export function KanbanBoard() {
+  const router = useRouter();
   const { user, isLoading: isCurrentUserLoading } = useCurrentUser();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [chats, setChats] = useState<ChatRecord[]>([]);
   const [activeView, setActiveView] = useState<TaskView>("todas");
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState(filterAll);
@@ -1072,6 +1168,12 @@ export function KanbanBoard() {
     })();
 
     return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    fetchChats({ limit: 1000 })
+      .then((data) => setChats(data))
+      .catch(() => setChats([]));
   }, []);
 
   const loadTasks = async ({ refresh = false }: { refresh?: boolean } = {}) => {
@@ -1140,6 +1242,11 @@ export function KanbanBoard() {
         setTaskResolutionNoteError(error instanceof Error ? error.message : "Não foi possível carregar o histórico da tarefa.");
       })
       .finally(() => setIsLoadingTaskResolutionNotes(false));
+  };
+
+  const handleOpenPatientChat = (task: Task) => {
+    if (!task.patientChatId) return;
+    router.push(`/chats?chatId=${encodeURIComponent(task.patientChatId)}`);
   };
 
   const handleUpdateTask = async (task: Task, values: { type: string; status: string; dueDate: string; responsibleUserId: string; subject: string; observations: string }) => {
@@ -1287,14 +1394,46 @@ export function KanbanBoard() {
     }
   };
 
-  const typeOptions = useMemo(() => uniqueValues(tasks, "type"), [tasks]);
-  const creatorOptions = useMemo(() => uniqueValues(tasks, "creator"), [tasks]);
-  const responsibleOptions = useMemo(() => uniqueValues(tasks, "responsible"), [tasks]);
+  const chatsByLookupKey = useMemo(() => {
+    const lookup = new Map<string, ChatRecord>();
+
+    for (const chat of chats) {
+      for (const key of getChatLookupKeys(chat)) {
+        if (!lookup.has(key)) lookup.set(key, chat);
+      }
+    }
+
+    return lookup;
+  }, [chats]);
+
+  const enrichedTasks = useMemo(
+    () =>
+      tasks.map((task) => {
+        const chat = getTaskPatientLookupKeys(task)
+          .map((key) => chatsByLookupKey.get(key))
+          .find(Boolean);
+
+        if (!chat) return task;
+
+        return {
+          ...task,
+          patient: getChatDisplayName(chat) || task.patient,
+          patientChatId: chat.chat_id || task.patientChatId,
+          patientPhone: chat.phone_contact || task.patientPhone,
+          patientPhotoUrl: chat.url_foto_perfil || undefined,
+        };
+      }),
+    [chatsByLookupKey, tasks],
+  );
+
+  const typeOptions = useMemo(() => uniqueValues(enrichedTasks, "type"), [enrichedTasks]);
+  const creatorOptions = useMemo(() => uniqueValues(enrichedTasks, "creator"), [enrichedTasks]);
+  const responsibleOptions = useMemo(() => uniqueValues(enrichedTasks, "responsible"), [enrichedTasks]);
 
   const filteredTasks = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    return tasks.filter((task) => {
+    return enrichedTasks.filter((task) => {
       const matchesQuery = query ? [task.subject, task.description, task.patient, task.creator, task.responsible, task.type].join(" ").toLowerCase().includes(query) : true;
       const matchesType = typeFilter === filterAll || task.type === typeFilter;
       const matchesCreator = creatorFilter === filterAll || task.creator === creatorFilter;
@@ -1302,7 +1441,7 @@ export function KanbanBoard() {
 
       return matchesQuery && matchesType && matchesCreator && matchesResponsible;
     });
-  }, [creatorFilter, responsibleFilter, searchQuery, tasks, typeFilter]);
+  }, [creatorFilter, enrichedTasks, responsibleFilter, searchQuery, typeFilter]);
 
   const tasksByStatus = useMemo(
     () =>
@@ -1425,9 +1564,11 @@ export function KanbanBoard() {
                   </div>
                 </div>
               ) : view.value === "todas" ? (
-                statusOrder.map((status) => <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} isFiltering={isFiltering} onSelectTask={handleSelectTask} />)
+                statusOrder.map((status) => (
+                  <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} isFiltering={isFiltering} onSelectTask={handleSelectTask} onOpenPatientChat={handleOpenPatientChat} />
+                ))
               ) : (
-                <TaskStatusGrid status={view.value} tasks={tasksByStatus[view.value]} isFiltering={isFiltering} onSelectTask={handleSelectTask} />
+                <TaskStatusGrid status={view.value} tasks={tasksByStatus[view.value]} isFiltering={isFiltering} onSelectTask={handleSelectTask} onOpenPatientChat={handleOpenPatientChat} />
               )}
             </main>
           </TabsContent>
@@ -1561,6 +1702,7 @@ export function KanbanBoard() {
             setSelectedTask(null);
           }
         }}
+        onOpenPatientChat={handleOpenPatientChat}
         onDelete={handleDeleteTask}
         onUpdate={handleUpdateTask}
         notes={taskResolutionNotes}

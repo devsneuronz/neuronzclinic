@@ -105,7 +105,13 @@ function getInitials(name: string) {
   return (words.length > 1 ? `${words[0][0]}${words[words.length - 1][0]}` : words[0]?.slice(0, 2) || "TA").toUpperCase()
 }
 
-function mapTaskRecord(record: AirtableRecord, linkedNames: { users: Map<string, string>; contacts: Map<string, string> }) {
+type LinkedContact = {
+  name: string
+  chatId: string
+  phone: string
+}
+
+function mapTaskRecord(record: AirtableRecord, linkedNames: { users: Map<string, string>; contacts: Map<string, LinkedContact> }) {
   const fields = record.fields ?? {}
   const subject = getStringField(fields, ["Assunto", "assunto", "Titulo", "Título", "Title", "Name", "Nome"])
   const observations = getStringField(fields, ["Observações", "Observacoes", "Descricao", "Descrição", "Description"])
@@ -134,8 +140,8 @@ function mapTaskRecord(record: AirtableRecord, linkedNames: { users: Map<string,
   const responsibleName =
     responsibleIds.map((id) => linkedNames.users.get(id)).find(Boolean) ||
     (isAirtableRecordId(responsible) ? "" : responsible)
-  const patientName =
-    contactIds.map((id) => linkedNames.contacts.get(id)).find(Boolean) || (isAirtableRecordId(patient) ? "" : patient)
+  const linkedContact = contactIds.map((id) => linkedNames.contacts.get(id)).find(Boolean)
+  const patientName = linkedContact?.name || (isAirtableRecordId(patient) ? "" : patient)
   const createdAt = getDateField(fields, ["Data e Hora", "Criado em", "Created At", "createdAt"]) || record.createdTime || ""
   const dueDate = getDateField(fields, ["Data_prazo", "Data prazo", "Prazo", "Due date", "Due Date"])
 
@@ -152,6 +158,8 @@ function mapTaskRecord(record: AirtableRecord, linkedNames: { users: Map<string,
     responsibleUserId: responsibleIds[0] || "",
     responsibleInitials: getInitials(responsibleName || "Sem responsável"),
     patient: patientName,
+    patientChatId: linkedContact?.chatId || "",
+    patientPhone: linkedContact?.phone || "",
     createdAt,
     dueDate,
   }
@@ -295,7 +303,7 @@ async function getLinkedNames(records: AirtableRecord[]) {
   const userIds = records.flatMap((record) => getRecordIds(record.fields ?? {}, ["User", "Responsável", "Responsavel"]))
   const contactIds = records.flatMap((record) => getRecordIds(record.fields ?? {}, ["Contato", "Paciente", "Patient"]))
   const users = new Map<string, string>()
-  const contacts = new Map<string, string>()
+  const contacts = new Map<string, LinkedContact>()
 
   let userRecords: AirtableRecord[] = []
   let contactRecords: AirtableRecord[] = []
@@ -314,7 +322,26 @@ async function getLinkedNames(records: AirtableRecord[]) {
   for (const record of contactRecords) {
     const fields = record.fields ?? {}
     const name = getStringField(fields, ["Name", "name", "Nome", "nome", "Nome Completo", "Contato", "Paciente"])
-    if (name) contacts.set(record.id, name)
+    const chatId = getStringField(fields, ["SUPABASE_CHAT", "ALT_CHAT_ID", "chat_id", "Chat ID"]) || ""
+    const phone = getStringField(fields, [
+      "N_WHATS_API",
+      "N_WHATS_WEB",
+      "Telefone Princial",
+      "Telefone Principal",
+      "Telefone SecundÃ¡rio",
+      "Telefone Secundario",
+      "celular-so-numero",
+      "Celularsupabase",
+      "Telefone",
+    ])
+
+    if (name || chatId || phone) {
+      contacts.set(record.id, {
+        name,
+        chatId,
+        phone: phone || "",
+      })
+    }
   }
 
   return { users, contacts }
