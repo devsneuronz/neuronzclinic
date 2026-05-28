@@ -174,7 +174,7 @@ export const MessageBubble = memo(
 
                 {mediaKind !== "sticker" && (
                   <div className="flex gap-2">
-                    <a href={mediaUrl} download className="flex flex-1 items-center justify-center gap-2 rounded bg-(--chat-card)/80 py-2 text-xs font-medium text-(--chat-muted-foreground) transition-colors hover:bg-(--chat-card)">
+                    <a href={mediaUrl} download target="_blank" rel="noopener noreferrer" className="flex flex-1 items-center justify-center gap-2 rounded bg-(--chat-card)/80 py-2 text-xs font-medium text-(--chat-muted-foreground) transition-colors hover:bg-(--chat-card)">
                       <Download className="h-3.5 w-3.5" />
                       Baixar Arquivo
                     </a>
