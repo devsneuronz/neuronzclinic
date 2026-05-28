@@ -47,23 +47,21 @@ export function AppShell({ children }: AppShellProps) {
   }, [isCollapsed, isHydrated]);
 
   if (!isHydrated) {
-    return <div className="flex h-screen bg-background" />;
+    return <div className="flex h-dvh bg-background" />;
   }
 
   if (pathname === "/login") {
-    return isAuthenticated ? <main className="flex min-h-screen w-full bg-background" /> : <main className="flex min-h-screen w-full bg-background">{children}</main>;
+    return isAuthenticated ? <main className="flex min-h-dvh w-full bg-background" /> : <main className="flex min-h-dvh w-full bg-background">{children}</main>;
   }
 
   if (!isAuthenticated) {
-    return <main className="flex min-h-screen w-full bg-background" />;
+    return <main className="flex min-h-dvh w-full bg-background" />;
   }
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen w-full bg-background">
-      {/* 🔄 Condicional baseada no seu Hook */}
+    <div className="flex flex-col md:flex-row min-h-dvh w-full bg-background">
       {isMobile ? <MobileHeader /> : <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />}
 
-      {/* O espaçamento do topo (pt-14) só se aplica se for mobile para não quebrar o layout do desktop */}
       <main className="flex-1 overflow-y-auto bg-background">{children}</main>
     </div>
   );

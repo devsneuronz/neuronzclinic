@@ -20,15 +20,12 @@ export function MobileHeader() {
 
   const [isOpen, setIsOpen] = useState(false);
 
-  // 2. 👇 Sempre que o pathname (URL) mudar, nós fechamos o menu automaticamente
   useEffect(() => {
     setIsOpen(false);
   }, [pathname]);
 
   return (
     <header className="md:hidden top-0 inset-x-0 h-14 flex items-center justify-between px-4 z-50 bg-[var(--sidebar-custom-bg)] border-b border-border shadow-xs">
-      <Logo isCollapsed={false} />
-
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
         <SheetTrigger asChild>
           <button type="button" className="p-2 rounded-md text-[var(--sidebar-custom-fg)] hover:bg-[var(--sidebar-custom-accent)] transition-colors cursor-pointer" aria-label="Abrir menu">
@@ -36,8 +33,10 @@ export function MobileHeader() {
           </button>
         </SheetTrigger>
 
-        <SheetContent side="right" className="w-full h-full p-4 pt-16 bg-[var(--sidebar-custom-bg)] border-none text-[var(--sidebar-custom-fg)] flex flex-col justify-between">
+        <SheetContent side="left" className="w-full h-full p-4 pt-16 bg-[var(--sidebar-custom-bg)] border-none text-[var(--sidebar-custom-fg)] flex flex-col justify-between">
           <SheetTitle className="sr-only">Navegação Principal</SheetTitle>
+
+          <Logo isCollapsed={false} className="absolute top-0" />
 
           <nav className="flex-1 space-y-2.5 overflow-y-auto pt-2">
             {navItems.map((item) => {
@@ -57,11 +56,11 @@ export function MobileHeader() {
                 </Link>
               );
             })}
-
-            <div className="pt-2">
-              <NoteMentionNotifications user={user} isCollapsed={false} />
-            </div>
           </nav>
+
+          <div className="pt-2">
+            <NoteMentionNotifications user={user} isCollapsed={false} />
+          </div>
 
           <div className="border-t border-[var(--sidebar-custom-border)] pt-4 pb-2">
             <div className="flex items-center gap-3 px-2">
@@ -74,7 +73,8 @@ export function MobileHeader() {
           </div>
         </SheetContent>
       </Sheet>
+
+      <Logo isCollapsed={false} />
     </header>
   );
 }
-

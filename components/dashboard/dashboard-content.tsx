@@ -1,77 +1,54 @@
-"use client"
+"use client";
 
-import { useEffect, useMemo, useState } from "react"
-import { addDays, addHours, format, isBefore, isToday, startOfToday } from "date-fns"
-import { ptBR } from "date-fns/locale"
-import {
-  AlertCircle,
-  Bot,
-  Calendar,
-  CheckCircle,
-  Clock,
-  Loader2,
-  RefreshCw,
-  Stethoscope,
-  Users,
-} from "lucide-react"
-import { Header } from "@/components/dashboard/header"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import { cn } from "@/lib/utils"
+import { Header } from "@/components/dashboard/header";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import { addDays, addHours, format, isBefore, isToday, startOfToday } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { AlertCircle, Bot, Calendar, CheckCircle, Clock, Loader2, RefreshCw, Stethoscope, Users } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 type CalendarAppointment = {
-  id: string
-  status: string
-  type: string
-  attendanceMode: string
-  startDateTime: string
-  endDateTime: string
-  professional: string
-  patient: string
-  phone: string
-  observations: string
-}
+  id: string;
+  status: string;
+  type: string;
+  attendanceMode: string;
+  startDateTime: string;
+  endDateTime: string;
+  professional: string;
+  patient: string;
+  phone: string;
+  observations: string;
+};
 
 type Task = {
-  id: string
-  subject: string
-  description: string
-  status: "aguardando" | "resolvendo" | "finalizado"
-  statusLabel: string
-  type: string
-  creator: string
-  responsible: string
-  patient: string
-  createdAt: string
-  dueDate: string
-}
+  id: string;
+  subject: string;
+  description: string;
+  status: "aguardando" | "resolvendo" | "finalizado";
+  statusLabel: string;
+  type: string;
+  creator: string;
+  responsible: string;
+  patient: string;
+  createdAt: string;
+  dueDate: string;
+};
 
 type AppointmentOptions = {
-  status: string[]
-  types: string[]
-  attendanceModes: string[]
-  professionals: Array<{ id: string; label: string }>
-  patients: Array<{ id: string; label: string }>
-}
+  status: string[];
+  types: string[];
+  attendanceModes: string[];
+  professionals: Array<{ id: string; label: string }>;
+  patients: Array<{ id: string; label: string }>;
+};
 
 const emptyAppointmentOptions: AppointmentOptions = {
   status: [],
@@ -79,7 +56,7 @@ const emptyAppointmentOptions: AppointmentOptions = {
   attendanceModes: [],
   professionals: [],
   patients: [],
-}
+};
 
 const statusStyles: Record<string, string> = {
   confirmado: "bg-success/10 text-success hover:bg-success/20",
@@ -88,27 +65,27 @@ const statusStyles: Record<string, string> = {
   aguardando: "bg-warning/10 text-warning-foreground hover:bg-warning/20",
   cancelado: "bg-destructive/10 text-destructive hover:bg-destructive/20",
   cancelada: "bg-destructive/10 text-destructive hover:bg-destructive/20",
-}
+};
 
 function getInitials(name: string) {
-  const words = name.split(/\s+/).filter(Boolean)
-  return (words.length > 1 ? `${words[0][0]}${words[words.length - 1][0]}` : words[0]?.slice(0, 2) || "NC").toUpperCase()
+  const words = name.split(/\s+/).filter(Boolean);
+  return (words.length > 1 ? `${words[0][0]}${words[words.length - 1][0]}` : words[0]?.slice(0, 2) || "NC").toUpperCase();
 }
 
 function getAppointmentDate(appointment: CalendarAppointment) {
-  const date = new Date(appointment.startDateTime)
-  return Number.isNaN(date.getTime()) ? null : date
+  const date = new Date(appointment.startDateTime);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function formatTime(value: string) {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? "--" : format(date, "HH:mm")
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "--" : format(date, "HH:mm");
 }
 
 function formatDateLabel(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "Sem prazo"
-  return format(date, "dd/MM", { locale: ptBR })
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Sem prazo";
+  return format(date, "dd/MM", { locale: ptBR });
 }
 
 function normalizeStatus(value: string) {
@@ -116,7 +93,7 @@ function normalizeStatus(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
-    .trim()
+    .trim();
 }
 
 function normalizeText(value: string) {
@@ -124,43 +101,40 @@ function normalizeText(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
-    .trim()
+    .trim();
 }
 
 function toDateTimeLocalValue(date: Date) {
-  return format(date, "yyyy-MM-dd'T'HH:mm")
+  return format(date, "yyyy-MM-dd'T'HH:mm");
 }
 
 async function fetchDashboardData() {
-  const todayStart = startOfToday()
-  const tomorrowStart = addDays(todayStart, 1)
+  const todayStart = startOfToday();
+  const tomorrowStart = addDays(todayStart, 1);
 
-  const appointmentsUrl = new URL("/api/airtable/appointments", window.location.origin)
-  appointmentsUrl.searchParams.set("start", todayStart.toISOString())
-  appointmentsUrl.searchParams.set("end", tomorrowStart.toISOString())
+  const appointmentsUrl = new URL("/api/airtable/appointments", window.location.origin);
+  appointmentsUrl.searchParams.set("start", todayStart.toISOString());
+  appointmentsUrl.searchParams.set("end", tomorrowStart.toISOString());
 
-  const [appointmentsResponse, tasksResponse] = await Promise.all([
-    fetch(appointmentsUrl, { cache: "no-store" }),
-    fetch("/api/airtable/tasks", { cache: "no-store" }),
-  ])
+  const [appointmentsResponse, tasksResponse] = await Promise.all([fetch(appointmentsUrl, { cache: "no-store" }), fetch("/api/airtable/tasks", { cache: "no-store" })]);
 
-  const appointmentsData = (await appointmentsResponse.json()) as { appointments?: CalendarAppointment[]; message?: string }
-  const tasksData = (await tasksResponse.json()) as { tasks?: Task[]; message?: string }
+  const appointmentsData = (await appointmentsResponse.json()) as { appointments?: CalendarAppointment[]; message?: string };
+  const tasksData = (await tasksResponse.json()) as { tasks?: Task[]; message?: string };
 
-  if (!appointmentsResponse.ok) throw new Error(appointmentsData.message || "Não foi possível carregar os agendamentos.")
-  if (!tasksResponse.ok) throw new Error(tasksData.message || "Não foi possível carregar as tarefas.")
+  if (!appointmentsResponse.ok) throw new Error(appointmentsData.message || "Não foi possível carregar os agendamentos.");
+  if (!tasksResponse.ok) throw new Error(tasksData.message || "Não foi possível carregar as tarefas.");
 
   return {
     appointments: appointmentsData.appointments ?? [],
     tasks: tasksData.tasks ?? [],
-  }
+  };
 }
 
 async function fetchAppointmentOptions() {
-  const response = await fetch("/api/airtable/appointment-options", { cache: "no-store" })
-  const data = (await response.json()) as Partial<AppointmentOptions> & { message?: string }
+  const response = await fetch("/api/airtable/appointment-options", { cache: "no-store" });
+  const data = (await response.json()) as Partial<AppointmentOptions> & { message?: string };
 
-  if (!response.ok) throw new Error(data.message || "Não foi possível carregar as opções de agendamento.")
+  if (!response.ok) throw new Error(data.message || "Não foi possível carregar as opções de agendamento.");
 
   return {
     status: Array.isArray(data.status) ? data.status : [],
@@ -168,20 +142,10 @@ async function fetchAppointmentOptions() {
     attendanceModes: Array.isArray(data.attendanceModes) ? data.attendanceModes : [],
     professionals: Array.isArray(data.professionals) ? data.professionals : [],
     patients: Array.isArray(data.patients) ? data.patients : [],
-  }
+  };
 }
 
-function StatCard({
-  label,
-  value,
-  description,
-  icon: Icon,
-}: {
-  label: string
-  value: string
-  description: string
-  icon: typeof Calendar
-}) {
+function StatCard({ label, value, description, icon: Icon }: { label: string; value: string; description: string; icon: typeof Calendar }) {
   return (
     <Card className="border-border bg-card shadow-sm">
       <CardContent className="p-5">
@@ -197,7 +161,7 @@ function StatCard({
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }
 
 function DashboardAppointments({ appointments }: { appointments: CalendarAppointment[] }) {
@@ -211,9 +175,7 @@ function DashboardAppointments({ appointments }: { appointments: CalendarAppoint
       </CardHeader>
       <CardContent>
         {appointments.length === 0 ? (
-          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-            Nenhuma consulta encontrada para hoje.
-          </div>
+          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">Nenhuma consulta encontrada para hoje.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -228,7 +190,7 @@ function DashboardAppointments({ appointments }: { appointments: CalendarAppoint
               </thead>
               <tbody className="divide-y divide-border">
                 {appointments.slice(0, 8).map((appointment) => {
-                  const normalizedStatus = normalizeStatus(appointment.status)
+                  const normalizedStatus = normalizeStatus(appointment.status);
 
                   return (
                     <tr key={appointment.id} className="transition-colors hover:bg-muted/50">
@@ -236,9 +198,7 @@ function DashboardAppointments({ appointments }: { appointments: CalendarAppoint
                       <td className="py-3">
                         <div className="flex items-center gap-3">
                           <Avatar className="h-8 w-8">
-                            <AvatarFallback className="bg-secondary text-xs text-secondary-foreground">
-                              {getInitials(appointment.patient)}
-                            </AvatarFallback>
+                            <AvatarFallback className="bg-secondary text-xs text-secondary-foreground">{getInitials(appointment.patient)}</AvatarFallback>
                           </Avatar>
                           <span className="text-sm font-medium text-foreground">{appointment.patient}</span>
                         </div>
@@ -246,12 +206,10 @@ function DashboardAppointments({ appointments }: { appointments: CalendarAppoint
                       <td className="py-3 text-sm text-muted-foreground">{appointment.type || "Consulta"}</td>
                       <td className="py-3 text-sm text-muted-foreground">{appointment.professional}</td>
                       <td className="py-3">
-                        <Badge className={cn("capitalize", statusStyles[normalizedStatus] || "bg-secondary text-secondary-foreground")}>
-                          {appointment.status || "Sem status"}
-                        </Badge>
+                        <Badge className={cn("capitalize", statusStyles[normalizedStatus] || "bg-secondary text-secondary-foreground")}>{appointment.status || "Sem status"}</Badge>
                       </td>
                     </tr>
-                  )
+                  );
                 })}
               </tbody>
             </table>
@@ -259,12 +217,12 @@ function DashboardAppointments({ appointments }: { appointments: CalendarAppoint
         )}
       </CardContent>
     </Card>
-  )
+  );
 }
 
 function PendingTasks({ tasks }: { tasks: Task[] }) {
-  const allOpenTasks = tasks.filter((task) => task.status !== "finalizado")
-  const openTasks = allOpenTasks.slice(0, 4)
+  const allOpenTasks = tasks.filter((task) => task.status !== "finalizado");
+  const openTasks = allOpenTasks.slice(0, 4);
 
   return (
     <Card className="border-border bg-card shadow-sm">
@@ -279,14 +237,12 @@ function PendingTasks({ tasks }: { tasks: Task[] }) {
       </CardHeader>
       <CardContent>
         {openTasks.length === 0 ? (
-          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-            Nenhuma pendência aberta.
-          </div>
+          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">Nenhuma pendência aberta.</div>
         ) : (
           <div className="divide-y divide-border">
             {openTasks.map((task) => {
-              const dueDate = task.dueDate ? new Date(task.dueDate) : null
-              const isLate = dueDate && !Number.isNaN(dueDate.getTime()) && isBefore(dueDate, startOfToday())
+              const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+              const isLate = dueDate && !Number.isNaN(dueDate.getTime()) && isBefore(dueDate, startOfToday());
 
               return (
                 <div key={task.id} className="grid grid-cols-[1fr_auto] gap-3 py-3">
@@ -296,153 +252,141 @@ function PendingTasks({ tasks }: { tasks: Task[] }) {
                       {task.patient || "Sem paciente"} · {task.responsible || "Sem responsável"}
                     </p>
                     <div className="mt-2 flex items-center gap-2">
-                      <Badge className={task.status === "resolvendo" ? "bg-primary/10 text-primary" : "bg-warning/10 text-warning-foreground"}>
-                        {task.statusLabel || task.status}
-                      </Badge>
+                      <Badge className={task.status === "resolvendo" ? "bg-primary/10 text-primary" : "bg-warning/10 text-warning-foreground"}>{task.statusLabel || task.status}</Badge>
                       <span className="truncate text-xs text-muted-foreground">{task.type}</span>
                     </div>
                   </div>
                   <div className="pt-0.5">
-                    <Badge
-                      variant="outline"
-                      className={cn("shrink-0", isLate ? "border-destructive/30 text-destructive" : "text-muted-foreground")}
-                    >
+                    <Badge variant="outline" className={cn("shrink-0", isLate ? "border-destructive/30 text-destructive" : "text-muted-foreground")}>
                       {formatDateLabel(task.dueDate)}
                     </Badge>
                   </div>
                 </div>
-              )
+              );
             })}
-            {allOpenTasks.length > openTasks.length ? (
-              <div className="pt-3 text-xs font-medium text-muted-foreground">
-                +{allOpenTasks.length - openTasks.length} pendências no quadro de tarefas
-              </div>
-            ) : null}
+            {allOpenTasks.length > openTasks.length ? <div className="pt-3 text-xs font-medium text-muted-foreground">+{allOpenTasks.length - openTasks.length} pendências no quadro de tarefas</div> : null}
           </div>
         )}
       </CardContent>
     </Card>
-  )
+  );
 }
 
 export function DashboardContent() {
-  const [appointments, setAppointments] = useState<CalendarAppointment[]>([])
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [errorMessage, setErrorMessage] = useState("")
-  const [successMessage, setSuccessMessage] = useState("")
-  const [appointmentOptions, setAppointmentOptions] = useState<AppointmentOptions>(emptyAppointmentOptions)
-  const [isAppointmentDialogOpen, setIsAppointmentDialogOpen] = useState(false)
-  const [isLoadingAppointmentOptions, setIsLoadingAppointmentOptions] = useState(false)
-  const [isSavingAppointment, setIsSavingAppointment] = useState(false)
-  const [appointmentStatus, setAppointmentStatus] = useState("")
-  const [appointmentType, setAppointmentType] = useState("")
-  const [appointmentAttendanceMode, setAppointmentAttendanceMode] = useState("")
-  const [appointmentProfessionalId, setAppointmentProfessionalId] = useState("")
-  const [appointmentPatientId, setAppointmentPatientId] = useState("")
-  const [appointmentPatientSearch, setAppointmentPatientSearch] = useState("")
-  const [isPatientSearchOpen, setIsPatientSearchOpen] = useState(false)
-  const [appointmentStartDateTime, setAppointmentStartDateTime] = useState("")
-  const [appointmentEndDateTime, setAppointmentEndDateTime] = useState("")
-  const [appointmentObservations, setAppointmentObservations] = useState("")
+  const [appointments, setAppointments] = useState<CalendarAppointment[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [appointmentOptions, setAppointmentOptions] = useState<AppointmentOptions>(emptyAppointmentOptions);
+  const [isAppointmentDialogOpen, setIsAppointmentDialogOpen] = useState(false);
+  const [isLoadingAppointmentOptions, setIsLoadingAppointmentOptions] = useState(false);
+  const [isSavingAppointment, setIsSavingAppointment] = useState(false);
+  const [appointmentStatus, setAppointmentStatus] = useState("");
+  const [appointmentType, setAppointmentType] = useState("");
+  const [appointmentAttendanceMode, setAppointmentAttendanceMode] = useState("");
+  const [appointmentProfessionalId, setAppointmentProfessionalId] = useState("");
+  const [appointmentPatientId, setAppointmentPatientId] = useState("");
+  const [appointmentPatientSearch, setAppointmentPatientSearch] = useState("");
+  const [isPatientSearchOpen, setIsPatientSearchOpen] = useState(false);
+  const [appointmentStartDateTime, setAppointmentStartDateTime] = useState("");
+  const [appointmentEndDateTime, setAppointmentEndDateTime] = useState("");
+  const [appointmentObservations, setAppointmentObservations] = useState("");
 
   const loadData = async ({ refresh = false }: { refresh?: boolean } = {}) => {
-    setIsLoading(!refresh)
-    setIsRefreshing(refresh)
-    setErrorMessage("")
+    setIsLoading(!refresh);
+    setIsRefreshing(refresh);
+    setErrorMessage("");
 
     try {
-      const data = await fetchDashboardData()
-      setAppointments(data.appointments)
-      setTasks(data.tasks)
+      const data = await fetchDashboardData();
+      setAppointments(data.appointments);
+      setTasks(data.tasks);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Não foi possível carregar a dashboard.")
+      setErrorMessage(error instanceof Error ? error.message : "Não foi possível carregar a dashboard.");
     } finally {
-      setIsLoading(false)
-      setIsRefreshing(false)
+      setIsLoading(false);
+      setIsRefreshing(false);
     }
-  }
+  };
 
   useEffect(() => {
-    let isActive = true
+    let isActive = true;
 
     void (async () => {
       try {
-        const data = await fetchDashboardData()
-        if (!isActive) return
-        setAppointments(data.appointments)
-        setTasks(data.tasks)
+        const data = await fetchDashboardData();
+        if (!isActive) return;
+        setAppointments(data.appointments);
+        setTasks(data.tasks);
       } catch (error) {
-        if (!isActive) return
-        setErrorMessage(error instanceof Error ? error.message : "Não foi possível carregar a dashboard.")
+        if (!isActive) return;
+        setErrorMessage(error instanceof Error ? error.message : "Não foi possível carregar a dashboard.");
       } finally {
-        if (isActive) setIsLoading(false)
+        if (isActive) setIsLoading(false);
       }
-    })()
+    })();
 
     return () => {
-      isActive = false
-    }
-  }, [])
+      isActive = false;
+    };
+  }, []);
 
-  const selectedAppointmentPatient = useMemo(
-    () => appointmentOptions.patients.find((patient) => patient.id === appointmentPatientId),
-    [appointmentOptions.patients, appointmentPatientId],
-  )
+  const selectedAppointmentPatient = useMemo(() => appointmentOptions.patients.find((patient) => patient.id === appointmentPatientId), [appointmentOptions.patients, appointmentPatientId]);
 
   const patientSearchResults = useMemo(() => {
-    const query = normalizeText(appointmentPatientSearch)
-    if (!query) return []
+    const query = normalizeText(appointmentPatientSearch);
+    if (!query) return [];
 
-    return appointmentOptions.patients.filter((patient) => normalizeText(patient.label).includes(query)).slice(0, 8)
-  }, [appointmentOptions.patients, appointmentPatientSearch])
+    return appointmentOptions.patients.filter((patient) => normalizeText(patient.label).includes(query)).slice(0, 8);
+  }, [appointmentOptions.patients, appointmentPatientSearch]);
 
   const openAppointmentDialog = async () => {
-    const now = new Date()
-    const startDate = new Date(now)
-    startDate.setMinutes(now.getMinutes() > 30 ? 0 : 30, 0, 0)
-    if (startDate.getTime() < now.getTime()) startDate.setHours(startDate.getHours() + 1)
+    const now = new Date();
+    const startDate = new Date(now);
+    startDate.setMinutes(now.getMinutes() > 30 ? 0 : 30, 0, 0);
+    if (startDate.getTime() < now.getTime()) startDate.setHours(startDate.getHours() + 1);
 
-    setSuccessMessage("")
-    setErrorMessage("")
-    setIsAppointmentDialogOpen(true)
-    setAppointmentStartDateTime(toDateTimeLocalValue(startDate))
-    setAppointmentEndDateTime(toDateTimeLocalValue(addHours(startDate, 1)))
-    setAppointmentPatientId("")
-    setAppointmentPatientSearch("")
-    setAppointmentObservations("")
-    setIsPatientSearchOpen(false)
+    setSuccessMessage("");
+    setErrorMessage("");
+    setIsAppointmentDialogOpen(true);
+    setAppointmentStartDateTime(toDateTimeLocalValue(startDate));
+    setAppointmentEndDateTime(toDateTimeLocalValue(addHours(startDate, 1)));
+    setAppointmentPatientId("");
+    setAppointmentPatientSearch("");
+    setAppointmentObservations("");
+    setIsPatientSearchOpen(false);
 
     const applyOptions = (options: AppointmentOptions) => {
-      setAppointmentStatus(options.status[0] || "")
-      setAppointmentType(options.types[0] || "")
-      setAppointmentAttendanceMode(options.attendanceModes[0] || "")
-      setAppointmentProfessionalId(options.professionals[0]?.id || "")
-    }
+      setAppointmentStatus(options.status[0] || "");
+      setAppointmentType(options.types[0] || "");
+      setAppointmentAttendanceMode(options.attendanceModes[0] || "");
+      setAppointmentProfessionalId(options.professionals[0]?.id || "");
+    };
 
     if (appointmentOptions.status.length > 0) {
-      applyOptions(appointmentOptions)
-      return
+      applyOptions(appointmentOptions);
+      return;
     }
 
-    setIsLoadingAppointmentOptions(true)
+    setIsLoadingAppointmentOptions(true);
     try {
-      const options = await fetchAppointmentOptions()
-      setAppointmentOptions(options)
-      applyOptions(options)
+      const options = await fetchAppointmentOptions();
+      setAppointmentOptions(options);
+      applyOptions(options);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Não foi possível carregar as opções de agendamento.")
+      setErrorMessage(error instanceof Error ? error.message : "Não foi possível carregar as opções de agendamento.");
     } finally {
-      setIsLoadingAppointmentOptions(false)
+      setIsLoadingAppointmentOptions(false);
     }
-  }
+  };
 
   const handleCreateAppointment = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setIsSavingAppointment(true)
-    setErrorMessage("")
-    setSuccessMessage("")
+    event.preventDefault();
+    setIsSavingAppointment(true);
+    setErrorMessage("");
+    setSuccessMessage("");
 
     try {
       const response = await fetch("/api/airtable/appointments", {
@@ -458,55 +402,55 @@ export function DashboardContent() {
           patientId: appointmentPatientId,
           observations: appointmentObservations,
         }),
-      })
-      const data = (await response.json()) as { message?: string }
+      });
+      const data = (await response.json()) as { message?: string };
 
-      if (!response.ok) throw new Error(data.message || "Não foi possível criar o agendamento.")
+      if (!response.ok) throw new Error(data.message || "Não foi possível criar o agendamento.");
 
-      setSuccessMessage(data.message || "Agendamento criado com sucesso.")
-      setIsAppointmentDialogOpen(false)
-      await loadData({ refresh: true })
+      setSuccessMessage(data.message || "Agendamento criado com sucesso.");
+      setIsAppointmentDialogOpen(false);
+      await loadData({ refresh: true });
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Não foi possível criar o agendamento.")
+      setErrorMessage(error instanceof Error ? error.message : "Não foi possível criar o agendamento.");
     } finally {
-      setIsSavingAppointment(false)
+      setIsSavingAppointment(false);
     }
-  }
+  };
 
   const stats = useMemo(() => {
     const todayAppointments = appointments.filter((appointment) => {
-      const date = getAppointmentDate(appointment)
-      return date ? isToday(date) : false
-    })
-    const pendingTasks = tasks.filter((task) => task.status !== "finalizado")
+      const date = getAppointmentDate(appointment);
+      return date ? isToday(date) : false;
+    });
+    const pendingTasks = tasks.filter((task) => task.status !== "finalizado");
     const overdueTasks = pendingTasks.filter((task) => {
-      const date = task.dueDate ? new Date(task.dueDate) : null
-      return date && !Number.isNaN(date.getTime()) && isBefore(date, startOfToday())
-    })
-    const patients = new Set(appointments.map((appointment) => appointment.patient).filter(Boolean))
+      const date = task.dueDate ? new Date(task.dueDate) : null;
+      return date && !Number.isNaN(date.getTime()) && isBefore(date, startOfToday());
+    });
+    const patients = new Set(appointments.map((appointment) => appointment.patient).filter(Boolean));
 
     return [
       { label: "Consultas Hoje", value: String(todayAppointments.length), description: "agendamentos carregados", icon: Calendar },
       { label: "Pacientes Hoje", value: String(patients.size), description: "pacientes com consulta", icon: Users },
       { label: "Pendências", value: String(pendingTasks.length), description: `${overdueTasks.length} atrasadas`, icon: AlertCircle },
       { label: "Em Atendimento", value: String(tasks.filter((task) => task.status === "resolvendo").length), description: "tarefas em resolução", icon: Clock },
-    ]
-  }, [appointments, tasks])
+    ];
+  }, [appointments, tasks]);
 
   const recentActivity = useMemo(() => {
-    const confirmed = appointments.filter((appointment) => normalizeStatus(appointment.status).includes("confirm")).length
-    const openTasks = tasks.filter((task) => task.status !== "finalizado").length
+    const confirmed = appointments.filter((appointment) => normalizeStatus(appointment.status).includes("confirm")).length;
+    const openTasks = tasks.filter((task) => task.status !== "finalizado").length;
 
     return [
       `${appointments.length} consultas encontradas para hoje`,
       `${confirmed} consultas confirmadas`,
       `${openTasks} tarefas ou pendências abertas`,
       `${tasks.filter((task) => task.status === "finalizado").length} tarefas finalizadas no quadro`,
-    ]
-  }, [appointments, tasks])
+    ];
+  }, [appointments, tasks]);
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-dvh bg-background">
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header onCreateAppointment={() => void openAppointmentDialog()} />
 
@@ -515,9 +459,7 @@ export function DashboardContent() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Visão operacional de hoje</p>
-                <h2 className="text-2xl font-semibold tracking-normal text-foreground">
-                  {format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}
-                </h2>
+                <h2 className="text-2xl font-semibold tracking-normal text-foreground">{format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}</h2>
               </div>
               <Button variant="outline" className="bg-background" onClick={() => loadData({ refresh: true })} disabled={isLoading || isRefreshing}>
                 {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -571,9 +513,7 @@ export function DashboardContent() {
                       <div className="space-y-3">
                         {recentActivity.map((item, index) => (
                           <div key={item} className="flex items-start gap-3">
-                            <div className="rounded-lg bg-primary/10 p-2 text-primary">
-                              {index === 0 ? <Calendar className="h-4 w-4" /> : index === 1 ? <Stethoscope className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
-                            </div>
+                            <div className="rounded-lg bg-primary/10 p-2 text-primary">{index === 0 ? <Calendar className="h-4 w-4" /> : index === 1 ? <Stethoscope className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}</div>
                             <p className="pt-1 text-sm font-medium text-foreground">{item}</p>
                           </div>
                         ))}
@@ -604,7 +544,9 @@ export function DashboardContent() {
                   </SelectTrigger>
                   <SelectContent>
                     {appointmentOptions.status.map((status) => (
-                      <SelectItem key={status} value={status}>{status}</SelectItem>
+                      <SelectItem key={status} value={status}>
+                        {status}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -618,7 +560,9 @@ export function DashboardContent() {
                   </SelectTrigger>
                   <SelectContent>
                     {appointmentOptions.types.map((type) => (
-                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -642,7 +586,9 @@ export function DashboardContent() {
                   </SelectTrigger>
                   <SelectContent>
                     {appointmentOptions.attendanceModes.map((mode) => (
-                      <SelectItem key={mode} value={mode}>{mode}</SelectItem>
+                      <SelectItem key={mode} value={mode}>
+                        {mode}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -656,7 +602,9 @@ export function DashboardContent() {
                   </SelectTrigger>
                   <SelectContent>
                     {appointmentOptions.professionals.map((professional) => (
-                      <SelectItem key={professional.id} value={professional.id}>{professional.label}</SelectItem>
+                      <SelectItem key={professional.id} value={professional.id}>
+                        {professional.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -671,12 +619,12 @@ export function DashboardContent() {
                   placeholder={selectedAppointmentPatient?.label || "Digite o nome do paciente"}
                   onBlur={() => window.setTimeout(() => setIsPatientSearchOpen(false), 120)}
                   onChange={(event) => {
-                    setAppointmentPatientSearch(event.target.value)
-                    setAppointmentPatientId("")
-                    setIsPatientSearchOpen(true)
+                    setAppointmentPatientSearch(event.target.value);
+                    setAppointmentPatientId("");
+                    setIsPatientSearchOpen(true);
                   }}
                   onFocus={() => {
-                    if (appointmentPatientSearch.trim()) setIsPatientSearchOpen(true)
+                    if (appointmentPatientSearch.trim()) setIsPatientSearchOpen(true);
                   }}
                 />
                 {isPatientSearchOpen && appointmentPatientSearch.trim() ? (
@@ -692,9 +640,9 @@ export function DashboardContent() {
                           )}
                           onMouseDown={(event) => event.preventDefault()}
                           onClick={() => {
-                            setAppointmentPatientId(patient.id)
-                            setAppointmentPatientSearch(patient.label)
-                            setIsPatientSearchOpen(false)
+                            setAppointmentPatientId(patient.id);
+                            setAppointmentPatientSearch(patient.label);
+                            setIsPatientSearchOpen(false);
                           }}
                         >
                           <span className="truncate">{patient.label}</span>
@@ -717,18 +665,7 @@ export function DashboardContent() {
               <Button type="button" variant="outline" onClick={() => setIsAppointmentDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button
-                type="submit"
-                disabled={
-                  isSavingAppointment ||
-                  isLoadingAppointmentOptions ||
-                  !appointmentStatus ||
-                  !appointmentType ||
-                  !appointmentAttendanceMode ||
-                  !appointmentProfessionalId ||
-                  !appointmentPatientId
-                }
-              >
+              <Button type="submit" disabled={isSavingAppointment || isLoadingAppointmentOptions || !appointmentStatus || !appointmentType || !appointmentAttendanceMode || !appointmentProfessionalId || !appointmentPatientId}>
                 {isSavingAppointment ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 Salvar agendamento
               </Button>
@@ -737,5 +674,5 @@ export function DashboardContent() {
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }
