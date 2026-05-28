@@ -1,10 +1,5 @@
 import type { CurrentUser } from "@/lib/user-roles"
 
-type TaskOwnership = {
-  creator?: string
-  responsible?: string
-}
-
 function normalizeComparableName(value: string) {
   return value
     .normalize("NFD")
@@ -15,7 +10,7 @@ function normalizeComparableName(value: string) {
     .trim()
 }
 
-function hasTatianaIdentity(value: string) {
+export function hasTatianaIdentity(value: string) {
   return /\btatiana\b/.test(normalizeComparableName(value))
 }
 
@@ -29,12 +24,6 @@ export function getUserHomePath(user: CurrentUser | null | undefined) {
   return isDraTatianaUser(user) ? "/tarefas" : "/"
 }
 
-export function canUserViewTask(user: CurrentUser | null | undefined, task: TaskOwnership) {
-  if (!isDraTatianaUser(user)) {
-    return true
-  }
-
-  const responsible = normalizeComparableName(task.responsible ?? "")
-
-  return hasTatianaIdentity(responsible)
+export function getDraTatianaResponsibleFilter(options: string[]) {
+  return options.find(hasTatianaIdentity) ?? ""
 }

@@ -12,11 +12,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { fetchChats, type ChatRecord } from "@/lib/supabase-rest";
-import { canUserViewTask } from "@/lib/user-access";
+import { getDraTatianaResponsibleFilter, isDraTatianaUser } from "@/lib/user-access";
 import { cn } from "@/lib/utils";
 import { AlertCircle, ArrowRight, CalendarDays, CheckCircle2, Circle, CircleDashed, Clock3, ImageIcon, Loader2, Mic, Plus, RefreshCw, Save, Search, Square, Timer, Trash2, X } from "lucide-react";
 import type { ChangeEvent, ComponentType, FormEvent, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type TaskStatus = "aguardando" | "resolvendo" | "finalizado";
@@ -1151,8 +1151,7 @@ export function KanbanBoard() {
   const [taskResponsibleUserId, setTaskResponsibleUserId] = useState("");
   const [taskSubject, setTaskSubject] = useState("");
   const [taskObservations, setTaskObservations] = useState("");
-
-  const applyTaskVisibility = useCallback((loadedTasks: Task[]) => loadedTasks.filter((task) => canUserViewTask(user, task)), [user]);
+  const hasAppliedInitialResponsibleFilterRef = useRef(false);
 
   useEffect(() => {
     if (isCurrentUserLoading) return;
@@ -1163,7 +1162,7 @@ export function KanbanBoard() {
       try {
         setErrorMessage("");
         const loadedTasks = await fetchTaskRecords({ signal: controller.signal });
-        setTasks(applyTaskVisibility(loadedTasks));
+        setTasks(loadedTasks);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setErrorMessage(error instanceof Error ? error.message : "Não foi possível carregar os encaminhamentos.");
@@ -1174,7 +1173,7 @@ export function KanbanBoard() {
     })();
 
     return () => controller.abort();
-  }, [applyTaskVisibility, isCurrentUserLoading]);
+  }, [isCurrentUserLoading]);
 
   useEffect(() => {
     fetchChats({ limit: 1000 })
@@ -1190,7 +1189,7 @@ export function KanbanBoard() {
 
     try {
       const loadedTasks = await fetchTaskRecords({ refresh });
-      setTasks(applyTaskVisibility(loadedTasks));
+      setTasks(loadedTasks);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Não foi possível carregar os encaminhamentos.");
       if (tasks.length === 0) setTasks([]);
@@ -1436,6 +1435,21 @@ export function KanbanBoard() {
   const typeOptions = useMemo(() => uniqueValues(enrichedTasks, "type"), [enrichedTasks]);
   const creatorOptions = useMemo(() => uniqueValues(enrichedTasks, "creator"), [enrichedTasks]);
   const responsibleOptions = useMemo(() => uniqueValues(enrichedTasks, "responsible"), [enrichedTasks]);
+  const initialTatianaResponsibleFilter = useMemo(() => getDraTatianaResponsibleFilter(responsibleOptions), [responsibleOptions]);
+
+  useEffect(() => {
+    if (hasAppliedInitialResponsibleFilterRef.current || isCurrentUserLoading || !isDraTatianaUser(user)) return;
+
+    if (!initialTatianaResponsibleFilter) return;
+
+    hasAppliedInitialResponsibleFilterRef.current = true;
+    setResponsibleFilter(initialTatianaResponsibleFilter);
+  }, [initialTatianaResponsibleFilter, isCurrentUserLoading, user]);
+
+  const effectiveResponsibleFilter =
+    responsibleFilter === filterAll && !hasAppliedInitialResponsibleFilterRef.current && isDraTatianaUser(user) && initialTatianaResponsibleFilter
+      ? initialTatianaResponsibleFilter
+      : responsibleFilter;
 
   const filteredTasks = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -1444,11 +1458,11 @@ export function KanbanBoard() {
       const matchesQuery = query ? [task.subject, task.description, task.patient, task.creator, task.responsible, task.type].join(" ").toLowerCase().includes(query) : true;
       const matchesType = typeFilter === filterAll || task.type === typeFilter;
       const matchesCreator = creatorFilter === filterAll || task.creator === creatorFilter;
-      const matchesResponsible = responsibleFilter === filterAll || task.responsible === responsibleFilter;
+      const matchesResponsible = effectiveResponsibleFilter === filterAll || task.responsible === effectiveResponsibleFilter;
 
       return matchesQuery && matchesType && matchesCreator && matchesResponsible;
     });
-  }, [creatorFilter, enrichedTasks, responsibleFilter, searchQuery, typeFilter]);
+  }, [creatorFilter, effectiveResponsibleFilter, enrichedTasks, searchQuery, typeFilter]);
 
   const tasksByStatus = useMemo(
     () =>
@@ -1465,7 +1479,7 @@ export function KanbanBoard() {
     [filteredTasks],
   );
 
-  const isFiltering = Boolean(searchQuery.trim()) || typeFilter !== filterAll || creatorFilter !== filterAll || responsibleFilter !== filterAll;
+  const isFiltering = Boolean(searchQuery.trim()) || typeFilter !== filterAll || creatorFilter !== filterAll || effectiveResponsibleFilter !== filterAll;
   const totalOpen = tasksByStatus.aguardando.length + tasksByStatus.resolvendo.length;
 
   return (
