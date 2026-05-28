@@ -47,19 +47,19 @@ export function AppShell({ children }: AppShellProps) {
   }, [isCollapsed, isHydrated]);
 
   if (!isHydrated) {
-    return <div className="flex h-dvh bg-background" />;
+    return <div className="flex h-full bg-background" />;
   }
 
   if (pathname === "/login") {
-    return isAuthenticated ? <main className="flex min-h-dvh w-full bg-background" /> : <main className="flex min-h-dvh w-full bg-background">{children}</main>;
+    return isAuthenticated ? <main className="flex min-h-full w-full bg-background" /> : <main className="flex min-h-dvh w-full bg-background">{children}</main>;
   }
 
   if (!isAuthenticated) {
-    return <main className="flex min-h-dvh w-full bg-background" />;
+    return <main className="flex min-h-full w-full bg-background" />;
   }
 
   return (
-    <div className="flex flex-col md:flex-row min-h-dvh w-full bg-background">
+    <div className="flex flex-col md:flex-row min-h-full w-full bg-background">
       {isMobile ? <MobileHeader /> : <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />}
 
       <main className="flex-1 overflow-y-auto bg-background">{children}</main>

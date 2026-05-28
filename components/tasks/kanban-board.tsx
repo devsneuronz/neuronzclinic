@@ -1302,7 +1302,7 @@ export function KanbanBoard() {
   const totalOpen = tasksByStatus.aguardando.length + tasksByStatus.resolvendo.length;
 
   return (
-    <div className="flex h-dvh flex-1 flex-col bg-background">
+    <div className="flex h-full flex-1 flex-col bg-background">
       <header className="border-b bg-card px-6 py-2">
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

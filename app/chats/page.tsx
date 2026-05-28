@@ -1679,7 +1679,7 @@ export default function ChatsPage() {
 
   // Desktop (original) layout
   return (
-    <div className="flex h-dvh overflow-hidden bg-background">
+    <div className="flex h-full overflow-hidden bg-background">
       <ContactList
         chats={visibleChats}
         search={search}
