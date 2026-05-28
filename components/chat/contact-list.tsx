@@ -159,7 +159,7 @@ export function ContactList({
   const sectorIds = useMemo(() => Array.from(new Set(chats.flatMap((chat) => getSectorIds(chat.setor)))), [chats]);
   const sectorOptions = useMemo(() => (sectorCatalog.length > 0 ? sectorCatalog : getUniqueOptions(sectorIds.map((id) => getSectorLabel(id, sectorLabels)))), [sectorCatalog, sectorIds, sectorLabels]);
 
-  const hasActiveFilters = statusFilter !== ALL_FILTERS || tagFilter !== ALL_FILTERS || sectorFilter !== ALL_FILTERS;
+  const hasActiveFilters = statusFilter !== ALL_FILTERS || tagFilter !== ALL_FILTERS || sectorFilter !== ALL_FILTERS || !!search.trim();
 
   const { user, isLoading } = useCurrentUser();
   const userName = user?.name ?? "Usuário";
@@ -339,6 +339,7 @@ export function ContactList({
     setStatusFilter(ALL_FILTERS);
     setTagFilter(ALL_FILTERS);
     setSectorFilter(ALL_FILTERS);
+    onSearchChange?.("");
   }
 
   function resetNewContactForm() {
