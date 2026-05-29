@@ -4,15 +4,16 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
-import { AlertCircle, CalendarDays, CheckCircle2, Circle, CircleDashed, Clock3, ImageIcon, Loader2, Mic, Plus, RefreshCw, Save, Search, Square, Timer, Trash2, UserRound, X } from "lucide-react";
+import { AlertCircle, CalendarDays, CheckCircle2, Circle, CircleDashed, Clock3, IdCardLanyard, ImageIcon, Loader2, Mic, Plus, RefreshCw, Save, Search, Square, Tag, Timer, Trash2, UserPlus, UserRound, X } from "lucide-react";
 import type { ChangeEvent, ComponentType, FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { FilterMenu } from "./FilterMenu";
 
 type TaskStatus = "aguardando" | "resolvendo" | "finalizado";
 type TaskView = "todas" | TaskStatus;
@@ -112,7 +113,7 @@ const statusConfig: Record<
   },
 };
 
-const filterAll = "Todos";
+const filterAll = " ";
 const fallbackTaskOptions: TaskOptions = {
   types: ["Tarefa"],
   statuses: ["Aguardando", "Resolvendo", "Finalizado"],
@@ -518,25 +519,6 @@ function TaskStatusGrid({ status, tasks, isFiltering, onSelectTask }: { status: 
         <EmptyColumn isFiltering={isFiltering} />
       )}
     </section>
-  );
-}
-
-function FilterMenu({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="min-w-36 justify-between bg-background">
-          <span className="truncate">{value === filterAll ? label : value}</span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="max-h-72 min-w-48 overflow-y-auto">
-        {[filterAll, ...options].map((option) => (
-          <DropdownMenuItem key={option} onSelect={() => onChange(option)}>
-            {option}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
 
@@ -1129,6 +1111,14 @@ export function KanbanBoard() {
       .finally(() => setIsLoadingTaskResolutionNotes(false));
   };
 
+  const isSmallScreen = useIsMobile(640);
+
+  useEffect(() => {
+    if (isSmallScreen && activeView === "todas") {
+      setActiveView("aguardando");
+    }
+  }, [isSmallScreen, activeView, setActiveView]);
+
   const handleUpdateTask = async (task: Task, values: { type: string; status: string; dueDate: string; responsibleUserId: string; subject: string; observations: string }) => {
     setSavingTaskId(task.id);
     setTaskActionError("");
@@ -1273,6 +1263,33 @@ export function KanbanBoard() {
   const creatorOptions = useMemo(() => uniqueValues(tasks, "creator"), [tasks]);
   const responsibleOptions = useMemo(() => uniqueValues(tasks, "responsible"), [tasks]);
 
+  const filtersConfig = [
+    {
+      id: "tipo",
+      icon: Tag,
+      value: typeFilter,
+      options: typeOptions,
+      filterAll: "Tipo",
+      onChange: setTypeFilter,
+    },
+    {
+      id: "criador",
+      icon: UserPlus,
+      value: creatorFilter,
+      options: creatorOptions,
+      filterAll: "Criador",
+      onChange: setCreatorFilter,
+    },
+    {
+      id: "responsavel",
+      icon: IdCardLanyard,
+      value: responsibleFilter,
+      options: responsibleOptions,
+      filterAll: "Responsável",
+      onChange: setResponsibleFilter,
+    },
+  ];
+
   const filteredTasks = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
@@ -1302,20 +1319,20 @@ export function KanbanBoard() {
   const totalOpen = tasksByStatus.aguardando.length + tasksByStatus.resolvendo.length;
 
   return (
-    <div className="flex h-full flex-1 flex-col bg-background">
-      <header className="border-b bg-card px-6 py-2">
+    <div className="flex h-full w-full flex-1 flex-col bg-background">
+      <header className="border-b bg-card px-4 py-2">
         <div className="flex flex-col gap-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-row gap-4 sm:flex-row sm:items-center justify-between">
             <div>
-              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground whitespace-nowrap">
                 <span className="h-2 w-2 rounded-full bg-cyan-600" />
                 Airtable / Encaminhamentos
               </div>
               <h1 className="text-xl font-semibold text-foreground">Tarefas</h1>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="grid grid-cols-3 overflow-hidden rounded-md border bg-background shadow-xs">
+            <div className="flex flex-row items-center gap-3">
+              <div className="hidden sm:grid grid-cols-3 overflow-hidden rounded-lg border bg-background shadow-xs">
                 <div className="px-4 py-2 text-center">
                   <p className="text-lg font-semibold text-foreground">{filteredTasks.length}</p>
                   <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Visíveis</p>
@@ -1329,27 +1346,30 @@ export function KanbanBoard() {
                   <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Finalizadas</p>
                 </div>
               </div>
-              <Button type="button" className="gap-2 bg-theme-primary text-white hover:bg-theme-primary/90" onClick={handleOpenCreateDialog}>
+              <Button type="button" className="gap-2 bg-theme-primary text-white hover:bg-theme-primary/90 h-10 min-[412px]:h-9" onClick={handleOpenCreateDialog}>
                 <Plus className="h-4 w-4" />
-                Nova Tarefa
+                <span className="hidden min-[412px]:inline">Nova Tarefa</span>
               </Button>
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="relative w-full xl:max-w-md">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder="Buscar por assunto, paciente, responsável..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="h-10 bg-background pl-9" />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <FilterMenu label="Tipo" value={typeFilter} options={typeOptions} onChange={setTypeFilter} />
-              <FilterMenu label="Criador" value={creatorFilter} options={creatorOptions} onChange={setCreatorFilter} />
-              <FilterMenu label="Responsável" value={responsibleFilter} options={responsibleOptions} onChange={setResponsibleFilter} />
-              <Button type="button" variant="outline" className="bg-background" onClick={() => loadTasks({ refresh: true })} disabled={isLoading || isRefreshing}>
-                {isLoading || isRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                {isRefreshing ? "Atualizando" : "Atualizar"}
-              </Button>
+            <div className="flex items-center gap-2 flex-2 min-w-0">
+              <div className="flex flex-row items-center gap-2 w-full">
+                {filtersConfig.map((filter) => (
+                  <FilterMenu key={filter.id} icon={filter.icon} value={filter.value} options={filter.options} filterAll={filter.filterAll} onChange={filter.onChange} />
+                ))}
+
+                <Button type="button" variant="outline" className="sm:justify-start bg-background h-10 shrink-0 sm:w-auto justify-center" onClick={() => loadTasks({ refresh: true })} disabled={isLoading || isRefreshing}>
+                  {isLoading || isRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  <span className="hidden sm:inline ml-2">{isRefreshing ? "Atualizando" : "Atualizar"}</span>
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -1369,14 +1389,20 @@ export function KanbanBoard() {
       </header>
 
       <Tabs value={activeView} onValueChange={(value) => setActiveView(value as TaskView)} className="flex min-h-0 flex-1 gap-0">
-        <div className="border-b px-5 py-3">
-          <TabsList className="gap-1.5 rounded-full px-1.5 h-10! bg-secondary/50 border border-border/40">
+        <div className="px-4 py-3 overflow-x-auto border-b flex bg-card w-full items-center justify-center">
+          <TabsList className="gap-1.5 rounded-full h-9 sm:h-11  bg-secondary/50 border border-border/40">
             {taskViewOptions.map((view) => {
               const colors = getTaskStatusColor(view.value);
               const isActive = activeView === view.value;
 
               return (
-                <TabsTrigger key={view.value} value={view.value} className="group relative data-[state=active]:bg-card px-3.5 h-7 rounded-full text-xs font-medium transition-all gap-2 cursor-pointer data-[state=active]:shadow-xs">
+                <TabsTrigger
+                  key={view.value}
+                  value={view.value}
+                  className={`group relative data-[state=active]:bg-card px-3.5 h-6 sm:px-6 sm:h-9 rounded-full text-xs sm:text-[14px] font-medium transition-all gap-2 cursor-pointer data-[state=active]:shadow-xs ${
+                    view.value === "todas" ? "hidden sm:inline-flex" : "inline-flex"
+                  }`}
+                >
                   <Circle
                     className="h-2 w-2 transition-all duration-300"
                     style={{
