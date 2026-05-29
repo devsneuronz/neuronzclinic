@@ -128,7 +128,15 @@ function mapTaskRecord(record: AirtableRecord, linkedNames: { users: Map<string,
     "Usuário",
     "User",
   ])
-  const creator = getStringField(fields, ["Criador", "Creator", "Created by", "Autor", "Solicitante"])
+  const creatorIds = getRecordIds(fields, ["User_criador", "Criador", "Creator", "Created by", "Autor", "Solicitante"])
+  const creator = getStringField(fields, [
+    "nome_user_criador",
+    "Criador",
+    "Creator",
+    "Created by",
+    "Autor",
+    "Solicitante",
+  ])
   const patient = getStringField(fields, [
     "Paciente",
     "Nome Paciente",
@@ -142,6 +150,7 @@ function mapTaskRecord(record: AirtableRecord, linkedNames: { users: Map<string,
     (isAirtableRecordId(responsible) ? "" : responsible)
   const linkedContact = contactIds.map((id) => linkedNames.contacts.get(id)).find(Boolean)
   const patientName = linkedContact?.name || (isAirtableRecordId(patient) ? "" : patient)
+  const creatorName = creatorIds.map((id) => linkedNames.users.get(id)).find(Boolean) || creator || "Sistema"
   const createdAt = getDateField(fields, ["Data e Hora", "Criado em", "Created At", "createdAt"]) || record.createdTime || ""
   const dueDate = getDateField(fields, ["Data_prazo", "Data prazo", "Prazo", "Due date", "Due Date"])
 
@@ -152,8 +161,8 @@ function mapTaskRecord(record: AirtableRecord, linkedNames: { users: Map<string,
     status: normalizeStatus(statusLabel),
     statusLabel,
     type,
-    creator: creator || "Sistema",
-    creatorInitials: getInitials(creator || "Sistema"),
+    creator: creatorName,
+    creatorInitials: getInitials(creatorName),
     responsible: responsibleName || "Sem responsável",
     responsibleUserId: responsibleIds[0] || "",
     responsibleInitials: getInitials(responsibleName || "Sem responsável"),
@@ -300,7 +309,9 @@ async function fetchContactTaskRecords(contactId: string) {
 }
 
 async function getLinkedNames(records: AirtableRecord[]) {
-  const userIds = records.flatMap((record) => getRecordIds(record.fields ?? {}, ["User", "Responsável", "Responsavel"]))
+  const userIds = records.flatMap((record) =>
+    getRecordIds(record.fields ?? {}, ["User", "User_criador", "Responsável", "Responsavel", "Criador"]),
+  )
   const contactIds = records.flatMap((record) => getRecordIds(record.fields ?? {}, ["Contato", "Paciente", "Patient"]))
   const users = new Map<string, string>()
   const contacts = new Map<string, LinkedContact>()
@@ -424,6 +435,25 @@ async function updateTask(id: string, fields: Record<string, unknown>) {
   }
 
   return (await response.json()) as AirtableRecord
+}
+
+function getAirtableErrorMessage(error: unknown, fallback: string) {
+  const rawMessage = error instanceof Error ? error.message : ""
+
+  if (!rawMessage) return fallback
+
+  try {
+    const parsed = JSON.parse(rawMessage) as { error?: { message?: string } }
+    const message = parsed.error?.message
+
+    if (message?.startsWith("Unknown field name:")) {
+      return `Campo não encontrado no Airtable: ${message.replace("Unknown field name:", "").trim().replace(/^"|"$/g, "")}.`
+    }
+
+    return message || fallback
+  } catch {
+    return rawMessage
+  }
 }
 
 export async function GET(request: Request) {
@@ -608,8 +638,8 @@ export async function POST(request: Request) {
       Data_prazo: dueDate,
       Contato: [contactId],
       User: [responsibleUserId],
+      User_criador: [responsibleUserId],
       Assunto: subject,
-      Criador: creatorName,
     }
 
     if (observations) fields["Observações"] = observations
@@ -623,7 +653,7 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     return NextResponse.json(
-      { message: error instanceof Error ? error.message : "Não foi possível criar o aviso/tarefa no Airtable." },
+      { message: getAirtableErrorMessage(error, "Não foi possível criar o aviso/tarefa no Airtable.") },
       { status: 500 },
     )
   }

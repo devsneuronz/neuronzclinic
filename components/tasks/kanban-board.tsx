@@ -162,6 +162,14 @@ function getDigits(value: string) {
   return value.replace(/\D/g, "");
 }
 
+function normalizeText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 function isNonEmptyString(value: string | undefined): value is string {
   return Boolean(value?.trim());
 }
@@ -1148,6 +1156,8 @@ export function KanbanBoard() {
   const [taskDueDate, setTaskDueDate] = useState(getTodayDate());
   const [taskPatientName, setTaskPatientName] = useState("");
   const [taskContactPhone, setTaskContactPhone] = useState("");
+  const [taskContactChatId, setTaskContactChatId] = useState("");
+  const [isContactSearchOpen, setIsContactSearchOpen] = useState(false);
   const [taskResponsibleUserId, setTaskResponsibleUserId] = useState("");
   const [taskSubject, setTaskSubject] = useState("");
   const [taskObservations, setTaskObservations] = useState("");
@@ -1334,6 +1344,8 @@ export function KanbanBoard() {
     setTaskDueDate(getTodayDate());
     setTaskPatientName("");
     setTaskContactPhone("");
+    setTaskContactChatId("");
+    setIsContactSearchOpen(false);
     setTaskResponsibleUserId(taskOptions.users[0]?.id || "");
     setTaskSubject("");
     setTaskObservations("");
@@ -1379,6 +1391,7 @@ export function KanbanBoard() {
           responsibleUserId: taskResponsibleUserId,
           patientName: taskPatientName,
           contactPhone: taskContactPhone,
+          chatId: taskContactChatId,
           subject: taskSubject,
           observations: taskObservations,
           creatorName: user.name,
@@ -1411,6 +1424,26 @@ export function KanbanBoard() {
 
     return lookup;
   }, [chats]);
+
+  const contactSearchResults = useMemo(() => {
+    const query = normalizeText(taskPatientName);
+    if (!query) return [];
+
+    const seen = new Set<string>();
+
+    return chats
+      .filter((chat) => {
+        const id = chat.chat_id || chat.phone_contact || getChatDisplayName(chat);
+        if (!id || seen.has(id)) return false;
+
+        const searchable = normalizeText([getChatDisplayName(chat), chat.phone_contact, chat.chat_id].filter(Boolean).join(" "));
+        const matches = searchable.includes(query);
+        if (matches) seen.add(id);
+
+        return matches;
+      })
+      .slice(0, 8);
+  }, [chats, taskPatientName]);
 
   const enrichedTasks = useMemo(
     () =>
@@ -1669,14 +1702,57 @@ export function KanbanBoard() {
                 </Select>
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 sm:col-span-2">
                 <FieldLabel>Contato / Paciente</FieldLabel>
-                <Input className="h-10" value={taskPatientName} onChange={(event) => setTaskPatientName(event.target.value)} />
-              </div>
-
-              <div className="space-y-1.5">
-                <FieldLabel>Telefone do contato</FieldLabel>
-                <Input className="h-10" value={taskContactPhone} onChange={(event) => setTaskContactPhone(event.target.value)} placeholder="DDD + número" required />
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="h-10 pl-9"
+                    value={taskPatientName}
+                    placeholder="Digite o nome do contato"
+                    required
+                    onBlur={() => {
+                      window.setTimeout(() => setIsContactSearchOpen(false), 120);
+                    }}
+                    onChange={(event) => {
+                      setTaskPatientName(event.target.value);
+                      setTaskContactPhone("");
+                      setTaskContactChatId("");
+                      setIsContactSearchOpen(true);
+                    }}
+                    onFocus={() => {
+                      if (taskPatientName.trim()) setIsContactSearchOpen(true);
+                    }}
+                  />
+                  {isContactSearchOpen && taskPatientName.trim() ? (
+                    <div className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md">
+                      {contactSearchResults.length > 0 ? (
+                        contactSearchResults.map((chat) => (
+                          <button
+                            key={chat.chat_id || chat.phone_contact || getChatDisplayName(chat)}
+                            type="button"
+                            className={cn(
+                              "flex w-full flex-col rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground",
+                              (taskContactChatId === chat.chat_id || taskContactPhone === chat.phone_contact) && "bg-accent text-accent-foreground",
+                            )}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => {
+                              setTaskPatientName(getChatDisplayName(chat));
+                              setTaskContactPhone(chat.phone_contact || "");
+                              setTaskContactChatId(chat.chat_id || "");
+                              setIsContactSearchOpen(false);
+                            }}
+                          >
+                            <span className="truncate font-medium">{getChatDisplayName(chat)}</span>
+                            {chat.phone_contact || chat.chat_id ? <span className="truncate text-xs text-muted-foreground">{chat.phone_contact || chat.chat_id}</span> : null}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-2 py-2 text-sm text-muted-foreground">Nenhum contato encontrado</div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
 
@@ -1701,7 +1777,7 @@ export function KanbanBoard() {
               <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isCreatingTask}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isCreatingTask || isLoadingTaskOptions || isCurrentUserLoading || !user || !taskResponsibleUserId}>
+              <Button type="submit" disabled={isCreatingTask || isLoadingTaskOptions || isCurrentUserLoading || !user || !taskResponsibleUserId || (!taskContactChatId && !taskContactPhone)}>
                 {isCreatingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 {isCreatingTask ? "Criando..." : "Criar tarefa"}
               </Button>
