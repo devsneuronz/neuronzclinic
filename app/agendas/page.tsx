@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 
 export default function AgendasPage() {
   return (
-    <div className="flex h-dvh">
+    <div className="flex h-full">
       <WeeklyCalendar />
     </div>
   );

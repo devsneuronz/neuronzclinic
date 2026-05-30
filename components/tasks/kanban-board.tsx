@@ -1,71 +1,29 @@
 "use client";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { getAvatarInitials } from "@/lib/avatar-initials";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { getTodayDate } from "@/lib/date";
 import { fetchChats, type ChatRecord } from "@/lib/supabase-rest";
+import { fallbackTaskOptions, getTaskNoteAttachmentType, type StatusConfigMap, type Task, type TaskOptions, type TaskResolutionNote, type TaskStatus } from "@/lib/task";
 import { getDraTatianaResponsibleFilter, isDraTatianaUser } from "@/lib/user-access";
 import { cn } from "@/lib/utils";
-import { AlertCircle, ArrowRight, CalendarDays, CheckCircle2, Circle, CircleDashed, Clock3, ImageIcon, Loader2, Mic, Plus, RefreshCw, Save, Search, Square, Timer, Trash2, X } from "lucide-react";
-import type { ChangeEvent, ComponentType, FormEvent, ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, CheckCircle2, Circle, CircleDashed, IdCardLanyard, Loader2, Plus, RefreshCw, Search, Tag, Timer, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
+import type { FormEvent, ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-type TaskStatus = "aguardando" | "resolvendo" | "finalizado";
+// Componentes da UI e do Kanban estruturados
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { FilterMenu } from "./filter-menu";
+import { KanbanColumn } from "./kanban-column";
+import { TaskDetailsDialog } from "./task-details-dialog";
+import { TaskStatusGrid } from "./task-grid";
 type TaskView = "todas" | TaskStatus;
-
-interface Task {
-  id: string;
-  subject: string;
-  description: string;
-  creator: string;
-  creatorInitials: string;
-  responsible: string;
-  responsibleUserId: string;
-  responsibleInitials: string;
-  patient: string;
-  patientChatId: string;
-  patientPhone: string;
-  patientPhotoUrl?: string;
-  type: string;
-  status: TaskStatus;
-  statusLabel: string;
-  createdAt: string;
-  dueDate: string;
-}
-
-interface TaskOptions {
-  types: string[];
-  statuses: string[];
-  users: Array<{ id: string; label: string }>;
-}
-
-interface TaskResolutionNote {
-  id: string;
-  task_id: string;
-  content: string;
-  status_snapshot: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-interface ParsedTaskResolutionNote {
-  type: "text" | "image" | "audio";
-  content: string;
-  mediaUrl: string;
-  fileName: string;
-  mimeType: string;
-}
-
-const taskNoteMediaPrefix = "task-note-media:";
 
 const statusOrder: TaskStatus[] = ["aguardando", "resolvendo", "finalizado"];
 const taskViewOptions: Array<{ value: TaskView; label: string }> = [
@@ -75,19 +33,7 @@ const taskViewOptions: Array<{ value: TaskView; label: string }> = [
   { value: "finalizado", label: "Finalizadas" },
 ];
 
-const statusConfig: Record<
-  TaskStatus,
-  {
-    label: string;
-    helper: string;
-    icon: ComponentType<{ className?: string }>;
-    columnClassName: string;
-    headerClassName: string;
-    helperClassName: string;
-    markerClassName: string;
-    countClassName: string;
-  }
-> = {
+const statusConfig: StatusConfigMap = {
   aguardando: {
     label: "Aguardando",
     helper: "Pendentes de triagem ou início",
@@ -97,6 +43,7 @@ const statusConfig: Record<
     helperClassName: "text-muted-foreground",
     markerClassName: "bg-amber-500",
     countClassName: "border-amber-500/20 bg-amber-500/10 text-amber-500",
+    ringClassName: "hover:ring-amber-500 focus-visible:ring-amber-500",
   },
   resolvendo: {
     label: "Resolvendo",
@@ -107,6 +54,7 @@ const statusConfig: Record<
     helperClassName: "text-muted-foreground",
     markerClassName: "bg-cyan-500",
     countClassName: "border-cyan-500/20 bg-cyan-500/10 text-cyan-500",
+    ringClassName: "hover:ring-cyan-500 focus-visible:ring-cyan-500",
   },
   finalizado: {
     label: "Finalizadas",
@@ -117,41 +65,9 @@ const statusConfig: Record<
     helperClassName: "text-muted-foreground",
     markerClassName: "bg-teal-600",
     countClassName: "border-teal-500/20 bg-teal-500/10 text-teal-500",
+    ringClassName: "hover:ring-teal-500 focus-visible:ring-teal-500",
   },
 };
-
-const filterAll = "Todos";
-const fallbackTaskOptions: TaskOptions = {
-  types: ["Tarefa"],
-  statuses: ["Aguardando", "Resolvendo", "Finalizado"],
-  users: [],
-};
-
-function getTodayDate() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function getDateInputValue(value: string) {
-  if (!value) return "";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  return date.toISOString().slice(0, 10);
-}
-
-function mergeOptions(options: string[], currentValue: string) {
-  return Array.from(new Set([currentValue, ...options].map((option) => option.trim()).filter(Boolean)));
-}
-
-function formatDateTime(value: string, options: Intl.DateTimeFormatOptions) {
-  if (!value) return "";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  return new Intl.DateTimeFormat("pt-BR", options).format(date);
-}
 
 function getTaskSortTime(task: Task) {
   const date = new Date(task.dueDate || task.createdAt || 0);
@@ -198,92 +114,7 @@ function sortTasksForStatus(status: TaskStatus, tasks: Task[]) {
   return [...tasks].sort((a, b) => getTaskSortTime(b) - getTaskSortTime(a));
 }
 
-function getTaskNoteAttachmentType(file: File | null) {
-  if (!file) return null;
-  if (file.type.startsWith("image/")) return "image";
-  if (file.type.startsWith("audio/")) return "audio";
-  return "unsupported";
-}
-
-function getTaskNoteAttachmentLabel(file: File) {
-  const type = getTaskNoteAttachmentType(file);
-  if (type === "image") return "Imagem";
-  if (type === "audio") return "Audio";
-  return "Arquivo";
-}
-
-function parseTaskResolutionNoteContent(content: string): ParsedTaskResolutionNote {
-  if (!content.startsWith(taskNoteMediaPrefix)) {
-    return {
-      type: "text",
-      content,
-      mediaUrl: "",
-      fileName: "",
-      mimeType: "",
-    };
-  }
-
-  try {
-    const parsed = JSON.parse(content.slice(taskNoteMediaPrefix.length)) as Partial<{
-      type: "image" | "audio";
-      caption: string;
-      mediaUrl: string;
-      fileName: string;
-      mimeType: string;
-    }>;
-
-    if ((parsed.type === "image" || parsed.type === "audio") && parsed.mediaUrl) {
-      return {
-        type: parsed.type,
-        content: typeof parsed.caption === "string" ? parsed.caption : "",
-        mediaUrl: parsed.mediaUrl,
-        fileName: parsed.fileName || "Anexo",
-        mimeType: parsed.mimeType || "",
-      };
-    }
-  } catch {
-    // Legacy fallback: show the raw content if the saved metadata is malformed.
-  }
-
-  return {
-    type: "text",
-    content,
-    mediaUrl: "",
-    fileName: "",
-    mimeType: "",
-  };
-}
-
-function isOverdue(task: Task) {
-  if (!task.dueDate || task.status === "finalizado") return false;
-
-  const dueDate = new Date(task.dueDate);
-  if (Number.isNaN(dueDate.getTime())) return false;
-
-  dueDate.setHours(23, 59, 59, 999);
-  return dueDate.getTime() < Date.now();
-}
-
-function getTaskTypeBadgeClassName(type: string) {
-  const normalizedType = type
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-
-  if (normalizedType.includes("aviso")) {
-    return "border-sky-400/20 bg-sky-400/10 text-sky-400";
-  }
-
-  if (normalizedType.includes("pendencia")) {
-    return "border-rose-400/25 bg-rose-400/10 text-rose-400";
-  }
-
-  if (normalizedType.includes("tarefa")) {
-    return "border-violet-400/20 bg-violet-400/10 text-violet-400";
-  }
-
-  return "border-primary/20 bg-primary/5 text-primary";
-}
+const filterAll = " ";
 
 function getTaskStatusColor(status: string) {
   const normalized = status.toLowerCase();
@@ -399,723 +230,6 @@ async function deleteTaskResolutionNote(noteId: string) {
   if (!response.ok) {
     throw new Error(data?.message || "Nao foi possivel apagar a evolucao da tarefa.");
   }
-}
-
-function TaskCard({ task, onSelect, onOpenPatientChat }: { task: Task; onSelect: (task: Task) => void; onOpenPatientChat: (task: Task) => void }) {
-  const overdue = isOverdue(task);
-  const dueDate = formatDateTime(task.dueDate, { day: "2-digit", month: "short", year: "numeric" });
-  const createdAt = formatDateTime(task.createdAt, {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-  return (
-    <article
-      role="button"
-      tabIndex={0}
-      onClick={() => onSelect(task)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSelect(task);
-        }
-      }}
-    >
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="mb-1 flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className={cn("max-w-full truncate text-[11px]", getTaskTypeBadgeClassName(task.type))}>
-              {task.type || "Encaminhamento"}
-            </Badge>
-            {overdue ? (
-              <Badge className="border-destructive/25 bg-destructive/5 text-[11px] text-destructive" variant="outline">
-                <AlertCircle className="h-3 w-3" />
-                Atrasada
-              </Badge>
-            ) : null}
-          </div>
-          <h3 className="line-clamp-2 text-sm font-semibold leading-5 text-foreground">{task.subject || "Encaminhamento sem assunto"}</h3>
-        </div>
-        <Avatar className="h-8 w-8 shrink-0 border border-primary/15">
-          <AvatarFallback className="bg-primary/10 text-[11px] font-semibold text-primary">{task.responsibleInitials}</AvatarFallback>
-        </Avatar>
-      </div>
-
-      {task.description ? <p className="mb-4 line-clamp-3 text-sm leading-6 text-muted-foreground">{task.description}</p> : <p className="mb-4 text-sm italic leading-6 text-muted-foreground">Sem observações registradas.</p>}
-
-      <div className="space-y-3 border-t pt-3">
-        {task.patient ? (
-          <button
-            type="button"
-            className={cn(
-              "group flex max-w-full items-center gap-2 rounded-md text-left text-xs text-muted-foreground transition-colors",
-              task.patientChatId ? "-mx-1 px-1.5 py-1 hover:bg-primary/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" : "cursor-default",
-            )}
-            onClick={(event) => {
-              event.stopPropagation();
-              if (task.patientChatId) onOpenPatientChat(task);
-            }}
-            disabled={!task.patientChatId}
-          >
-            <Avatar className="h-7 w-7 shrink-0 border">
-              <AvatarImage src={task.patientPhotoUrl || undefined} alt={task.patient} />
-              <AvatarFallback className="bg-muted text-[10px] font-semibold text-muted-foreground">{getAvatarInitials(task.patient)}</AvatarFallback>
-            </Avatar>
-            <span className="min-w-0 truncate font-medium text-foreground">{task.patient}</span>
-            {task.patientChatId ? <ArrowRight className="h-3.5 w-3.5 shrink-0 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-70" /> : null}
-          </button>
-        ) : null}
-
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Responsável</p>
-            <p className="truncate text-xs font-medium text-foreground">{task.responsible}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Prazo</p>
-            <p className={cn("text-xs font-medium", overdue ? "text-destructive" : "text-foreground")}>{dueDate || "Sem prazo"}</p>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
-          <span className="truncate">Criado por {task.creator}</span>
-          {createdAt ? (
-            <span className="flex shrink-0 items-center gap-1">
-              <Clock3 className="h-3 w-3" />
-              {createdAt}
-            </span>
-          ) : null}
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function EmptyColumn({ isFiltering }: { isFiltering: boolean }) {
-  return (
-    <div className="flex min-h-40 flex-col items-center justify-center rounded-md border border-dashed bg-background/70 p-6 text-center">
-      <CheckCircle2 className="mb-2 h-5 w-5 text-muted-foreground" />
-      <p className="text-sm font-medium text-foreground">{isFiltering ? "Nada encontrado" : "Sem encaminhamentos"}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{isFiltering ? "Ajuste busca ou filtros para ampliar a lista." : "Quando houver registros, eles aparecem aqui."}</p>
-    </div>
-  );
-}
-
-function KanbanColumn({
-  status,
-  tasks,
-  isFiltering,
-  onSelectTask,
-  onOpenPatientChat,
-}: {
-  status: TaskStatus;
-  tasks: Task[];
-  isFiltering: boolean;
-  onSelectTask: (task: Task) => void;
-  onOpenPatientChat: (task: Task) => void;
-}) {
-  const config = statusConfig[status];
-  const Icon = config.icon;
-
-  const colorName = config?.markerClassName?.replace("bg-", "") || "theme-primary/50";
-
-  return (
-    <section className={cn("flex min-w-[300px] flex-1 flex-col rounded-md border p-3", config.columnClassName)}>
-      <div className="mb-3 flex items-start justify-between gap-3 px-1">
-        <div className="flex items-start gap-2">
-          <span className={cn("mt-1.25 h-2.5 w-2.5 rounded-full", config.markerClassName)} />
-          <div>
-            <div className={cn("flex items-center gap-2 font-semibold", config.headerClassName)}>
-              <Icon className="h-4 w-4" />
-              {config.label}
-            </div>
-            <p className={cn("mt-0.5 text-xs", config.helperClassName)}>{config.helper}</p>
-          </div>
-        </div>
-        <span className={cn("flex h-6 min-w-6 items-center justify-center rounded-md border px-2 text-xs font-semibold shadow-xs", config.countClassName)}>{tasks.length}</span>
-      </div>
-
-      <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-1">
-        {tasks.length > 0 ? (
-          tasks.map((task) => (
-            <div
-              key={task.id}
-              className={cn(
-                "group cursor-pointer rounded-md border bg-card p-4 text-left shadow-xs transition hover:ring-2 hover:shadow-sm focus-visible:outline-hidden focus-visible:ring-2",
-                `hover:ring-${colorName} focus-visible:ring-${colorName}`,
-              )}
-            >
-              <TaskCard task={task} onSelect={onSelectTask} onOpenPatientChat={onOpenPatientChat} />
-            </div>
-          ))
-        ) : (
-          <EmptyColumn isFiltering={isFiltering} />
-        )}
-      </div>
-    </section>
-  );
-}
-
-function TaskStatusGrid({
-  status,
-  tasks,
-  isFiltering,
-  onSelectTask,
-  onOpenPatientChat,
-}: {
-  status: TaskStatus;
-  tasks: Task[];
-  isFiltering: boolean;
-  onSelectTask: (task: Task) => void;
-  onOpenPatientChat: (task: Task) => void;
-}) {
-  const config = statusConfig[status];
-  const Icon = config.icon;
-
-  const colorName = config?.markerClassName?.replace("bg-", "") || "theme-primary/50";
-
-  return (
-    <section className={cn("flex min-w-full flex-1 flex-col rounded-md border p-3", config.columnClassName)}>
-      <div className="mb-3 flex items-start justify-between gap-3 px-1">
-        <div className="flex items-start gap-2">
-          <span className={cn("mt-1.25 h-2.5 w-2.5 rounded-full", config.markerClassName)} />
-          <div>
-            <div className={cn("flex items-center gap-2 font-semibold", config.headerClassName)}>
-              <Icon className="h-4 w-4" />
-              {config.label}
-            </div>
-            <p className={cn("mt-0.5 text-xs", config.helperClassName)}>{config.helper}</p>
-          </div>
-        </div>
-        <span className={cn("flex h-6 min-w-6 items-center justify-center rounded-md border px-2 text-xs font-semibold shadow-xs", config.countClassName)}>{tasks.length}</span>
-      </div>
-
-      {tasks.length > 0 ? (
-        <div className="p-1 grid flex-1 auto-rows-max grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 overflow-y-auto pr-1">
-          {tasks.map((task) => (
-            <div
-              key={task.id}
-              className={cn(
-                "group cursor-pointer rounded-md border bg-card p-4 text-left shadow-xs transition hover:ring-2 hover:shadow-sm focus-visible:outline-hidden focus-visible:ring-2",
-                `hover:ring-${colorName} focus-visible:ring-${colorName}`,
-              )}
-            >
-              <TaskCard task={task} onSelect={onSelectTask} onOpenPatientChat={onOpenPatientChat} />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <EmptyColumn isFiltering={isFiltering} />
-      )}
-    </section>
-  );
-}
-
-function FilterMenu({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="min-w-36 justify-between bg-background">
-          <span className="truncate">{value === filterAll ? label : value}</span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="max-h-72 min-w-48 overflow-y-auto">
-        {[filterAll, ...options].map((option) => (
-          <DropdownMenuItem key={option} onSelect={() => onChange(option)}>
-            {option}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function TaskDetailsDialog({
-  task,
-  open,
-  onOpenChange,
-  onOpenPatientChat,
-  onDelete,
-  onUpdate,
-  notes,
-  noteDraft,
-  noteAttachment,
-  onNoteDraftChange,
-  onNoteAttachmentChange,
-  onCreateNote,
-  onDeleteNote,
-  taskOptions,
-  isLoadingTaskOptions,
-  isLoadingNotes,
-  isSavingNote,
-  deletingNoteId,
-  isDeleting,
-  isSaving,
-  errorMessage,
-  noteErrorMessage,
-}: {
-  task: Task | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onOpenPatientChat: (task: Task) => void;
-  onDelete: (task: Task) => void;
-  onUpdate: (task: Task, values: { type: string; status: string; dueDate: string; responsibleUserId: string; subject: string; observations: string }) => void;
-  notes: TaskResolutionNote[];
-  noteDraft: string;
-  noteAttachment: File | null;
-  onNoteDraftChange: (value: string) => void;
-  onNoteAttachmentChange: (file: File | null) => void;
-  onCreateNote: (task: Task) => void;
-  onDeleteNote: (noteId: string) => void;
-  taskOptions: TaskOptions;
-  isLoadingTaskOptions: boolean;
-  isLoadingNotes: boolean;
-  isSavingNote: boolean;
-  deletingNoteId: string;
-  isDeleting: boolean;
-  isSaving: boolean;
-  errorMessage: string;
-  noteErrorMessage: string;
-}) {
-  const [type, setType] = useState(task?.type || fallbackTaskOptions.types[0]);
-  const [status, setStatus] = useState(task ? task.statusLabel || statusConfig[task.status].label : fallbackTaskOptions.statuses[0]);
-  const [dueDate, setDueDate] = useState(task ? getDateInputValue(task.dueDate) || getTodayDate() : getTodayDate());
-  const [responsibleUserId, setResponsibleUserId] = useState(task?.responsibleUserId || "");
-  const [subject, setSubject] = useState(task?.subject || "");
-  const [observations, setObservations] = useState(task?.description || "");
-  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
-  const [audioRecordingError, setAudioRecordingError] = useState("");
-  const noteAttachmentInputRef = useRef<HTMLInputElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const audioStreamRef = useRef<MediaStream | null>(null);
-  const overdue = task ? isOverdue(task) : false;
-  const createdAt = task
-    ? formatDateTime(task.createdAt, {
-        day: "2-digit",
-        month: "long",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "";
-
-  const responsibleOptions = useMemo(() => {
-    const options = taskOptions.users;
-
-    if (!task?.responsibleUserId || options.some((user) => user.id === task.responsibleUserId)) {
-      return options;
-    }
-
-    return [{ id: task.responsibleUserId, label: task.responsible || "Responsável atual" }, ...options];
-  }, [task, taskOptions.users]);
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!task) return;
-
-    onUpdate(task, {
-      type,
-      status,
-      dueDate,
-      responsibleUserId,
-      subject,
-      observations,
-    });
-  };
-
-  const isBusy = isDeleting || isSaving;
-  const attachmentType = getTaskNoteAttachmentType(noteAttachment);
-  const canCreateNote = Boolean(noteDraft.trim() || noteAttachment) && attachmentType !== "unsupported";
-  const noteMediaPreviewUrl = useMemo(() => (["image", "audio"].includes(attachmentType || "") && noteAttachment ? URL.createObjectURL(noteAttachment) : ""), [attachmentType, noteAttachment]);
-
-  useEffect(() => {
-    if (!noteMediaPreviewUrl) return;
-    return () => URL.revokeObjectURL(noteMediaPreviewUrl);
-  }, [noteMediaPreviewUrl]);
-
-  useEffect(() => {
-    return () => {
-      const recorder = mediaRecorderRef.current;
-      if (recorder && recorder.state !== "inactive") {
-        recorder.onstop = null;
-        recorder.stop();
-      }
-      audioStreamRef.current?.getTracks().forEach((track) => track.stop());
-    };
-  }, []);
-
-  const handleAttachmentChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] ?? null;
-    onNoteAttachmentChange(file);
-    setAudioRecordingError("");
-  };
-
-  const handleClearAttachment = () => {
-    onNoteAttachmentChange(null);
-    if (noteAttachmentInputRef.current) noteAttachmentInputRef.current.value = "";
-    setAudioRecordingError("");
-  };
-
-  const stopAudioRecording = () => {
-    const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== "inactive") {
-      recorder.stop();
-    }
-  };
-
-  const handleAudioRecording = async () => {
-    if (isRecordingAudio) {
-      stopAudioRecording();
-      return;
-    }
-
-    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      setAudioRecordingError("Gravacao de audio nao suportada neste navegador.");
-      return;
-    }
-
-    try {
-      setAudioRecordingError("");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-
-      audioStreamRef.current = stream;
-      audioChunksRef.current = [];
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) audioChunksRef.current.push(event.data);
-      };
-
-      recorder.onstop = () => {
-        const mimeType = recorder.mimeType || "audio/webm";
-        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-        const extension = mimeType.includes("mp4") ? "m4a" : mimeType.includes("ogg") ? "ogg" : "webm";
-        const audioFile = new File([audioBlob], `audio-tarefa-${Date.now()}.${extension}`, { type: mimeType });
-
-        onNoteAttachmentChange(audioFile);
-        audioChunksRef.current = [];
-        mediaRecorderRef.current = null;
-        audioStreamRef.current?.getTracks().forEach((track) => track.stop());
-        audioStreamRef.current = null;
-        setIsRecordingAudio(false);
-      };
-
-      recorder.onerror = () => {
-        setAudioRecordingError("Nao foi possivel gravar o audio.");
-        setIsRecordingAudio(false);
-        audioStreamRef.current?.getTracks().forEach((track) => track.stop());
-        audioStreamRef.current = null;
-      };
-
-      onNoteAttachmentChange(null);
-      if (noteAttachmentInputRef.current) noteAttachmentInputRef.current.value = "";
-      recorder.start();
-      setIsRecordingAudio(true);
-    } catch {
-      setAudioRecordingError("Permita o acesso ao microfone para gravar o audio.");
-      setIsRecordingAudio(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-        {task ? (
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <DialogHeader className="pr-6">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary">
-                  {task.type || "Tarefa"}
-                </Badge>
-                <Badge variant="outline" className={cn(overdue ? "border-destructive/25 bg-destructive/5 text-destructive" : "")}>
-                  {overdue ? "Atrasada" : task.statusLabel || statusConfig[task.status].label}
-                </Badge>
-              </div>
-              <DialogTitle className="pt-2 text-xl leading-7">Editar tarefa</DialogTitle>
-              <DialogDescription>Atualize os campos do encaminhamento registrado no Airtable.</DialogDescription>
-            </DialogHeader>
-
-            <div className="grid gap-4 border-y py-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <FieldLabel>Tipo</FieldLabel>
-                <Select value={type} onValueChange={setType} required>
-                  <SelectTrigger className="h-10 w-full">
-                    <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mergeOptions(taskOptions.types, task.type).map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <FieldLabel>Status</FieldLabel>
-                <Select value={status} onValueChange={setStatus} required>
-                  <SelectTrigger className="h-10 w-full">
-                    <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mergeOptions(taskOptions.statuses, task.statusLabel || statusConfig[task.status].label).map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <FieldLabel>Prazo</FieldLabel>
-                <Input type="date" className="h-10" value={dueDate} onChange={(event) => setDueDate(event.target.value)} required />
-              </div>
-
-              <div className="space-y-1.5">
-                <FieldLabel>Responsável</FieldLabel>
-                <Select value={responsibleUserId} onValueChange={setResponsibleUserId} required>
-                  <SelectTrigger className="h-10 w-full">
-                    <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {responsibleOptions.length > 0 ? (
-                      responsibleOptions.map((user) => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.label}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="no-users" disabled>
-                        Nenhum usuário encontrado
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Paciente</p>
-                {task.patient ? (
-                  <button
-                    type="button"
-                    className={cn(
-                      "group mt-1 flex max-w-full items-center gap-2 rounded-md text-left transition-colors",
-                      task.patientChatId ? "-mx-1 px-1.5 py-1 hover:bg-primary/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" : "cursor-default",
-                    )}
-                    onClick={() => {
-                      if (task.patientChatId) onOpenPatientChat(task);
-                    }}
-                    disabled={!task.patientChatId}
-                  >
-                    <Avatar className="h-8 w-8 shrink-0 border">
-                      <AvatarImage src={task.patientPhotoUrl || undefined} alt={task.patient} />
-                      <AvatarFallback className="bg-muted text-[10px] font-semibold text-muted-foreground">{getAvatarInitials(task.patient)}</AvatarFallback>
-                    </Avatar>
-                    <span className="min-w-0 break-words text-sm font-medium text-foreground">{task.patient}</span>
-                    {task.patientChatId ? <ArrowRight className="h-4 w-4 shrink-0 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-70" /> : null}
-                  </button>
-                ) : (
-                  <p className="mt-1 break-words text-sm text-foreground">Nao informado</p>
-                )}
-              </div>
-
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Criada em</p>
-                <p className="mt-1 flex items-center gap-2 text-sm text-foreground">
-                  <CalendarDays className="h-4 w-4" />
-                  {createdAt || "Nao informado"}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <FieldLabel>Assunto</FieldLabel>
-              <Input className="h-10" value={subject} onChange={(event) => setSubject(event.target.value)} required />
-            </div>
-
-            <div className="space-y-1.5">
-              <FieldLabel>Observações</FieldLabel>
-              <Textarea className="min-h-28 resize-y" value={observations} onChange={(event) => setObservations(event.target.value)} />
-            </div>
-
-            <section className="space-y-3 border-t pt-4">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Evolução / resolução</h3>
-                <p className="mt-1 text-xs text-muted-foreground">Registre o histórico de acompanhamento desta tarefa.</p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <input ref={noteAttachmentInputRef} type="file" accept="image/*" className="hidden" onChange={handleAttachmentChange} disabled={isSavingNote || isRecordingAudio} />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="transition hover:-translate-y-0.5 hover:border-sky-400/50 hover:bg-sky-400/10 hover:text-sky-600 hover:shadow-xs"
-                  onClick={() => noteAttachmentInputRef.current?.click()}
-                  disabled={isSavingNote || isRecordingAudio}
-                >
-                  <ImageIcon className="h-4 w-4" />
-                  Imagem
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className={cn(
-                    "transition hover:-translate-y-0.5 hover:shadow-xs",
-                    isRecordingAudio ? "border-rose-400/50 bg-rose-400/10 text-rose-600 hover:bg-rose-400/15" : "hover:border-teal-400/50 hover:bg-teal-400/10 hover:text-teal-600",
-                  )}
-                  onClick={handleAudioRecording}
-                  disabled={isSavingNote}
-                >
-                  {isRecordingAudio ? <Square className="h-4 w-4 fill-current" /> : <Mic className="h-4 w-4" />}
-                  {isRecordingAudio ? "Parar gravação" : "Gravar audio"}
-                </Button>
-                {noteAttachment ? (
-                  <div
-                    className={cn(
-                      "flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs",
-                      attachmentType === "unsupported" ? "border-destructive/25 bg-destructive/5 text-destructive" : "bg-background text-muted-foreground",
-                    )}
-                  >
-                    <span className="truncate">
-                      {attachmentType === "unsupported" ? "Formato nao suportado" : getTaskNoteAttachmentLabel(noteAttachment)}: {noteAttachment.name}
-                    </span>
-                    <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={handleClearAttachment} aria-label="Remover anexo">
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-
-              {audioRecordingError ? (
-                <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  {audioRecordingError}
-                </div>
-              ) : null}
-
-              {attachmentType === "image" && noteMediaPreviewUrl ? (
-                <div className="overflow-hidden rounded-md border bg-background">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={noteMediaPreviewUrl} alt={noteAttachment?.name || "Preview da imagem"} className="max-h-64 w-full object-contain" />
-                </div>
-              ) : null}
-
-              {attachmentType === "audio" && noteMediaPreviewUrl ? <audio controls className="w-full" src={noteMediaPreviewUrl} /> : null}
-
-              <Textarea
-                className="min-h-24 resize-y"
-                value={noteDraft}
-                onChange={(event) => onNoteDraftChange(event.target.value)}
-                placeholder={noteAttachment ? "Legenda opcional" : "Digite uma atualização sobre a resolução da tarefa"}
-                disabled={isSavingNote}
-              />
-
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs text-muted-foreground">{isLoadingNotes ? "Carregando histórico..." : `${notes.length} registro${notes.length === 1 ? "" : "s"}`}</p>
-                <Button type="button" size="sm" disabled={!canCreateNote || isSavingNote} onClick={() => onCreateNote(task)}>
-                  {isSavingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  {isSavingNote ? "Salvando..." : "Adicionar evolução"}
-                </Button>
-              </div>
-
-              {noteErrorMessage ? (
-                <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  {noteErrorMessage}
-                </div>
-              ) : null}
-
-              <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
-                {!isLoadingNotes && notes.length === 0 ? (
-                  <p className="rounded-md border border-dashed px-3 py-3 text-sm text-muted-foreground">Nenhuma evolução registrada.</p>
-                ) : (
-                  notes.map((note) => {
-                    const parsedNote = parseTaskResolutionNoteContent(note.content);
-
-                    return (
-                      <div key={note.id} className="rounded-md border bg-card px-3 py-2">
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <div className="min-w-0 text-[11px] text-muted-foreground">
-                            <span>{formatDateTime(note.updated_at || note.created_at, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
-                            {note.status_snapshot ? <span className="ml-2">Status: {note.status_snapshot}</span> : null}
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            onClick={() => onDeleteNote(note.id)}
-                            aria-label="Apagar evolução"
-                            disabled={deletingNoteId === note.id}
-                          >
-                            {deletingNoteId === note.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                          </Button>
-                        </div>
-
-                        {parsedNote.type === "image" ? (
-                          <a href={parsedNote.mediaUrl} target="_blank" rel="noreferrer" className="mb-2 block overflow-hidden rounded-md border bg-background">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={parsedNote.mediaUrl} alt={parsedNote.content || parsedNote.fileName} className="max-h-72 w-full object-contain" />
-                          </a>
-                        ) : null}
-
-                        {parsedNote.type === "audio" ? (
-                          <audio controls className="mb-2 w-full" src={parsedNote.mediaUrl}>
-                            <a href={parsedNote.mediaUrl}>{parsedNote.fileName}</a>
-                          </audio>
-                        ) : null}
-
-                        {parsedNote.content ? <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{parsedNote.content}</p> : null}
-                        {parsedNote.type !== "text" ? <p className="mt-1 truncate text-[11px] text-muted-foreground">{parsedNote.fileName}</p> : null}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </section>
-
-            <div className="text-xs text-muted-foreground">Criado por {task.creator || "Sistema"}</div>
-
-            {overdue ? (
-              <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                <AlertCircle className="h-4 w-4" />
-                Esta tarefa está atrasada.
-              </div>
-            ) : null}
-
-            {errorMessage ? (
-              <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                <AlertCircle className="h-4 w-4" />
-                {errorMessage}
-              </div>
-            ) : null}
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isBusy}>
-                Fechar
-              </Button>
-              <Button type="button" variant="destructive" onClick={() => onDelete(task)} disabled={isBusy}>
-                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                {isDeleting ? "Excluindo..." : "Excluir tarefa"}
-              </Button>
-              <Button type="submit" disabled={isBusy || isLoadingTaskOptions || !responsibleUserId}>
-                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                {isSaving ? "Salvando..." : "Salvar alterações"}
-              </Button>
-            </DialogFooter>
-          </form>
-        ) : null}
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 function FieldLabel({ children }: { children: ReactNode }) {
@@ -1264,6 +378,14 @@ export function KanbanBoard() {
     if (!task.patientChatId) return;
     router.push(`/chats?chatId=${encodeURIComponent(task.patientChatId)}`);
   };
+
+  const isSmallScreen = useIsMobile(640);
+
+  useEffect(() => {
+    if (isSmallScreen && activeView === "todas") {
+      setActiveView("aguardando");
+    }
+  }, [isSmallScreen, activeView, setActiveView]);
 
   const handleUpdateTask = async (task: Task, values: { type: string; status: string; dueDate: string; responsibleUserId: string; subject: string; observations: string }) => {
     setSavingTaskId(task.id);
@@ -1479,10 +601,34 @@ export function KanbanBoard() {
     setResponsibleFilter(initialTatianaResponsibleFilter);
   }, [initialTatianaResponsibleFilter, isCurrentUserLoading, user]);
 
-  const effectiveResponsibleFilter =
-    responsibleFilter === filterAll && !hasAppliedInitialResponsibleFilterRef.current && isDraTatianaUser(user) && initialTatianaResponsibleFilter
-      ? initialTatianaResponsibleFilter
-      : responsibleFilter;
+  const effectiveResponsibleFilter = responsibleFilter === filterAll && !hasAppliedInitialResponsibleFilterRef.current && isDraTatianaUser(user) && initialTatianaResponsibleFilter ? initialTatianaResponsibleFilter : responsibleFilter;
+
+  const filtersConfig = [
+    {
+      id: "tipo",
+      icon: Tag,
+      value: typeFilter,
+      options: typeOptions,
+      filterAll: "Tipo",
+      onChange: setTypeFilter,
+    },
+    {
+      id: "criador",
+      icon: UserPlus,
+      value: creatorFilter,
+      options: creatorOptions,
+      filterAll: "Criador",
+      onChange: setCreatorFilter,
+    },
+    {
+      id: "responsavel",
+      icon: IdCardLanyard,
+      value: responsibleFilter,
+      options: responsibleOptions,
+      filterAll: "Responsável",
+      onChange: setResponsibleFilter,
+    },
+  ];
 
   const filteredTasks = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -1516,20 +662,20 @@ export function KanbanBoard() {
   const totalOpen = tasksByStatus.aguardando.length + tasksByStatus.resolvendo.length;
 
   return (
-    <div className="flex h-dvh flex-1 flex-col bg-background">
-      <header className="border-b bg-card px-6 py-2">
+    <div className="flex h-full w-full flex-1 flex-col bg-background">
+      <header className="border-b bg-card px-4 py-2">
         <div className="flex flex-col gap-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-row gap-4 sm:flex-row sm:items-center justify-between">
             <div>
-              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground whitespace-nowrap">
                 <span className="h-2 w-2 rounded-full bg-cyan-600" />
                 Airtable / Encaminhamentos
               </div>
               <h1 className="text-xl font-semibold text-foreground">Tarefas</h1>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="grid grid-cols-3 overflow-hidden rounded-md border bg-background shadow-xs">
+            <div className="flex flex-row items-center gap-3">
+              <div className="hidden sm:grid grid-cols-3 overflow-hidden rounded-lg border bg-background shadow-xs">
                 <div className="px-4 py-2 text-center">
                   <p className="text-lg font-semibold text-foreground">{filteredTasks.length}</p>
                   <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Visíveis</p>
@@ -1543,27 +689,30 @@ export function KanbanBoard() {
                   <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Finalizadas</p>
                 </div>
               </div>
-              <Button type="button" className="gap-2 bg-theme-primary text-white hover:bg-theme-primary/90" onClick={handleOpenCreateDialog}>
+              <Button type="button" className="gap-2 bg-theme-primary text-white hover:bg-theme-primary/90 h-10 min-[412px]:h-9" onClick={handleOpenCreateDialog}>
                 <Plus className="h-4 w-4" />
-                Nova Tarefa
+                <span className="hidden min-[412px]:inline">Nova Tarefa</span>
               </Button>
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="relative w-full xl:max-w-md">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder="Buscar por assunto, paciente, responsável..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="h-10 bg-background pl-9" />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <FilterMenu label="Tipo" value={typeFilter} options={typeOptions} onChange={setTypeFilter} />
-              <FilterMenu label="Criador" value={creatorFilter} options={creatorOptions} onChange={setCreatorFilter} />
-              <FilterMenu label="Responsável" value={responsibleFilter} options={responsibleOptions} onChange={setResponsibleFilter} />
-              <Button type="button" variant="outline" className="bg-background" onClick={() => loadTasks({ refresh: true })} disabled={isLoading || isRefreshing}>
-                {isLoading || isRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                {isRefreshing ? "Atualizando" : "Atualizar"}
-              </Button>
+            <div className="flex items-center gap-2 flex-2 min-w-0">
+              <div className="flex flex-row items-center gap-2 w-full">
+                {filtersConfig.map((filter) => (
+                  <FilterMenu key={filter.id} icon={filter.icon} value={filter.value} options={filter.options} filterAll={filter.filterAll} onChange={filter.onChange} />
+                ))}
+
+                <Button type="button" variant="outline" className="sm:justify-start bg-background h-10 shrink-0 sm:w-auto justify-center" onClick={() => loadTasks({ refresh: true })} disabled={isLoading || isRefreshing}>
+                  {isLoading || isRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  <span className="hidden sm:inline ml-2">{isRefreshing ? "Atualizando" : "Atualizar"}</span>
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -1583,14 +732,20 @@ export function KanbanBoard() {
       </header>
 
       <Tabs value={activeView} onValueChange={(value) => setActiveView(value as TaskView)} className="flex min-h-0 flex-1 gap-0">
-        <div className="border-b px-5 py-3">
-          <TabsList className="gap-1.5 rounded-full px-1.5 h-10! bg-secondary/50 border border-border/40">
+        <div className="px-4 py-3 overflow-x-auto border-b flex bg-card w-full items-center justify-center">
+          <TabsList className="gap-1.5 rounded-full h-9 sm:h-11  bg-secondary/50 border border-border/40">
             {taskViewOptions.map((view) => {
               const colors = getTaskStatusColor(view.value);
               const isActive = activeView === view.value;
 
               return (
-                <TabsTrigger key={view.value} value={view.value} className="group relative data-[state=active]:bg-card px-3.5 h-7 rounded-full text-xs font-medium transition-all gap-2 cursor-pointer data-[state=active]:shadow-xs">
+                <TabsTrigger
+                  key={view.value}
+                  value={view.value}
+                  className={`group relative data-[state=active]:bg-card px-3.5 h-6 sm:px-6 sm:h-9 rounded-full text-xs sm:text-[14px] font-medium transition-all gap-2 cursor-pointer data-[state=active]:shadow-xs ${
+                    view.value === "todas" ? "hidden sm:inline-flex" : "inline-flex"
+                  }`}
+                >
                   <Circle
                     className="h-2 w-2 transition-all duration-300"
                     style={{
@@ -1619,10 +774,10 @@ export function KanbanBoard() {
                 </div>
               ) : view.value === "todas" ? (
                 statusOrder.map((status) => (
-                  <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} isFiltering={isFiltering} onSelectTask={handleSelectTask} onOpenPatientChat={handleOpenPatientChat} />
+                  <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} isFiltering={isFiltering} onSelectTask={handleSelectTask} onOpenPatientChat={handleOpenPatientChat} statusConfig={statusConfig} />
                 ))
               ) : (
-                <TaskStatusGrid status={view.value} tasks={tasksByStatus[view.value]} isFiltering={isFiltering} onSelectTask={handleSelectTask} onOpenPatientChat={handleOpenPatientChat} />
+                <TaskStatusGrid status={view.value} tasks={tasksByStatus[view.value]} isFiltering={isFiltering} onSelectTask={handleSelectTask} onOpenPatientChat={handleOpenPatientChat} statusConfig={statusConfig} />
               )}
             </main>
           </TabsContent>
@@ -1818,6 +973,7 @@ export function KanbanBoard() {
         isSaving={Boolean(selectedTask && savingTaskId === selectedTask.id)}
         errorMessage={taskActionError}
         noteErrorMessage={taskResolutionNoteError}
+        statusConfig={statusConfig}
       />
     </div>
   );

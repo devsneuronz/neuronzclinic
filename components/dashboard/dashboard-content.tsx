@@ -450,7 +450,7 @@ export function DashboardContent() {
   }, [appointments, tasks]);
 
   return (
-    <div className="flex h-dvh bg-background">
+    <div className="flex h-full bg-background">
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header onCreateAppointment={() => void openAppointmentDialog()} />
 

@@ -8,11 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { addDays, addMonths, addWeeks, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek, subMonths, subWeeks } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarDays, CalendarIcon, CalendarPlus, ChevronLeft, ChevronRight, Circle, Clock, Loader2, Phone, Plus, Search, Stethoscope, User, UserPlus } from "lucide-react";
+import { Calendar1, CalendarDays, CalendarIcon, CalendarPlus, ChevronLeft, ChevronRight, Circle, Clock, Columns3, List, Loader2, Phone, Plus, Search, Stethoscope, User, UserPlus } from "lucide-react";
 import type { FormEvent, MouseEvent } from "react";
 import React, { useEffect, useMemo, useState } from "react";
 import { Calendar } from "../ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
 
 type ViewType = "Mês" | "Semana" | "Dia" | "Lista";
 
@@ -40,6 +41,12 @@ type AppointmentOptions = {
 };
 
 const views: ViewType[] = ["Mês", "Semana", "Dia", "Lista"];
+const viewIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+  Dia: Calendar1,
+  Semana: Columns3,
+  Mês: CalendarDays,
+  Lista: List,
+};
 const timeSlots = Array.from({ length: 16 }, (_, index) => index + 6);
 const allValue = "todos";
 const dayStartHour = 6;
@@ -234,13 +241,6 @@ export function WeeklyCalendar() {
   const [appointmentStartDateTime, setAppointmentStartDateTime] = useState("");
   const [appointmentEndDateTime, setAppointmentEndDateTime] = useState("");
   const [appointmentObservations, setAppointmentObservations] = useState("");
-
-  // Referência para guardar o temporizador do clique longo
-  const touchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-  // Estado para saber se o usuário "destravou" o modo agendamento via toque
-  const [isTouchSelecting, setIsTouchSelecting] = React.useState(false);
-  // Guarda o ponto inicial do toque para evitar falsos agendamentos ao rolar a tela
-  const touchStartPosRef = React.useRef({ x: 0, y: 0 });
 
   const range = useMemo(() => getRange(currentDate, activeView), [activeView, currentDate]);
   const professionalLabels = useMemo(() => new Map(options.professionals.map((professional) => [professional.id, professional.label])), [options.professionals]);
@@ -528,8 +528,8 @@ export function WeeklyCalendar() {
   }
 
   return (
-    <div className="flex h-dvh flex-1 flex-col bg-card overflow-hidden">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border p-4 md:px-6 min-h-15.25">
+    <div className="flex h-full flex-1 flex-col bg-card overflow-hidden">
+      <header className="flex flex-col-reverse md:flex-row md:items-center justify-between gap-4 border-b border-border p-4 md:px-6 min-h-15.25">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-center min-w-0">
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={goToPrevious} aria-label="Periodo anterior">
@@ -588,24 +588,29 @@ export function WeeklyCalendar() {
         </div>
       </header>
 
-      <div className={cn("px-4 md:px-6 py-3 overflow-x-auto custom-scrollbar", activeView !== "Semana" && activeView !== "Dia" && "border-border border-b")}>
-        <div className="flex gap-1 min-w-max">
-          {views.map((view) => (
-            <button
-              key={view}
-              onClick={() => setActiveView(view)}
-              className={cn(
-                "rounded-md px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium transition-colors text-muted-foreground",
-                activeView === view ? "bg-theme-primary text-white" : "cursor-pointer text-muted-foreground hover:bg-theme-accent hover:text-foreground dark:hover:bg-theme-primary/20",
-              )}
-            >
-              {view}
-            </button>
-          ))}
-        </div>
+      <div className={cn(" px-4 py-3 overflow-x-auto", activeView !== "Semana" && activeView !== "Dia" && "border-border border-b")}>
+        <Tabs value={activeView} onValueChange={(value) => setActiveView(value as typeof activeView)} className="w-full">
+          <TabsList className="w-full md:w-max gap-1.5 rounded-full px-1.5 h-10! bg-secondary/50 border border-border/40 ">
+            {views.map((view) => {
+              const Icon = viewIcons[view];
+
+              return (
+                <TabsTrigger
+                  key={view}
+                  value={view}
+                  className="data-[state=active]:border-theme-border group relative data-[state=active]:bg-theme-bg px-3.5 h-7 rounded-full text-xs font-medium transition-all gap-2 cursor-pointer data-[state=active]:shadow-xs data-[state=active]:text-theme-fg!"
+                >
+                  {Icon && <Icon className="group-data-[state=active]:text-theme-primary h-2 w-2 transition-all duration-300" />}
+
+                  <span className="truncate">{view}</span>
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        </Tabs>
       </div>
 
-      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden h-full">
+      <div className="flex flex-col-reverse lg:flex-row flex-1 overflow-hidden h-full">
         <div className="flex-1 overflow-auto min-w-0">
           <div className="flex flex-col">
             {errorMessage && <div className="border-b border-border bg-amber-500/10 px-6 py-2 text-sm text-amber-700 dark:text-amber-300">{errorMessage}</div>}
@@ -705,66 +710,12 @@ export function WeeklyCalendar() {
                     return (
                       <div
                         key={day.toISOString()}
-                        className={cn("relative flex-1 border-r border-border last:border-r-0 select-none", isSameDay(day, new Date()) && "bg-primary/5", isTouchSelecting ? "touch-none cursor-crosshair" : "touch-pan-y md:touch-auto")}
+                        className={cn("relative flex-1 cursor-crosshair border-r border-border last:border-r-0", isSameDay(day, new Date()) && "bg-primary/5")}
                         onMouseDown={(event) => handleGridMouseDown(day, event)}
                         onMouseMove={(event) => handleGridMouseMove(day, event)}
                         onMouseUp={(event) => handleGridMouseUp(day, event)}
                         onMouseLeave={() => {
                           if (daySelection) setSelection(null);
-                        }}
-                        onTouchStart={(event) => {
-                          const touch = event.touches[0];
-                          touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
-                          setIsTouchSelecting(false);
-
-                          touchTimeoutRef.current = setTimeout(() => {
-                            setIsTouchSelecting(true);
-                            if (navigator.vibrate) navigator.vibrate(50);
-
-                            const simulatedEvent = {
-                              clientX: touch.clientX,
-                              clientY: touch.clientY,
-                              preventDefault: () => event.preventDefault(),
-                              stopPropagation: () => event.stopPropagation(),
-                            } as unknown as React.MouseEvent<HTMLDivElement>;
-
-                            handleGridMouseDown(day, simulatedEvent);
-                          }, 400);
-                        }}
-                        onTouchMove={(event) => {
-                          const touch = event.touches[0];
-
-                          if (!isTouchSelecting) {
-                            const moveX = Math.abs(touch.clientX - touchStartPosRef.current.x);
-                            const moveY = Math.abs(touch.clientY - touchStartPosRef.current.y);
-
-                            if (moveX > 10 || moveY > 10) {
-                              if (touchTimeoutRef.current) clearTimeout(touchTimeoutRef.current);
-                            }
-                            return;
-                          }
-
-                          const simulatedEvent = {
-                            clientX: touch.clientX,
-                            clientY: touch.clientY,
-                            preventDefault: () => {},
-                            stopPropagation: () => {},
-                          } as unknown as React.MouseEvent<HTMLDivElement>;
-
-                          handleGridMouseMove(day, simulatedEvent);
-                        }}
-                        onTouchEnd={(event) => {
-                          if (touchTimeoutRef.current) clearTimeout(touchTimeoutRef.current);
-
-                          if (isTouchSelecting) {
-                            const simulatedEvent = {
-                              preventDefault: () => {},
-                              stopPropagation: () => {},
-                            } as unknown as React.MouseEvent<HTMLDivElement>;
-
-                            handleGridMouseUp(day, simulatedEvent);
-                            setIsTouchSelecting(false);
-                          }
                         }}
                       >
                         {timeSlots.map((hour) => (
@@ -796,24 +747,27 @@ export function WeeklyCalendar() {
           </div>
         </div>
 
-        <aside className={cn("w-full lg:w-64 flex-shrink-0 border-border bg-card p-4 transition-all duration-300", "border-t lg:border-t-0 lg:border-l", activeView !== "Mês" && activeView !== "Lista" && "lg:border-t")}>
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-foreground">Filtros</h3>
-            {isLoadingOptions && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+        <aside className={cn("flex flex-row w-full lg:w-64 lg:flex-col shrink-0 border-border bg-card p-4 transition-all duration-300", "border-t lg:border-t-0 lg:border-l", activeView !== "Mês" && activeView !== "Lista" && "lg:border-t")}>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-foreground hidden lg:inline">Filtros</h3>
+            {isLoadingOptions && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mr-4" />}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-col gap-4">
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Status</label>
+          <div className="grid grid-cols-3 gap-3 lg:flex lg:flex-col lg:gap-4 w-full">
+            <div className="flex-1 lg:space-y-2">
+              <label className="text-xs font-medium text-muted-foreground hidden lg:inline">Status</label>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full ">
-                  <div className="flex flex-row items-center gap-3">
+                <SelectTrigger className="w-full">
+                  <div className="flex flex-row items-center gap-3 overflow-hidden">
                     <Circle className="h-3 w-3" style={{ fill: currentStatusColor, stroke: currentStatusColor }} />
                     <SelectValue placeholder="Selecione o status" />
                   </div>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={allValue}>Todos</SelectItem>
+                  <SelectItem value={allValue}>
+                    <span className="lg:hidden">Status</span>
+                    <span className="hidden lg:inline">Todos</span>
+                  </SelectItem>
                   {options.status.map((status) => (
                     <SelectItem key={status} value={status}>
                       {status}
@@ -823,17 +777,20 @@ export function WeeklyCalendar() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Tipo</label>
+            <div className="flex-1 lg:space-y-2">
+              <label className="text-xs font-medium text-muted-foreground hidden lg:inline">Tipo</label>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger className="w-full">
-                  <div className="flex flex-row items-center gap-3">
+                  <div className="flex flex-row items-center gap-3 overflow-hidden">
                     <Stethoscope className="h-3.5 w-3.5 text-muted-foreground" />
                     <SelectValue placeholder="Selecione o tipo" />
                   </div>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={allValue}>Todos</SelectItem>
+                  <SelectItem value={allValue}>
+                    <span className="lg:hidden">Tipo</span>
+                    <span className="hidden lg:inline">Todos</span>
+                  </SelectItem>
                   {options.types.map((type) => (
                     <SelectItem key={type} value={type}>
                       {type}
@@ -843,17 +800,20 @@ export function WeeklyCalendar() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Profissional</label>
+            <div className="flex-1 lg:space-y-2">
+              <label className="text-xs font-medium text-muted-foreground hidden lg:inline">Profissional</label>
               <Select value={professionalFilter} onValueChange={setProfessionalFilter}>
                 <SelectTrigger className="w-full">
-                  <div className="flex flex-row items-center gap-3">
+                  <div className="flex flex-row items-center gap-3 overflow-hidden">
                     <User className="h-3.5 w-3.5 text-muted-foreground" />
                     <SelectValue placeholder="Selecione o profissional" />
                   </div>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={allValue}>Todos</SelectItem>
+                  <SelectItem value={allValue}>
+                    <span className="lg:hidden">Profissional</span>
+                    <span className="hidden lg:inline">Todos</span>
+                  </SelectItem>
                   {options.professionals.map((professional) => (
                     <SelectItem key={professional.id} value={professional.id}>
                       {professional.label}
@@ -863,8 +823,8 @@ export function WeeklyCalendar() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Paciente</label>
+            <div className="col-span-3 sm:flex-[2] sm:min-w-[200px] lg:space-y-2">
+              <label className="text-xs font-medium text-muted-foreground hidden lg:inline">Paciente</label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <input
