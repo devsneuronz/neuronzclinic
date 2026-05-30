@@ -16,8 +16,6 @@ export function KanbanColumn({ status, tasks, isFiltering, onSelectTask, onOpenP
   const config = statusConfig[status];
   const Icon = config.icon;
 
-  const colorName = config?.markerClassName?.replace("bg-", "") || "theme-primary/50";
-
   return (
     <section className={cn("flex min-w-[300px] flex-1 flex-col rounded-md border p-3", config.columnClassName)}>
       <div className="mb-3 flex items-start justify-between gap-3 px-1">
@@ -37,13 +35,7 @@ export function KanbanColumn({ status, tasks, isFiltering, onSelectTask, onOpenP
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-1">
         {tasks.length > 0 ? (
           tasks.map((task) => (
-            <div
-              key={task.id}
-              className={cn(
-                "group cursor-pointer rounded-md border bg-card p-4 text-left shadow-xs transition hover:ring-2 hover:shadow-sm focus-visible:outline-hidden focus-visible:ring-2",
-                `hover:ring-${colorName} focus-visible:ring-${colorName}`,
-              )}
-            >
+            <div key={task.id} className={cn("group cursor-pointer rounded-md border bg-card p-4 text-left shadow-xs transition hover:ring-2 hover:shadow-sm focus-visible:outline-hidden focus-visible:ring-2", config.ringClassName)}>
               <TaskCard task={task} onSelect={onSelectTask} onOpenPatientChat={onOpenPatientChat} />
             </div>
           ))
