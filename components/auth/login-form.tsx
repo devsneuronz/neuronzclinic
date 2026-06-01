@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, BrainCircuit, CheckCircle2, Eye, EyeOff, Loader2, LockKeyhole, Mail } from "lucide-react";
+import { ArrowRight, CheckCircle2, Eye, EyeOff, Loader2, LockKeyhole, Mail, Sparkles } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
@@ -174,16 +174,16 @@ export function LoginForm() {
             <div className="flex flex-col gap-20">
               <div className="max-w-md space-y-6">
                 <div className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/90 backdrop-blur-xs">
-                  <BrainCircuit className="h-3.5 w-3.5" />
-                  Atendimento inteligente
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Experiência Tournieux
                 </div>
                 <div className="space-y-4">
-                  <h1 className="text-3xl font-semibold leading-tight text-white">Sua clínica pronta para atender com clareza.</h1>
-                  <p className="text-sm leading-6 text-white/70">Acesse conversas, agenda e tarefas em uma rotina visualmente limpa, com a calma que o cuidado pede.</p>
+                  <h1 className="text-3xl font-semibold leading-tight text-white">Simplifique a rotina. Foque no que importa.</h1>
+                  <p className="text-sm leading-6 text-white/70">Uma interface intuitiva desenhada para otimizar seus fluxos da clínica, trazendo leveza visual e precisão para o dia a dia.</p>
                 </div>
               </div>
               <div className="grid gap-2.5 text-xs text-white/80">
-                {["Fluxos de atendimento centralizados", "Agenda e tarefas no mesmo painel", "Base preparada para Supabase Auth"].map((item) => (
+                {["Painel de atendimento inteligente e fluido", "Organização de tarefas e encaminhamentos", "Histórico de interações centralizado"].map((item) => (
                   <div key={item} className="flex items-center gap-3">
                     <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
                     <span>{item}</span>
