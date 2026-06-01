@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { useIsMobile } from "@/hooks/use-mobile";
 import type { ChatRecord, MessageRecord } from "@/lib/supabase-rest";
 import { getMentionLabel, getMentionSlug } from "@/lib/user-mentions";
 import type { MentionableUser } from "@/lib/user-roles";
@@ -58,9 +59,9 @@ type ChatComposerProps = {
 };
 
 function getLocalDateTimeValue(date = new Date(Date.now() + 10 * 60 * 1000)) {
-  const offset = date.getTimezoneOffset()
-  const localDate = new Date(date.getTime() - offset * 60 * 1000)
-  return localDate.toISOString().slice(0, 16)
+  const offset = date.getTimezoneOffset();
+  const localDate = new Date(date.getTime() - offset * 60 * 1000);
+  return localDate.toISOString().slice(0, 16);
 }
 
 export function ChatComposer({
@@ -105,6 +106,10 @@ export function ChatComposer({
   const [isScheduling, setIsScheduling] = useState(false);
   const mentionMatch = noteDraft.match(/(^|\s)@([\p{L}\p{N}._-]*)$/u);
   const mentionQuery = mentionMatch?.[2] ?? "";
+
+  const isMobile = useIsMobile();
+  const canSend = !!draft.trim() || !!attachment;
+
   const mentionSuggestions = useMemo(() => {
     if (!isInternalNoteOpen || !mentionMatch) return [];
 
@@ -314,12 +319,11 @@ export function ChatComposer({
             </div>
           ) : (
             <>
-              <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-foreground" onClick={onOpenInternalNote} aria-label="Criar anotação interna">
-                <PenLine className="h-5 w-5" />
-              </Button>
-              <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-foreground" onClick={onStartRecording} disabled={isSending || !!attachment} aria-label="Gravar áudio">
-                <Mic className="h-5 w-5" />
-              </Button>
+              {!isMobile && (
+                <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-foreground" onClick={onOpenInternalNote} aria-label="Criar anotação interna">
+                  <PenLine className="h-5 w-5" />
+                </Button>
+              )}
             </>
           )}
           <input
@@ -334,53 +338,103 @@ export function ChatComposer({
           <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(event) => onAttachmentSelected(event.target.files?.[0])} />
           {!isRecording && (
             <>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-foreground" aria-label="Anexar arquivo">
-                    <Paperclip className="h-5 w-5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" side="top" sideOffset={12} className="w-[300px] rounded-lg border-border bg-card p-3 shadow-xl">
-                  <div className="grid grid-cols-3 gap-2">
-                    <DropdownMenuItem className={attachmentMenuItemClass} onSelect={() => photoInputRef.current?.click()}>
-                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
-                        <FileImage className="h-5 w-5 text-current" />
-                      </span>
-                      Fotos
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className={attachmentMenuItemClass} onSelect={() => videoInputRef.current?.click()}>
-                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-rose-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
-                        <Video className="h-5 w-5 text-current" />
-                      </span>
-                      Vídeos
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className={attachmentMenuItemClass} onSelect={() => fileInputRef.current?.click()}>
-                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
-                        <FileText className="h-5 w-5 text-current" />
-                      </span>
-                      Documentos
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className={attachmentMenuItemClass} onSelect={() => cameraInputRef.current?.click()}>
-                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
-                        <Camera className="h-5 w-5 text-current" />
-                      </span>
-                      Câmera
-                    </DropdownMenuItem>
-                    <DropdownMenuItem aria-disabled className={disabledAttachmentMenuItemClass} onSelect={(event) => event.preventDefault()}>
-                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
-                        <MapPin className="h-5 w-5 text-current" />
-                      </span>
-                      Localização
-                    </DropdownMenuItem>
-                    <DropdownMenuItem aria-disabled className={disabledAttachmentMenuItemClass} onSelect={(event) => event.preventDefault()}>
-                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
-                        <UserRound className="h-5 w-5 text-current" />
-                      </span>
-                      Contato
-                    </DropdownMenuItem>
-                  </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {!isMobile ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-foreground" aria-label="Anexar arquivo">
+                      <Paperclip className="h-5 w-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" side="top" sideOffset={12} className="w-[300px] rounded-lg border-border bg-card p-3 shadow-xl">
+                    <div className="grid grid-cols-3 gap-2">
+                      <DropdownMenuItem className={attachmentMenuItemClass} onSelect={() => photoInputRef.current?.click()}>
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
+                          <FileImage className="h-5 w-5 text-current" />
+                        </span>
+                        Fotos
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className={attachmentMenuItemClass} onSelect={() => videoInputRef.current?.click()}>
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-rose-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
+                          <Video className="h-5 w-5 text-current" />
+                        </span>
+                        Vídeos
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className={attachmentMenuItemClass} onSelect={() => fileInputRef.current?.click()}>
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
+                          <FileText className="h-5 w-5 text-current" />
+                        </span>
+                        Documentos
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className={attachmentMenuItemClass} onSelect={() => cameraInputRef.current?.click()}>
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
+                          <Camera className="h-5 w-5 text-current" />
+                        </span>
+                        Câmera
+                      </DropdownMenuItem>
+                      {isMobile && (
+                        <>
+                          <DropdownMenuItem aria-disabled className={attachmentMenuItemClass} onSelect={() => setIsScheduleOpen(true)}>
+                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-500  text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
+                              <Clock className="h-5 w-5 text-current" />
+                            </span>
+                            Agendar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem aria-disabled className={attachmentMenuItemClass} onSelect={() => setIsScheduleOpen(true)} onClick={onOpenInternalNote}>
+                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-300  text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
+                              <PenLine className="h-5 w-5 text-current" />
+                            </span>
+                            Anotação
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                      <DropdownMenuItem aria-disabled className={disabledAttachmentMenuItemClass} onSelect={(event) => event.preventDefault()}>
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
+                          <MapPin className="h-5 w-5 text-current" />
+                        </span>
+                        Localização
+                      </DropdownMenuItem>
+                      <DropdownMenuItem aria-disabled className={disabledAttachmentMenuItemClass} onSelect={(event) => event.preventDefault()}>
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
+                          <UserRound className="h-5 w-5 text-current" />
+                        </span>
+                        Contato
+                      </DropdownMenuItem>
+                    </div>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Popover open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="ghost" size="icon" className="shrink-0 text-teal-500 hover:text-teal-600" disabled={isSending} aria-label="Agendar mensagem" title="Agendar mensagem">
+                      <Clock className="h-5 w-5" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" side="top" sideOffset={12} className="w-80 rounded-md border-border bg-card p-3 shadow-xl">
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Agendar mensagem</p>
+                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{attachment ? attachment.name : draft.trim() || "Mensagem"}</p>
+                      </div>
+                      <input
+                        type="datetime-local"
+                        value={scheduleDateTime}
+                        onChange={(event) => setScheduleDateTime(event.target.value)}
+                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                      {scheduleError && <p className="rounded-md bg-red-500/10 px-2 py-1.5 text-xs text-red-500">{scheduleError}</p>}
+                      <div className="flex justify-end gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => setIsScheduleOpen(false)}>
+                          Cancelar
+                        </Button>
+                        <Button type="button" size="sm" className="bg-teal-500 text-white hover:bg-teal-600" onClick={handleScheduleSubmit} disabled={isScheduling}>
+                          <CalendarClock className="h-4 w-4" />
+                          Agendar
+                        </Button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
               <div className="relative flex flex-1 gap-2 items-center h-full">
                 {isSignatureMode && !attachment && <span className="shrink-0 select-none rounded-md text-xs py-1.5 px-2 ml-2 bg-theme-primary text-theme-primary-fg font-bold">{userName}</span>}
 
@@ -390,43 +444,111 @@ export function ChatComposer({
                   onChange={(event) => onDraftChange(event.target.value)}
                   disabled={isSending}
                   placeholder={attachment ? "Legenda opcional" : "Digite uma mensagem..."}
-                  className="flex-1 border-0 bg-input/50 rounded-md resize-none transition-[color,box-shadow] h-full min-h-0"
+                  className={cn("flex-1 border-0 bg-input/50  resize-none transition-[color,box-shadow] h-full w-0 min-h-0", isMobile ? "rounded-[20px] pr-7" : "rounded-md")}
                 />
+                {isMobile && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild className="absolute right-0">
+                      <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-foreground" aria-label="Anexar arquivo">
+                        <Paperclip className="h-5 w-5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" side="top" sideOffset={12} className="w-[300px] rounded-lg border-border bg-card p-3 shadow-xl">
+                      <div className="grid grid-cols-3 gap-2">
+                        <DropdownMenuItem className={attachmentMenuItemClass} onSelect={() => photoInputRef.current?.click()}>
+                          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
+                            <FileImage className="h-5 w-5 text-current" />
+                          </span>
+                          Fotos
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className={attachmentMenuItemClass} onSelect={() => videoInputRef.current?.click()}>
+                          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-rose-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
+                            <Video className="h-5 w-5 text-current" />
+                          </span>
+                          Vídeos
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className={attachmentMenuItemClass} onSelect={() => fileInputRef.current?.click()}>
+                          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
+                            <FileText className="h-5 w-5 text-current" />
+                          </span>
+                          Documentos
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className={attachmentMenuItemClass} onSelect={() => cameraInputRef.current?.click()}>
+                          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
+                            <Camera className="h-5 w-5 text-current" />
+                          </span>
+                          Câmera
+                        </DropdownMenuItem>
+                        {isMobile && (
+                          <>
+                            <DropdownMenuItem aria-disabled className={attachmentMenuItemClass} onSelect={() => setIsScheduleOpen(true)} onClick={onOpenInternalNote}>
+                              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-300  text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
+                                <PenLine className="h-5 w-5 text-current" />
+                              </span>
+                              Anotação
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                        <DropdownMenuItem aria-disabled className={disabledAttachmentMenuItemClass} onSelect={(event) => event.preventDefault()}>
+                          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
+                            <MapPin className="h-5 w-5 text-current" />
+                          </span>
+                          Localização
+                        </DropdownMenuItem>
+                        <DropdownMenuItem aria-disabled className={disabledAttachmentMenuItemClass} onSelect={(event) => event.preventDefault()}>
+                          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
+                            <UserRound className="h-5 w-5 text-current" />
+                          </span>
+                          Contato
+                        </DropdownMenuItem>
+                      </div>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
               </div>
-              <Popover open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
-                <PopoverTrigger asChild>
-                  <Button type="button" variant="ghost" size="icon" className="shrink-0 text-teal-500 hover:text-teal-600" disabled={isSending} aria-label="Agendar mensagem" title="Agendar mensagem">
-                    <Clock className="h-5 w-5" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="end" side="top" sideOffset={12} className="w-80 rounded-md border-border bg-card p-3 shadow-xl">
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">Agendar mensagem</p>
-                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{attachment ? attachment.name : draft.trim() || "Mensagem"}</p>
+              {!isMobile && (
+                <Popover open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="ghost" size="icon" className="shrink-0 text-teal-500 hover:text-teal-600" disabled={isSending} aria-label="Agendar mensagem" title="Agendar mensagem">
+                      <Clock className="h-5 w-5" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" side="top" sideOffset={12} className="w-80 rounded-md border-border bg-card p-3 shadow-xl">
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Agendar mensagem</p>
+                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{attachment ? attachment.name : draft.trim() || "Mensagem"}</p>
+                      </div>
+                      <input
+                        type="datetime-local"
+                        value={scheduleDateTime}
+                        onChange={(event) => setScheduleDateTime(event.target.value)}
+                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                      {scheduleError && <p className="rounded-md bg-red-500/10 px-2 py-1.5 text-xs text-red-500">{scheduleError}</p>}
+                      <div className="flex justify-end gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => setIsScheduleOpen(false)}>
+                          Cancelar
+                        </Button>
+                        <Button type="button" size="sm" className="bg-teal-500 text-white hover:bg-teal-600" onClick={handleScheduleSubmit} disabled={isScheduling}>
+                          <CalendarClock className="h-4 w-4" />
+                          Agendar
+                        </Button>
+                      </div>
                     </div>
-                    <input
-                      type="datetime-local"
-                      value={scheduleDateTime}
-                      onChange={(event) => setScheduleDateTime(event.target.value)}
-                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                    {scheduleError && <p className="rounded-md bg-red-500/10 px-2 py-1.5 text-xs text-red-500">{scheduleError}</p>}
-                    <div className="flex justify-end gap-2">
-                      <Button type="button" variant="outline" size="sm" onClick={() => setIsScheduleOpen(false)}>
-                        Cancelar
-                      </Button>
-                      <Button type="button" size="sm" className="bg-teal-500 text-white hover:bg-teal-600" onClick={handleScheduleSubmit} disabled={isScheduling}>
-                        <CalendarClock className="h-4 w-4" />
-                        Agendar
-                      </Button>
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
-              <Button type="submit" disabled={isSending || (!draft.trim() && !attachment)} size="icon" className="shrink-0 rounded-full bg-teal-500 text-white hover:bg-teal-600" aria-label="Enviar mensagem">
-                {isSending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-              </Button>
+                  </PopoverContent>
+                </Popover>
+              )}
+
+              {canSend ? (
+                <Button type="submit" disabled={isSending} size="icon" className="h-10 w-10 shrink-0 rounded-full bg-teal-500 text-white hover:bg-teal-600" aria-label="Enviar mensagem">
+                  {isSending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                </Button>
+              ) : (
+                <Button type="button" disabled={isSending} size="icon" className="h-10 w-10 shrink-0 rounded-full bg-input/30 text-white/50 hover:bg-input/80 hover:text-white" onClick={onStartRecording} aria-label="Gravar áudio">
+                  <Mic className="h-5 w-5" />
+                </Button>
+              )}
             </>
           )}
         </div>

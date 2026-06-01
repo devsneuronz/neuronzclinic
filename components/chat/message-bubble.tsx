@@ -69,6 +69,35 @@ export const MessageBubble = memo(
             !isHighlighted && "duration-1000",
             deleted && "border border-dashed border-red-500/45 bg-(--chat-muted)/80 opacity-80 shadow-none saturate-[0.65]",
             mediaKind === "audio" && " w-[320px] ",
+            fromMe
+              ? `
+      rounded-tr-none
+      bg-(--chat-me)
+      after:absolute
+      after:right-[-8px]
+      after:top-0
+      after:h-0
+      after:w-0
+      after:border-t-[10px]
+      after:border-r-[10px]
+      after:border-t-(--chat-me)
+      after:border-r-transparent
+      after:content-['']
+    `
+              : `
+      rounded-tl-none
+      bg-(--chat-other)
+      before:absolute
+      before:left-[-8px]
+      before:top-0
+      before:h-0
+      before:w-0
+      before:border-t-[10px]
+      before:border-l-[10px]
+      before:border-t-(--chat-other)
+      before:border-l-transparent
+      before:content-['']
+    `,
           )}
         >
           {message.participant && !fromMe && <p className="mb-1 text-sm font-medium text-(--chat-primary)">{message.participant}</p>}
@@ -174,7 +203,13 @@ export const MessageBubble = memo(
 
                 {mediaKind !== "sticker" && (
                   <div className="flex gap-2">
-                    <a href={mediaUrl} download target="_blank" rel="noopener noreferrer" className="flex flex-1 items-center justify-center gap-2 rounded bg-(--chat-card)/80 py-2 text-xs font-medium text-(--chat-muted-foreground) transition-colors hover:bg-(--chat-card)">
+                    <a
+                      href={mediaUrl}
+                      download
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex flex-1 items-center justify-center gap-2 rounded bg-(--chat-card)/80 py-2 text-xs font-medium text-(--chat-muted-foreground) transition-colors hover:bg-(--chat-card)"
+                    >
                       <Download className="h-3.5 w-3.5" />
                       Baixar Arquivo
                     </a>
