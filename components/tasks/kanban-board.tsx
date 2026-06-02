@@ -375,9 +375,9 @@ export function KanbanBoard() {
   };
 
   const handleOpenPatientChat = (task: Task) => {
-  if (!task.patientChatId) return;
-  router.push(`/chats?chatId=${encodeURIComponent(task.patientChatId)}`);
-};
+    if (!task.patientChatId) return;
+    router.push(`/chats?chatId=${encodeURIComponent(task.patientChatId)}`);
+  };
 
   const isSmallScreen = useIsMobile(640);
 
