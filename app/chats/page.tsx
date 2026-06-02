@@ -1088,6 +1088,9 @@ export default function ChatsPage() {
     const requestId = ++searchRequestIdRef.current;
 
     if (!term) {
+      setSearchChats([]);
+      setSearchChatsTerm("");
+      setHasMoreSearchChats(false);
       return;
     }
 
@@ -1095,7 +1098,7 @@ export default function ChatsPage() {
 
     let isMounted = true;
 
-    fetchChats({ limit: CHAT_PAGE_SIZE, offset: 0, search: term })
+    fetchChats({ limit: CHAT_PAGE_SIZE, offset: 0, search: "" })
       .then((data) => {
         if (!isMounted || requestId !== searchRequestIdRef.current) return;
         const filtered = data.filter((chat) => {
