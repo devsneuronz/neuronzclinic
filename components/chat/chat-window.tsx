@@ -177,8 +177,9 @@ export function ChatWindow({
 
   const { user } = useCurrentUser();
   const userName = user?.name ?? "Usuário";
-  const composerMinSize = isInternalNoteOpen ? 212 : 65;
-  const composerMaxSize = isInternalNoteOpen ? 300 : 180;
+
+  const composerMinSize = isInternalNoteOpen ? 270 : 65;
+  const composerMaxSize = isInternalNoteOpen ? 340 : 180;
 
   const messagesRef = useRef(messages);
   const currentChatIdRef = useRef(chat?.chat_id ?? null);
@@ -1081,13 +1082,7 @@ export function ChatWindow({
   const attachmentKind = getAttachmentType(attachment);
 
   return (
-    <div
-      className="flex h-full flex-1 overflow-hidden bg-background"
-      onDragEnter={handleAttachmentDragEnter}
-      onDragOver={handleAttachmentDragOver}
-      onDragLeave={handleAttachmentDragLeave}
-      onDrop={handleAttachmentDrop}
-    >
+    <div className="flex h-full flex-1 overflow-hidden bg-background" onDragEnter={handleAttachmentDragEnter} onDragOver={handleAttachmentDragOver} onDragLeave={handleAttachmentDragLeave} onDrop={handleAttachmentDrop}>
       <div className="flex flex-1 flex-col border-r border-border relative w-full">
         {isDraggingAttachment && (
           <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm">
@@ -1150,8 +1145,8 @@ export function ChatWindow({
               onScrollToMessage={handleScrollToMessage}
             />
           </Panel>
-          <Separator className="h-1 bg-(--chat-muted)/50 transition-colors hover:bg-theme-primary/50" />
-          <Panel id="message-panel" defaultSize={composerMinSize} minSize={composerMinSize} maxSize={composerMaxSize} className="bg-(--chat-card) border-l border-(--chat-muted)">
+          <Separator className="h-1.25 bg-(--chat-muted)/50 transition-colors hover:bg-theme-primary/50 border-t " />
+          <Panel id="message-panel" minSize={composerMinSize} maxSize={composerMaxSize} className="bg-(--chat-card) border-l border-(--chat-muted) overflow-visible!">
             <ChatComposer
               chat={chat}
               draft={draft}

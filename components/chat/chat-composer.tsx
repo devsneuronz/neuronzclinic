@@ -9,7 +9,7 @@ import type { ChatRecord, MessageRecord } from "@/lib/supabase-rest";
 import { getMentionLabel, getMentionSlug } from "@/lib/user-mentions";
 import type { MentionableUser } from "@/lib/user-roles";
 import { cn } from "@/lib/utils";
-import { CalendarClock, Camera, Check, Clock, FileImage, FileText, Loader2, MapPin, Mic, Paperclip, Pause, PenLine, Reply, Send, Trash2, UserRound, Video, X } from "lucide-react";
+import { CalendarClock, Camera, Check, Clock, FileImage, FileText, Loader2, MapPin, Mic, Paperclip, Pause, PenLine, Pin, Reply, Send, Trash2, UserRound, Video, X } from "lucide-react";
 import type { FormEvent, RefObject } from "react";
 import { useMemo, useState } from "react";
 import { Textarea } from "../ui/textarea";
@@ -176,46 +176,57 @@ export function ChatComposer({
   return (
     <form onSubmit={onSubmit} className="flex h-full flex-col border-t border-border bg-card px-4 py-3">
       {isInternalNoteOpen && (
-        <div className="mb-4 max-w-5xl">
-          <div className="mb-2">
-            <p className="text-sm font-semibold text-foreground">Escrever anotação interna:</p>
-            <p className="text-xs text-muted-foreground">A anotação não é visível para o cliente.</p>
+        <div className="flex h-full w-full md:w-2/3 lg:w-1/2 flex-col bg-background/50 p-4 min-h-0 rounded-lg">
+          <div className="mb-3 shrink-0">
+            <div className="flex items-center gap-2">
+              <Pin className="h-4 w-4 text-yellow-300 rotate-45" />
+              <p className="text-sm font-semibold text-foreground">Anotação Interna</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">Esta anotação não é visível para o cliente.</p>
           </div>
+
           {noteLinkedMessage && (
-            <div className="mb-2 max-w-2xl border-l-4 border-amber-400 bg-yellow-100/85 px-3 py-2 text-xs text-yellow-950">
-              <p className="font-semibold">Anotação vinculada à mensagem</p>
-              <p className="mt-0.5 line-clamp-2">{getMessagePreviewText(noteLinkedMessage)}</p>
+            <div className="mb-3 max-w-2xl shrink-0 border-l-2 border-yellow-300 bg-yellow-500/10 backdrop-blur-sm px-3 py-2 rounded-r-md text-xs text-foreground/90">
+              <p className="font-medium text-yellow-400 ">Vinculada a uma mensagem</p>
+              <p className="mt-0.5 line-clamp-1 italic text-muted-foreground">aaa</p>
             </div>
           )}
-          <div className="relative">
+          <div
+            className="group relative flex-1 min-h-0 w-full rounded-sm border border-border bg-input/30 transition-all focus-within:border-yellow-300/40"
+            style={{
+              clipPath: "polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%)",
+            }}
+          >
+            <div
+              className=" absolute top-0 right-0 h-4 w-4 pointer-events-none border-l border-b border-border transition-all group-focus-within:bg-yellow-300/20 group-focus-within:border-yellow-300/40"
+              style={{
+                clipPath: "polygon(0 0, 100% 100%, 0 100%)",
+              }}
+            />
+
             <textarea
               value={noteDraft}
               onChange={(event) => onNoteDraftChange(event.target.value)}
-              className="min-h-20 w-full resize-y border-0 bg-yellow-100 px-3 py-2 text-sm text-yellow-950 outline-none ring-1 ring-yellow-200 placeholder:text-yellow-950/45 focus:ring-2 focus:ring-amber-400"
-              placeholder="Digite uma anotacao interna. Use @ para mencionar alguem."
+              className="h-full w-full resize-none bg-transparent px-3.5 py-3 pr-6 text-sm text-foreground outline-none placeholder:text-muted-foreground/50"
+              placeholder="Digite a anotação interna... Use @ para mencionar alguém."
             />
-            {mentionSuggestions.length > 0 && (
-              <div className="absolute bottom-full left-0 z-20 mb-2 w-72 overflow-hidden rounded-md border border-amber-200 bg-card p-1 text-sm shadow-lg">
-                {mentionSuggestions.map((user) => (
-                  <button key={user.email} type="button" className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-foreground transition hover:bg-amber-100 dark:hover:bg-amber-500/15" onClick={() => insertMention(user)}>
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-xs font-semibold text-amber-700">{getMentionLabel(user).charAt(0).toUpperCase()}</span>
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium">@{getMentionLabel(user)}</span>
-                      <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
-          <div className="mt-2 flex items-center gap-2">
-            <Button type="button" size="sm" className="bg-green-600 text-white hover:bg-green-700" onClick={onSaveInternalNote} disabled={!noteDraft.trim()}>
-              <Check className="h-4 w-4" />
-              Salvar anotação
-            </Button>
-            <Button type="button" size="sm" className="bg-red-700 text-white hover:bg-red-800" onClick={onCloseInternalNote}>
-              <X className="h-4 w-4" />
+
+          <div className="mt-3 flex items-center justify-end gap-2 border-t border-border/60 pt-3 shrink-0">
+            <Button type="button" variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 gap-1.5 transition-colors" onClick={onCloseInternalNote}>
+              <X className="h-3.5 w-3.5" />
               Cancelar
+            </Button>
+
+            <Button
+              type="button"
+              size="sm"
+              className="bg-amber-300 text-black hover:bg-amber-300/80 font-medium gap-1.5 shadow-sm shadow-amber-500/10 transition-all disabled:opacity-50"
+              onClick={onSaveInternalNote}
+              disabled={!noteDraft.trim()}
+            >
+              <Check className="h-3.5 w-3.5" />
+              Salvar Nota
             </Button>
           </div>
         </div>
@@ -444,7 +455,7 @@ export function ChatComposer({
                   onChange={(event) => onDraftChange(event.target.value)}
                   disabled={isSending}
                   placeholder={attachment ? "Legenda opcional" : "Digite uma mensagem..."}
-                  className={cn("flex-1 border-0 bg-input/50  resize-none transition-[color,box-shadow] h-full w-0 min-h-0", isMobile ? "rounded-[20px] pr-7" : "rounded-md")}
+                  className={cn("flex-1 border-0 bg-input/50 resize-none transition-[color,box-shadow] h-full w-0 min-h-0", isMobile ? "rounded-[20px] pr-7" : "rounded-md")}
                 />
                 {isMobile && (
                   <DropdownMenu>
