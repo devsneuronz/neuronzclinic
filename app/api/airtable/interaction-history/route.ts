@@ -191,6 +191,17 @@ function mapInteractionRecord(record: AirtableRecord, index: number) {
   }
 }
 
+function getInteractionTime(interaction: ReturnType<typeof mapInteractionRecord>) {
+  const time = new Date(interaction.createdAt).getTime()
+  return Number.isNaN(time) ? 0 : time
+}
+
+function sortInteractionsOldestFirst(interactions: ReturnType<typeof mapInteractionRecord>[]) {
+  return [...interactions]
+    .sort((first, second) => getInteractionTime(first) - getInteractionTime(second))
+    .map((interaction, index) => ({ ...interaction, number: index + 1 }))
+}
+
 async function fetchMetadataTables() {
   const response = await fetch(`https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables`, {
     headers: {
@@ -343,7 +354,7 @@ export async function GET(request: Request) {
     }
 
     const records = await fetchAirtableRecords(INTERACTION_HISTORY_TABLE, params)
-    const interactions = records.map(mapInteractionRecord).filter((interaction) => interaction.received || interaction.iaResponse)
+    const interactions = sortInteractionsOldestFirst(records.map(mapInteractionRecord).filter((interaction) => interaction.received || interaction.iaResponse))
     const qualityOptions = getChoiceNames(historyTable, QUALITY_FIELD_CANDIDATES)
 
     return NextResponse.json({ interactions, qualityOptions: qualityOptions.length > 0 ? qualityOptions : FALLBACK_QUALITY_OPTIONS })

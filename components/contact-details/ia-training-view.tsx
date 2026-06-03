@@ -41,6 +41,17 @@ function formatInteractionDate(value: string) {
   }).format(date);
 }
 
+function getInteractionTime(item: TrainingInteraction) {
+  const time = new Date(item.createdAt).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function sortInteractionsOldestFirst(interactions: TrainingInteraction[]) {
+  return [...interactions]
+    .sort((first, second) => getInteractionTime(first) - getInteractionTime(second))
+    .map((interaction, index) => ({ ...interaction, number: index + 1 }));
+}
+
 export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
   const [trainingData, setTrainingData] = useState<TrainingInteraction[]>([]);
   const [qualityOptions, setQualityOptions] = useState<string[]>([]);
@@ -52,7 +63,6 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const chatId = chat?.chat_id || "";
-  const latestCorrectedIndex = trainingData.reduce((latestIndex, item, index) => (item.correctedResponse ? index : latestIndex), -1);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -78,10 +88,12 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
           throw new Error(data.message || "Não foi possível carregar o histórico de interações.");
         }
 
-        setTrainingData(data.interactions ?? []);
+        const sortedInteractions = sortInteractionsOldestFirst(data.interactions ?? []);
+
+        setTrainingData(sortedInteractions);
         setQualityOptions(data.qualityOptions ?? []);
         setCorrectionDrafts(
-          (data.interactions ?? []).reduce<Record<string, string>>((drafts, item) => {
+          sortedInteractions.reduce<Record<string, string>>((drafts, item) => {
             drafts[item.id] = item.correctedResponse || "";
             return drafts;
           }, {}),
@@ -224,8 +236,7 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
       ) : null}
 
       <Accordion type="single" collapsible className="w-full space-y-3">
-        {trainingData.map((item, index) => {
-          const isCorrectionLocked = Boolean(item.correctedResponse) || (latestCorrectedIndex >= 0 && index < latestCorrectedIndex);
+        {trainingData.map((item) => {
           const isSendingCorrection = sendingCorrectionIds.includes(item.id);
           const correctionValue = correctionDrafts[item.id] ?? item.correctedResponse ?? "";
           const hasCorrectionConfirmation = Boolean(item.correctedResponse) || confirmedCorrectionIds.includes(item.id);
@@ -305,19 +316,16 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
                     <h4 className="text-xs font-bold">Mensagem Corrigida</h4>
                     <Textarea
                       value={correctionValue}
-                      placeholder={isCorrectionLocked ? "Correção indisponível para esta interação." : "Digite a resposta ideal para treinar a IA..."}
+                      placeholder="Digite a resposta ideal para treinar a IA..."
                       className="min-h-[120px] resize-none bg-muted/20 border-border"
-                      disabled={isCorrectionLocked || isSendingCorrection}
+                      disabled={isSendingCorrection}
                       onChange={(event) => setCorrectionDrafts((current) => ({ ...current, [item.id]: event.target.value }))}
                     />
                     {hasCorrectionConfirmation ? <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-500"><Check className="h-3.5 w-3.5" />Correção feita</div> : null}
-                    {!hasCorrectionConfirmation && isCorrectionLocked ? (
-                      <div className="text-xs text-muted-foreground">Uma interação posterior já foi corrigida.</div>
-                    ) : null}
                   </div>
                   <Button
                     className="h-8 px-4 w-full bg-theme-primary hover:bg-theme-primary/80 text-xs text-white font-bold rounded-md"
-                    disabled={isCorrectionLocked || isSendingCorrection || !correctionValue.trim()}
+                    disabled={isSendingCorrection || !correctionValue.trim()}
                     onClick={() => void handleSendCorrection(item)}
                   >
                     {isSendingCorrection ? "Enviando..." : "Responder"}
