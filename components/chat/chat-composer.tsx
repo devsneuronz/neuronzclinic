@@ -191,25 +191,40 @@ export function ChatComposer({
               <p className="mt-0.5 line-clamp-1 italic text-muted-foreground">aaa</p>
             </div>
           )}
-          <div
-            className="group relative flex-1 min-h-0 w-full rounded-sm border border-border bg-input/30 transition-all focus-within:border-yellow-300/40"
-            style={{
-              clipPath: "polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%)",
-            }}
-          >
-            <div
-              className=" absolute top-0 right-0 h-4 w-4 pointer-events-none border-l border-b border-border transition-all group-focus-within:bg-yellow-300/20 group-focus-within:border-yellow-300/40"
-              style={{
-                clipPath: "polygon(0 0, 100% 100%, 0 100%)",
-              }}
-            />
 
-            <textarea
-              value={noteDraft}
-              onChange={(event) => onNoteDraftChange(event.target.value)}
-              className="h-full w-full resize-none bg-transparent px-3.5 py-3 pr-6 text-sm text-foreground outline-none placeholder:text-muted-foreground/50"
-              placeholder="Digite a anotação interna... Use @ para mencionar alguém."
-            />
+          <div className="relative flex-1 min-h-0 w-full">
+            <div
+              className="group relative flex-1 h-full w-full rounded-sm border border-border bg-input/30 transition-all focus-within:border-yellow-300/40"
+              style={{
+                clipPath: "polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%)",
+              }}
+            >
+              <div
+                className=" absolute top-0 right-0 h-4 w-4 pointer-events-none border-l border-b border-border transition-all group-focus-within:bg-yellow-300/20 group-focus-within:border-yellow-300/40"
+                style={{
+                  clipPath: "polygon(0 0, 100% 100%, 0 100%)",
+                }}
+              />
+              <textarea
+                value={noteDraft}
+                onChange={(event) => onNoteDraftChange(event.target.value)}
+                className="h-full w-full resize-none bg-transparent px-3.5 py-3 pr-6 text-sm text-foreground outline-none placeholder:text-muted-foreground/50"
+                placeholder="Digite a anotação interna... Use @ para mencionar alguém."
+              />
+            </div>
+            {mentionSuggestions.length > 0 && (
+              <div className="absolute bottom-full left-0 z-20 mb-2 w-72 overflow-hidden rounded-md border border-border bg-popover p-1 text-sm shadow-xl backdrop-blur-md">
+                {mentionSuggestions.map((user) => (
+                  <button key={user.email} type="button" className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-foreground transition hover:bg-accent" onClick={() => insertMention(user)}>
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-[10px] font-bold text-amber-600 dark:text-amber-400">{getMentionLabel(user).charAt(0).toUpperCase()}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium text-xs">@{getMentionLabel(user)}</span>
+                      <span className="block truncate text-[10px] text-muted-foreground">{user.email}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="mt-3 flex items-center justify-end gap-2 border-t border-border/60 pt-3 shrink-0">
