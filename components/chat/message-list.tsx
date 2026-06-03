@@ -1,11 +1,12 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import type { ChatRecord, MessageRecord } from "@/lib/supabase-rest";
+import type { ChatRecord, MessageRecord, ScheduledMessageRecord } from "@/lib/supabase-rest";
 import { ArrowDown, MessageSquareText, Trash2 } from "lucide-react";
 import type { RefObject, UIEvent } from "react";
 import { MessageBubble } from "./message-bubble";
 import { getDisplayName, getTimeLabel } from "./message-utils";
+import { ScheduledMessagesStrip } from "./scheduled-messages-strip";
 
 export type InternalNote = {
   id: string;
@@ -49,6 +50,11 @@ type MessageListProps = {
   onDeleteNote: (noteId: string) => void;
   onExpandImage: (url: string, alt: string) => void;
   onScrollToMessage: (id: string) => void;
+
+  messages: ScheduledMessageRecord[];
+  onCancel: (messageId: string) => Promise<void>;
+  onUpdate: ({ id, text, scheduledAt }: { id: string; text: string; scheduledAt: string }) => Promise<void>;
+  isInternalNoteOpen: boolean;
 };
 
 function InternalNoteBubble({ chat, note, onScrollToMessage, onDeleteNote }: { chat: ChatRecord; note: InternalNote; onScrollToMessage: (id: string) => void; onDeleteNote: (noteId: string) => void }) {
@@ -117,6 +123,10 @@ export function MessageList({
   onDeleteNote,
   onExpandImage,
   onScrollToMessage,
+  messages,
+  onCancel,
+  onUpdate,
+  isInternalNoteOpen,
 }: MessageListProps) {
   return (
     <>
@@ -130,7 +140,7 @@ export function MessageList({
           backgroundSize: "600px",
         }}
       >
-        <div className="mx-auto flex min-h-full w-full flex-col px-6 py-4">
+        <div className="relative mx-auto flex min-h-full w-full flex-col px-6">
           {isLoading ? (
             <div className="shadow-x m-auto rounded-full border border-input/30 bg-input/20 px-4 py-2 text-sm shadow-sm backdrop-blur-[1px]">Carregando mensagens...</div>
           ) : error ? (
@@ -139,7 +149,7 @@ export function MessageList({
             <div className="shadow-x m-auto rounded-full border border-input/30 bg-input/20 px-4 py-2 text-sm text-foreground/75 shadow-sm backdrop-blur-[1px]">Esta conversa ainda não tem mensagens visíveis.</div>
           ) : (
             <>
-              <div className="mb-2 flex justify-center">
+              <div className="mb-2 flex justify-center ">
                 {hasMoreMessages ? (
                   <Button variant="ghost" className="h-8 bg-(--chat-muted)/70 px-3 text-xs text-(--chat-muted-foreground) shadow-sm hover:bg-(--chat-muted)" disabled={isLoadingOlder} onClick={onLoadOlderClick}>
                     {isLoadingOlder ? "Carregando mensagens antigas..." : "Carregar mensagens antigas"}
@@ -181,6 +191,8 @@ export function MessageList({
               ))}
             </>
           )}
+
+          {!isInternalNoteOpen && <ScheduledMessagesStrip messages={messages} onCancel={onCancel} onUpdate={onUpdate} />}
           <div ref={bottomRef} />
         </div>
       </div>

@@ -397,22 +397,6 @@ export function ChatComposer({
                         </span>
                         Câmera
                       </DropdownMenuItem>
-                      {isMobile && (
-                        <>
-                          <DropdownMenuItem aria-disabled className={attachmentMenuItemClass} onSelect={() => setIsScheduleOpen(true)}>
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-500  text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
-                              <Clock className="h-5 w-5 text-current" />
-                            </span>
-                            Agendar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem aria-disabled className={attachmentMenuItemClass} onSelect={() => setIsScheduleOpen(true)} onClick={onOpenInternalNote}>
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-300  text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
-                              <PenLine className="h-5 w-5 text-current" />
-                            </span>
-                            Anotação
-                          </DropdownMenuItem>
-                        </>
-                      )}
                       <DropdownMenuItem aria-disabled className={disabledAttachmentMenuItemClass} onSelect={(event) => event.preventDefault()}>
                         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
                           <MapPin className="h-5 w-5 text-current" />
@@ -431,7 +415,15 @@ export function ChatComposer({
               ) : (
                 <Popover open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
                   <PopoverTrigger asChild>
-                    <Button type="button" variant="ghost" size="icon" className="shrink-0 text-teal-500 hover:text-teal-600" disabled={isSending} aria-label="Agendar mensagem" title="Agendar mensagem">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className={cn("shrink-0 text-teal-500 hover:text-teal-600", isScheduleOpen && "bg-accent/50 border border-border")}
+                      disabled={isSending}
+                      aria-label="Agendar mensagem"
+                      title="Agendar mensagem"
+                    >
                       <Clock className="h-5 w-5" />
                     </Button>
                   </PopoverTrigger>
@@ -448,7 +440,7 @@ export function ChatComposer({
                         className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-teal-500"
                       />
                       {scheduleError && <p className="rounded-md bg-red-500/10 px-2 py-1.5 text-xs text-red-500">{scheduleError}</p>}
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-start gap-2">
                         <Button type="button" variant="outline" size="sm" onClick={() => setIsScheduleOpen(false)}>
                           Cancelar
                         </Button>
@@ -507,7 +499,7 @@ export function ChatComposer({
                         </DropdownMenuItem>
                         {isMobile && (
                           <>
-                            <DropdownMenuItem aria-disabled className={attachmentMenuItemClass} onSelect={() => setIsScheduleOpen(true)} onClick={onOpenInternalNote}>
+                            <DropdownMenuItem aria-disabled className={attachmentMenuItemClass} onClick={onOpenInternalNote}>
                               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-300  text-black shadow-sm ring-1 ring-black/10 dark:text-white dark:ring-white/15">
                                 <PenLine className="h-5 w-5 text-current" />
                               </span>
@@ -535,7 +527,15 @@ export function ChatComposer({
               {!isMobile && (
                 <Popover open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
                   <PopoverTrigger asChild>
-                    <Button type="button" variant="ghost" size="icon" className="shrink-0 text-teal-500 hover:text-teal-600" disabled={isSending} aria-label="Agendar mensagem" title="Agendar mensagem">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className={cn("shrink-0 text-teal-500 hover:text-teal-600", isScheduleOpen && "bg-accent/50 border border-border")}
+                      disabled={isSending}
+                      aria-label="Agendar mensagem"
+                      title="Agendar mensagem"
+                    >
                       <Clock className="h-5 w-5" />
                     </Button>
                   </PopoverTrigger>

@@ -33,7 +33,6 @@ import { ExpandedImageModal } from "./expanded-image-modal";
 import { ForwardMessageDialog } from "./forward-message-dialog";
 import { MessageList, type InternalNote, type TimelineItem } from "./message-list";
 import { getDateLabel, getMediaKind, getMessagePreviewText, isDeletedMessage } from "./message-utils";
-import { ScheduledMessagesStrip } from "./scheduled-messages-strip";
 
 const FORWARD_TARGET_PAGE_SIZE = 50;
 interface ChatWindowProps {
@@ -1110,7 +1109,6 @@ export function ChatWindow({
           isMobile={isMobile}
           onCloseChat={onCloseChat}
         />
-        {!isInternalNoteOpen && <ScheduledMessagesStrip messages={scheduledMessages} onCancel={handleCancelScheduledMessage} onUpdate={handleUpdateScheduledMessage} />}
         <Group orientation="vertical">
           <Panel>
             <MessageList
@@ -1143,6 +1141,10 @@ export function ChatWindow({
               onDeleteNote={deleteInternalNote}
               onExpandImage={(url: string, alt: string) => setExpandedImage({ url, alt })}
               onScrollToMessage={handleScrollToMessage}
+              messages={scheduledMessages}
+              onCancel={handleCancelScheduledMessage}
+              onUpdate={handleUpdateScheduledMessage}
+              isInternalNoteOpen={isInternalNoteOpen}
             />
           </Panel>
           <Separator className="h-1.25 bg-(--chat-muted)/50 transition-colors hover:bg-theme-primary/50 border-t " />
