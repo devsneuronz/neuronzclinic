@@ -1148,7 +1148,7 @@ export function ChatWindow({
             />
           </Panel>
           <Separator className="h-1.25 bg-(--chat-muted)/50 transition-colors hover:bg-theme-primary/50 border-t " />
-          <Panel id="message-panel" minSize={composerMinSize} maxSize={composerMaxSize} className="bg-(--chat-card) border-l border-(--chat-muted) overflow-visible!">
+          <Panel id="message-panel" defaultSize={composerMinSize} minSize={composerMinSize} maxSize={composerMaxSize} className="bg-(--chat-card) border-l border-(--chat-muted) overflow-visible!">
             <ChatComposer
               chat={chat}
               draft={draft}
