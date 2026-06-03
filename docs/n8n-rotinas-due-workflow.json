@@ -1,0 +1,80 @@
+{
+  "name": "Neuronz - Rotinas - Processar ações pendentes",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "schedule-every-minute",
+      "name": "A cada minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_BASE_URL + '/api/routines/due' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.ROUTINES_WEBHOOK_SECRET }}"
+            },
+            {
+              "name": "x-routines-secret",
+              "value": "={{ $env.ROUTINES_WEBHOOK_SECRET }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { limit: 50 } }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "process-due-actions",
+      "name": "Processar ações vencidas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 0]
+    }
+  ],
+  "connections": {
+    "A cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Processar ações vencidas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo"
+  },
+  "pinData": {},
+  "active": false,
+  "versionId": "rotinas-due-v1",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

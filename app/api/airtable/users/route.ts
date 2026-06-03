@@ -30,6 +30,7 @@ type AirtableRecord = {
 }
 
 type ListedUser = {
+  id?: string
   email: string
   name: string
   role: ReturnType<typeof normalizeUserRole>
@@ -221,6 +222,7 @@ async function listActiveUsers() {
       }
 
       indexedUsers.set(email, {
+        id: record.id,
         email,
         name: getName(fields, email),
         role: getRole(fields),

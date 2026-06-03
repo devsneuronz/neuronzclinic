@@ -1,0 +1,234 @@
+{
+  "name": "Neuronz - Rotinas - Evento de contato",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "contact-routine-event",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-contact-routine-event",
+      "name": "Webhook - Evento de Contato",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "contact-routine-event"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\n\nconst eventType = String(body.event_type || body.eventType || '').toLowerCase();\nconst tag = body.tag || {};\nconst status = body.status || {};\n\nlet trigger = 'manual';\nlet targetId = '';\nlet targetLabel = '';\n\nif (eventType.includes('tag')) {\n  trigger = 'tag';\n  targetId = String(tag.id || body.tag_id || body.target_id || '');\n  targetLabel = String(tag.label || body.tag_label || body.target_label || '');\n}\n\nif (eventType.includes('status')) {\n  trigger = 'status';\n  targetLabel = String(status.label || body.status_label || body.target_label || body.status || '');\n}\n\nif (eventType.includes('birthday') || eventType.includes('anivers')) {\n  trigger = 'birthday';\n  targetLabel = 'Aniversário';\n}\n\nreturn [{\n  json: {\n    raw: body,\n    trigger,\n    targetId,\n    targetLabel,\n    contactId: String(body.contact_id || body.chat_id || body.contact_airtable_id || ''),\n    contactAirtableId: String(body.contact_airtable_id || body.airtable_contact_id || ''),\n    chatId: String(body.chat_id || body.phone || ''),\n    contactName: String(body.contact_name || body.nome_contato || body.name || ''),\n    contactPhone: String(body.contact_phone || body.phone || body.chat_id || ''),\n    occurredAt: body.occurred_at || new Date().toISOString(),\n    source: body.source || 'unknown'\n  }\n}];"
+      },
+      "id": "normalize-event",
+      "name": "Normalizar Evento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.OPENAI_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  model: $env.OPENAI_MODEL || 'gpt-4o-mini',\n  temperature: 0,\n  response_format: { type: 'json_object' },\n  messages: [\n    {\n      role: 'system',\n      content: 'Você normaliza eventos de contato para disparo de rotinas. Responda somente JSON válido. Não invente IDs. Gatilhos permitidos: manual, tag, status, birthday, specific_date. Retorne: {\"shouldTrigger\": boolean, \"trigger\": string, \"targetId\": string, \"targetLabel\": string, \"reason\": string}. Regras: tag_added dispara trigger tag apenas para tag nova; status_changed dispara trigger status apenas quando mudou; birthday dispara trigger birthday; contato que já tinha a tag antes não deve disparar.'\n    },\n    {\n      role: 'user',\n      content: 'Evento normalizado:\\n' + JSON.stringify($json)\n    }\n  ]\n} }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "openai-normalize",
+      "name": "IA - Validar Evento",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $('Normalizar Evento').first().json;\nconst content = $json.choices?.[0]?.message?.content || '{}';\nlet ai = {};\n\ntry {\n  ai = typeof content === 'string' ? JSON.parse(content) : content;\n} catch (error) {\n  ai = { shouldTrigger: true, trigger: event.trigger, targetId: event.targetId, targetLabel: event.targetLabel, reason: 'Fallback: IA retornou JSON inválido.' };\n}\n\nif (ai.shouldTrigger === false) {\n  return [{ json: { skipped: true, reason: ai.reason || 'IA bloqueou o disparo.', event } }];\n}\n\nreturn [{\n  json: {\n    skipped: false,\n    trigger: ai.trigger || event.trigger,\n    targetId: ai.targetId || event.targetId,\n    targetLabel: ai.targetLabel || event.targetLabel,\n    contactId: event.contactId,\n    contactAirtableId: event.contactAirtableId,\n    chatId: event.chatId,\n    contactName: event.contactName,\n    contactPhone: event.contactPhone,\n    occurredAt: event.occurredAt,\n    aiReason: ai.reason || '',\n    raw: event.raw\n  }\n}];"
+      },
+      "id": "prepare-trigger",
+      "name": "Preparar Disparo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [760, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.skipped }}",
+              "value2": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-should-trigger",
+      "name": "Deve Disparar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1000, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_BASE_URL + '/api/routines/trigger' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.ROUTINES_WEBHOOK_SECRET }}"
+            },
+            {
+              "name": "x-routines-secret",
+              "value": "={{ $env.ROUTINES_WEBHOOK_SECRET }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  trigger: $json.trigger,\n  targetId: $json.targetId,\n  targetLabel: $json.targetLabel,\n  contactId: $json.contactId,\n  contactAirtableId: $json.contactAirtableId,\n  chatId: $json.chatId,\n  contactName: $json.contactName,\n  contactPhone: $json.contactPhone,\n  occurredAt: $json.occurredAt,\n  aiReason: $json.aiReason\n} }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "trigger-routine-backend",
+      "name": "Disparar Backend de Rotinas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1240, -120]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, triggered: true, backend: $json } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-success",
+      "name": "Responder - Disparado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1500, -120]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, triggered: false, reason: $json.reason || 'Sem rotina elegível' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-skipped",
+      "name": "Responder - Ignorado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1240, 120]
+    }
+  ],
+  "connections": {
+    "Webhook - Evento de Contato": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Evento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Evento": {
+      "main": [
+        [
+          {
+            "node": "IA - Validar Evento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IA - Validar Evento": {
+      "main": [
+        [
+          {
+            "node": "Preparar Disparo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Disparo": {
+      "main": [
+        [
+          {
+            "node": "Deve Disparar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deve Disparar?": {
+      "main": [
+        [
+          {
+            "node": "Disparar Backend de Rotinas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder - Ignorado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Disparar Backend de Rotinas": {
+      "main": [
+        [
+          {
+            "node": "Responder - Disparado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "active": false,
+  "versionId": "rotinas-event-v1",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

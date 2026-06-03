@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+const ROUTINES_EVENT_WEBHOOK_URL = process.env.ROUTINES_EVENT_WEBHOOK_URL
+const ROUTINES_WEBHOOK_SECRET = process.env.ROUTINES_WEBHOOK_SECRET
 
 type RawChat = Record<string, unknown>
 type TagInput = { id: string; label: string; color?: string | null }
@@ -43,6 +45,52 @@ function normalizeTags(value: unknown): TagInput[] | null {
       }
     })
     .filter((tag) => /^rec[a-zA-Z0-9]+$/.test(tag.id) && tag.label)
+
+  return tags
+}
+
+function normalizeTagFromUnknown(value: unknown): TagInput | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+
+    if (looksLikeJsonObjectString(trimmed)) {
+      try {
+        return normalizeTagFromUnknown(JSON.parse(trimmed))
+      } catch {
+        return null
+      }
+    }
+
+    return /^rec[a-zA-Z0-9]+$/.test(trimmed) ? { id: trimmed, label: trimmed } : null
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+
+  const source = value as Record<string, unknown>
+  const id = getString(source.id) || getString(source["IDA TAG"])
+  const label = getString(source.label) || getString(source.Tag) || getString(source.tag) || getString(source.Nome) || getString(source.name) || id
+  const color = getHexColor(source.color) || getHexColor(source.HEXCOR) || getHexColor(source.hexcor) || getHexColor(source.hex_status)
+
+  return /^rec[a-zA-Z0-9]+$/.test(id) && label ? { id, label, ...(color ? { color } : {}) } : null
+}
+
+function extractTagsFromChat(chat: RawChat): TagInput[] {
+  const candidates = [chat.json_tags_parsed, chat.json_tags, chat.tag_chat_array]
+  const tags: TagInput[] = []
+  const seen = new Set<string>()
+
+  for (const candidate of candidates) {
+    const values = Array.isArray(candidate) ? candidate : typeof candidate === "string" ? candidate.split(",").map((item) => item.trim()) : []
+
+    for (const value of values) {
+      const tag = normalizeTagFromUnknown(value)
+      if (!tag || seen.has(tag.id)) continue
+
+      seen.add(tag.id)
+      tags.push(tag)
+    }
+  }
 
   return tags
 }
@@ -146,6 +194,16 @@ function buildPatch(body: RawChat, currentChat: RawChat) {
   return patch
 }
 
+function getAddedTags(body: RawChat, currentChat: RawChat) {
+  if (!("tags" in body)) return []
+
+  const nextTags = normalizeTags(body.tags)
+  if (!nextTags) return []
+
+  const currentTagIds = new Set(extractTagsFromChat(currentChat).map((tag) => tag.id))
+  return nextTags.filter((tag) => !currentTagIds.has(tag.id))
+}
+
 async function supabaseRequest(path: string, init?: RequestInit) {
   if (!SUPABASE_REST_URL || !SUPABASE_KEY) {
     throw new Error("Missing Supabase REST configuration.")
@@ -174,6 +232,51 @@ async function fetchCurrentChat(id: string) {
   return data[0] ?? null
 }
 
+function getContactAirtableId(chat: RawChat) {
+  return (
+    getString(chat.airtable_id) ||
+    getString(chat.airtable_record_id) ||
+    getString(chat.contato_airtable_id) ||
+    getString(chat.contact_airtable_id) ||
+    getString(chat.record_id)
+  )
+}
+
+async function notifyRoutineTagAdded({ chatId, currentChat, addedTags }: { chatId: string; currentChat: RawChat; addedTags: TagInput[] }) {
+  if (!ROUTINES_EVENT_WEBHOOK_URL || addedTags.length === 0) return
+
+  const contactName = getString(currentChat.nome_contato) || getString(currentChat.pushname)
+  const contactPhone = getString(currentChat.phone_contact) || getString(currentChat.chat_id) || chatId
+  const contactAirtableId = getContactAirtableId(currentChat)
+
+  for (const tag of addedTags) {
+    const payload = {
+      event_type: "tag_added",
+      contact_id: chatId,
+      contact_airtable_id: contactAirtableId,
+      chat_id: getString(currentChat.chat_id) || chatId,
+      contact_name: contactName,
+      contact_phone: contactPhone,
+      tag,
+      occurred_at: new Date().toISOString(),
+      source: "neuronzclinic-app",
+    }
+
+    const response = await fetch(ROUTINES_EVENT_WEBHOOK_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(ROUTINES_WEBHOOK_SECRET ? { Authorization: `Bearer ${ROUTINES_WEBHOOK_SECRET}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    })
+
+    if (!response.ok) {
+      console.error("Routine tag webhook failed", await response.text().catch(() => response.statusText))
+    }
+  }
+}
+
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params
@@ -194,6 +297,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
 
     const patch = buildPatch(body as RawChat, currentChat)
+    const addedTags = getAddedTags(body as RawChat, currentChat)
     if (Object.keys(patch).length === 0) {
       return NextResponse.json({ message: "Nenhum campo valido para atualizar." }, { status: 400 })
     }
@@ -211,9 +315,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
 
     const data = (await response.json()) as RawChat[]
+    await notifyRoutineTagAdded({ chatId, currentChat: data[0] ?? { ...currentChat, ...patch }, addedTags })
+
     return NextResponse.json({
       chat: data[0] ?? { ...currentChat, ...patch },
       patch,
+      routineEvents: {
+        tagAdded: addedTags.length,
+      },
     })
   } catch (error) {
     return NextResponse.json(
