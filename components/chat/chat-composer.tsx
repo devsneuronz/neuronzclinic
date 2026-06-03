@@ -571,7 +571,7 @@ export function ChatComposer({
                   {isSending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                 </Button>
               ) : (
-                <Button type="button" disabled={isSending} size="icon" className="h-10 w-10 shrink-0 rounded-full bg-input/30 text-white/50 hover:bg-input/80 hover:text-white" onClick={onStartRecording} aria-label="Gravar áudio">
+                <Button type="button" disabled={isSending} size="icon" className="h-10 w-10 shrink-0 rounded-full bg-input/30 text-foreground/50 hover:bg-input/80 hover:text-foreground" onClick={onStartRecording} aria-label="Gravar áudio">
                   <Mic className="h-5 w-5" />
                 </Button>
               )}

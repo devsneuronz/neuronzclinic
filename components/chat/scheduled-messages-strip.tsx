@@ -159,9 +159,9 @@ export function ScheduledMessagesStrip({
           <DialogHeader>
             <DialogTitle>Editar mensagem agendada</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
-            <Textarea value={editText} onChange={(event) => setEditText(event.target.value)} className="min-h-28 resize-y" placeholder="Mensagem" />
-            <Input type="datetime-local" value={editDateTime} onChange={(event) => setEditDateTime(event.target.value)} />
+          <div className="space-y-3  overflow-hidden">
+            <Textarea value={editText} onChange={(event) => setEditText(event.target.value)} className="min-h-28 resize-y ring-0!" placeholder="Mensagem" />
+            <Input type="datetime-local" value={editDateTime} onChange={(event) => setEditDateTime(event.target.value)} className="ring-0!" />
             {editError && <p className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-500">{editError}</p>}
           </div>
           <DialogFooter>
