@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
-import { getChatTags, getReadableTextColor, type ChatTag } from "@/lib/chat-tags";
+import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, getReadableTextColor, type ChatTag } from "@/lib/chat-tags";
 import { ChatRecord, fetchChats, updateChatDetails } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 import { ArrowDown, ArrowRight, Loader2, Maximize2, RefreshCw, Search, Users } from "lucide-react";
@@ -303,6 +303,31 @@ export default function ContatosPage() {
     }
   }
 
+  async function handleToggleContactInterest(contact: ChatRecord, interest: ChatTag) {
+    const latestContact = contactsRef.current.find((current) => current.id === contact.id) ?? contact;
+    const currentInterests = getChatInterestTags(latestContact);
+    const interestKey = getTagKey(interest);
+    const hasInterest = currentInterests.some((currentInterest) => getTagKey(currentInterest) === interestKey);
+    const nextInterests = hasInterest ? currentInterests.filter((currentInterest) => getTagKey(currentInterest) !== interestKey) : [...currentInterests, interest];
+    const interestPatch = CHAT_INTEREST_FIELD_CANDIDATES.reduce<Record<string, ChatTag[]>>((patch, field) => {
+      patch[field] = nextInterests;
+      return patch;
+    }, {});
+
+    updateContactById(contact.id, (current) => ({
+      ...current,
+      ...interestPatch,
+    }));
+    setError(undefined);
+
+    try {
+      await updateChatDetails({ id: contact.id, interestTags: nextInterests });
+    } catch (err) {
+      restoreContact(contact);
+      setError(err instanceof Error ? err.message : "Nao foi possivel salvar os interesses do contato.");
+    }
+  }
+
   function handleReorderTags(contact: ChatRecord, tags: ChatTag[]) {
     updateContactById(contact.id, (current) => ({
       ...current,
@@ -519,6 +544,7 @@ export default function ContatosPage() {
                   tagOptions={contactTagOptions}
                   onChangeStatus={(status) => void handleChangeContactStatus(selectedContact, status)}
                   onToggleTag={(tag) => void handleToggleContactTag(selectedContact, tag)}
+                  onToggleInterest={(interest) => void handleToggleContactInterest(selectedContact, interest)}
                   onChangeName={(name) => handleChangeName(selectedContact, name)}
                   onChangeContactInfo={(info) => handleChangeContactInfo(selectedContact, info)}
                   onMarkAsRead={() => void handleMarkAsRead(selectedContact)}

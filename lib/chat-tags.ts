@@ -6,6 +6,21 @@ export interface ChatTag {
   color?: string
 }
 
+export const CHAT_INTEREST_FIELD_CANDIDATES = [
+  "json_interests_parsed",
+  "json_interests",
+  "interest_tags_array",
+  "interest_tags",
+  "interests",
+  "json_interesses_parsed",
+  "json_interesses",
+  "interesses_array",
+  "interesses",
+  "tag_interesse_array",
+  "tags_interesse",
+  "tags_interesses",
+]
+
 type TagLike = {
   fields?: Record<string, unknown>
   id?: unknown
@@ -106,6 +121,27 @@ export function getChatTags(chat?: Partial<ChatRecord>): ChatTag[] {
   if (!chat) return []
 
   const candidates = [chat.json_tags_parsed, chat.json_tags, chat.tag_chat_array]
+  const seen = new Set<string>()
+  const tags: ChatTag[] = []
+
+  for (const candidate of candidates) {
+    for (const tag of tagsFromCandidate(candidate)) {
+      const key = tag.id || tag.label
+      if (seen.has(key)) continue
+
+      seen.add(key)
+      tags.push(tag)
+    }
+  }
+
+  return tags
+}
+
+export function getChatInterestTags(chat?: Partial<ChatRecord>): ChatTag[] {
+  if (!chat) return []
+
+  const source = chat as Partial<ChatRecord> & Record<string, unknown>
+  const candidates = CHAT_INTEREST_FIELD_CANDIDATES.map((field) => source[field])
   const seen = new Set<string>()
   const tags: ChatTag[] = []
 

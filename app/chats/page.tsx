@@ -7,7 +7,7 @@ import type { ContactInfoValues } from "@/components/contact-details/profile-vie
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
-import { getChatTags, type ChatTag } from "@/lib/chat-tags";
+import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, type ChatTag } from "@/lib/chat-tags";
 import { createSupabaseRealtimeSubscription, type SupabasePostgresChangePayload } from "@/lib/supabase-realtime";
 import {
   ChatRecord,
@@ -399,6 +399,7 @@ export default function ChatsPage() {
     for (const chat of [...chats, ...searchChats]) indexedChats.set(chat.id, chat);
     return Array.from(indexedChats.values());
   }, [chats, searchChats]);
+  const knownChatsRef = useRef<ChatRecord[]>([]);
   const selectedChat = useMemo(() => knownChats.find((chat) => chat.id === selectedChatId), [knownChats, selectedChatId]);
   const fallbackStatusOptions = useMemo(() => getFallbackStatusOptions(knownChats), [knownChats]);
   const fallbackTagOptions = useMemo(() => getFallbackTagOptions(knownChats), [knownChats]);
@@ -449,6 +450,10 @@ export default function ChatsPage() {
   useEffect(() => {
     selectedChatRemoteIdRef.current = selectedChatRemoteId;
   }, [selectedChatRemoteId]);
+
+  useEffect(() => {
+    knownChatsRef.current = knownChats;
+  }, [knownChats]);
 
   useEffect(() => {
     isGhostModeRef.current = effectiveGhostMode;
@@ -1518,6 +1523,22 @@ export default function ChatsPage() {
     [selectedChatId],
   );
 
+  const updateSelectedChatInterests = useCallback(
+    (interests: ChatTag[]) => {
+      if (!selectedChatId) return;
+
+      const interestPatch = CHAT_INTEREST_FIELD_CANDIDATES.reduce<Record<string, ChatTag[]>>((patch, field) => {
+        patch[field] = interests;
+        return patch;
+      }, {});
+      const updateInterests = (list: ChatRecord[]) => list.map((chat) => (chat.id === selectedChatId ? { ...chat, ...interestPatch } : chat));
+
+      setChats((current) => updateInterests(current));
+      setSearchChats((current) => updateInterests(current));
+    },
+    [selectedChatId],
+  );
+
   const handleChangeContactName = useCallback(
     async (name: string) => {
       if (!selectedChat || !selectedChatId) return;
@@ -1608,8 +1629,9 @@ export default function ChatsPage() {
     async (tag: ChatTag) => {
       if (!selectedChat) return;
 
-      const previousChat = selectedChat;
-      const currentTags = getChatTags(selectedChat);
+      const latestChat = knownChatsRef.current.find((chat) => chat.id === selectedChat.id) ?? selectedChat;
+      const previousChat = latestChat;
+      const currentTags = getChatTags(latestChat);
       const tagKey = getTagKey(tag);
       const hasTag = currentTags.some((currentTag) => getTagKey(currentTag) === tagKey);
       const nextTags = hasTag ? currentTags.filter((currentTag) => getTagKey(currentTag) !== tagKey) : [...currentTags, tag];
@@ -1628,6 +1650,33 @@ export default function ChatsPage() {
       }
     },
     [restoreSelectedChat, selectedChat, updateSelectedChatTags],
+  );
+
+  const handleToggleContactInterest = useCallback(
+    async (interest: ChatTag) => {
+      if (!selectedChat) return;
+
+      const latestChat = knownChatsRef.current.find((chat) => chat.id === selectedChat.id) ?? selectedChat;
+      const previousChat = latestChat;
+      const currentInterests = getChatInterestTags(latestChat);
+      const interestKey = getTagKey(interest);
+      const hasInterest = currentInterests.some((currentInterest) => getTagKey(currentInterest) === interestKey);
+      const nextInterests = hasInterest ? currentInterests.filter((currentInterest) => getTagKey(currentInterest) !== interestKey) : [...currentInterests, interest];
+
+      updateSelectedChatInterests(nextInterests);
+      setError(undefined);
+
+      try {
+        await updateChatDetails({
+          id: selectedChat.id,
+          interestTags: nextInterests,
+        });
+      } catch (err) {
+        restoreSelectedChat(previousChat);
+        setError(err instanceof Error ? err.message : "Não foi possível salvar os interesses do contato.");
+      }
+    },
+    [restoreSelectedChat, selectedChat, updateSelectedChatInterests],
   );
 
   const handleReorderTags = useCallback(
@@ -1705,6 +1754,7 @@ export default function ChatsPage() {
           tagOptions={contactTagOptions}
           onChangeStatus={handleChangeContactStatus}
           onToggleTag={handleToggleContactTag}
+          onToggleInterest={handleToggleContactInterest}
           onMarkAsRead={handleMarkAsReadPersisted}
           onMarkAsUnread={handleMarkAsUnread}
           onReorderTags={handleReorderTags}
@@ -1801,6 +1851,7 @@ export default function ChatsPage() {
                 tagOptions={contactTagOptions}
                 onChangeStatus={handleChangeContactStatus}
                 onToggleTag={handleToggleContactTag}
+                onToggleInterest={handleToggleContactInterest}
                 onChangeName={handleChangeContactName}
                 onChangeContactInfo={handleChangeContactInfo}
                 onMarkAsRead={handleMarkAsReadPersisted}

@@ -22,8 +22,10 @@ interface ContactDetailsProps {
   onToggleIA: () => void;
   statusOptions?: ChatStatusOption[];
   tagOptions?: ChatTag[];
+  interestOptions?: ChatTag[];
   onChangeStatus?: (status: ChatStatusOption) => void;
   onToggleTag?: (tag: ChatTag) => void;
+  onToggleInterest?: (tag: ChatTag) => void;
   onChangeName?: (name: string) => Promise<void> | void;
   onChangeContactInfo?: (info: ContactInfoValues) => Promise<void> | void;
   onMarkAsRead?: () => void;
@@ -51,8 +53,10 @@ export function ContactDetails({
   onToggleIA,
   statusOptions,
   tagOptions,
+  interestOptions,
   onChangeStatus,
   onToggleTag,
+  onToggleInterest,
   onMarkAsRead,
   onMarkAsUnread,
   onReorderTags,
@@ -225,8 +229,10 @@ export function ContactDetails({
               contactPhone={contactPhone}
               statusOptions={statusOptions}
               tagOptions={tagOptions}
+              interestOptions={interestOptions}
               onChangeStatus={onChangeStatus}
               onToggleTag={onToggleTag}
+              onToggleInterest={onToggleInterest}
               onChangeName={onChangeName}
               onChangeContactInfo={onChangeContactInfo}
               onReorderTags={onReorderTags}

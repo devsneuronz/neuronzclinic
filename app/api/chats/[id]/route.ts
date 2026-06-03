@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { CHAT_INTEREST_FIELD_CANDIDATES } from "@/lib/chat-tags"
 
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
@@ -187,6 +188,26 @@ function buildPatch(body: RawChat, currentChat: RawChat) {
 
       for (const field of safeFields) {
         patch[field] = formatTagsLikeExisting(currentChat[field], tags)
+      }
+    }
+  }
+
+  if ("interestTags" in body) {
+    const interestTags = normalizeTags(body.interestTags)
+
+    if (interestTags) {
+      if (interestTags.length !== (Array.isArray(body.interestTags) ? body.interestTags.length : 0)) {
+        throw new Error("Todos os interesses precisam ter um id valido do Airtable.")
+      }
+
+      const fieldsToUpdate = CHAT_INTEREST_FIELD_CANDIDATES.filter((field) => Object.prototype.hasOwnProperty.call(currentChat, field))
+
+      if (fieldsToUpdate.length === 0) {
+        throw new Error("Nenhum campo de interesses foi encontrado no registro do contato.")
+      }
+
+      for (const field of fieldsToUpdate) {
+        patch[field] = formatTagsLikeExisting(currentChat[field], interestTags)
       }
     }
   }

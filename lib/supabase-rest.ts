@@ -39,6 +39,18 @@ export interface ChatRecord {
   json_tags: unknown
   json_tags_parsed: unknown
   tag_chat_array: unknown
+  json_interests_parsed?: unknown
+  json_interests?: unknown
+  interest_tags_array?: unknown
+  interest_tags?: unknown
+  interests?: unknown
+  json_interesses_parsed?: unknown
+  json_interesses?: unknown
+  interesses_array?: unknown
+  interesses?: unknown
+  tag_interesse_array?: unknown
+  tags_interesse?: unknown
+  tags_interesses?: unknown
   dono: string | null
   setor: unknown
   grupo: unknown
@@ -159,6 +171,7 @@ export interface UpdateChatDetailsInput {
   ia_responde?: boolean | null
   unread_count?: number | null
   tags?: Array<{ id: string; label: string; color?: string | null }>
+  interestTags?: Array<{ id: string; label: string; color?: string | null }>
 }
 
 export interface LatestMessageStatusRecord {
@@ -286,37 +299,7 @@ function escapePostgrestPattern(value: string) {
 }
 
 export function fetchChats({ limit = 50, offset = 0, search }: ChatQueryOptions = {}) {
-  const select = [
-    "id",
-    "chat_id",
-    "nome_contato",
-    "pushname",
-    "phone_contact",
-    "cidade_residencia",
-    "cidade_desejada",
-    "email_contato",
-    "url_foto_perfil",
-    "text_last_message",
-    "last_message_time",
-    "last_time_formatado",
-    "unread_count",
-    "pinned",
-    "archived",
-    "finalizada",
-    "ia_responde",
-    "last_message_fromMe",
-    "Status_chat",
-    "hex_status",
-    "json_tags",
-    "json_tags_parsed",
-    "tag_chat_array",
-    "dono",
-    "setor",
-    "grupo",
-    "draft",
-    "lid_id",
-    "updated_at",
-  ].join(",")
+  const select = "*"
   const term = search?.trim()
   const searchFilter = term
     ? `&or=(${[
