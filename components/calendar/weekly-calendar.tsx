@@ -664,7 +664,10 @@ export function WeeklyCalendar() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => {
+                                  setDialogStartDate(new Date(appointment.startDateTime));
+                                  setDialogEndDate(new Date(appointment.endDateTime));
                                   setSelectedAppointment(appointment);
+
                                   setIsAppointmentDialogOpen(true);
                                 }}
                                 disabled={isSavingAppointment}
