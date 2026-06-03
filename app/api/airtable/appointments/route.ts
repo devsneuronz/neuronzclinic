@@ -515,3 +515,12 @@ export async function POST(request: Request) {
     )
   }
 }
+export async function PATCH(request: Request) {
+  // EDITAR AQUI: implement appointment update logic
+  return NextResponse.json({ message: "Update endpoint not implemented yet." }, { status: 501 });
+}
+
+export async function DELETE(request: Request) {
+  // EDITAR AQUI: implement appointment delete logic
+  return NextResponse.json({ message: "Delete endpoint not implemented yet." }, { status: 501 });
+}
