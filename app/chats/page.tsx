@@ -26,7 +26,7 @@ import {
   sendMessage,
   updateChatDetails,
 } from "@/lib/supabase-rest";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 
@@ -413,7 +413,9 @@ export default function ChatsPage() {
   const messagesByChatIdRef = useRef(messagesByChatId);
   const readReceiptKeyByChatIdRef = useRef<Record<string, string>>({});
   const ghostUnreadCountByChatIdRef = useRef<Record<string, number>>({});
-  const targetChatId = searchParams.get("chatId") || storedTargetChatId;
+
+  const chatIdFromUrl = searchParams.get("chatId");
+  const targetChatId = chatIdFromUrl || storedTargetChatId;
 
   const [isSignatureMode, setIsAssinaturaMode] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
@@ -682,12 +684,54 @@ export default function ChatsPage() {
     });
   }, []);
 
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const routerRef = useRef(router);
+  const pathnameRef = useRef(pathname);
+  const searchParamsRef = useRef(searchParams);
+
+  const wasUrlJustClearedRef = useRef(false);
+
+  useEffect(() => {
+    routerRef.current = router;
+    pathnameRef.current = pathname;
+    searchParamsRef.current = searchParams;
+  }, [router, pathname, searchParams]);
+
   useEffect(() => {
     if (!targetChatId) return;
 
+    if (wasUrlJustClearedRef.current && targetChatId === storedTargetChatId) {
+      wasUrlJustClearedRef.current = false;
+      return;
+    }
+
+    const currentRouter = routerRef.current;
+    const currentPathname = pathnameRef.current;
+    const currentSearchParams = searchParamsRef.current;
+
+    const clearChatIdFromUrl = () => {
+      const params = new URLSearchParams(currentSearchParams.toString());
+      if (params.has("chatId")) {
+        params.delete("chatId");
+        const newQuery = params.toString();
+        const newUrl = newQuery ? `${currentPathname}?${newQuery}` : currentPathname;
+        if (chatIdFromUrl) {
+          wasUrlJustClearedRef.current = true;
+        }
+        currentRouter.replace(newUrl, { scroll: false });
+      }
+    };
+
     const knownTarget = knownChats.find((chat) => chat.chat_id === targetChatId || chat.id === targetChatId);
     if (knownTarget) {
-      window.queueMicrotask(() => setSelectedChatId(knownTarget.id));
+      window.queueMicrotask(() => {
+        setSelectedChatId(knownTarget.id);
+        setStoredTargetChatId(knownTarget.chat_id);
+        window.localStorage.setItem(LAST_OPEN_CHAT_STORAGE_KEY, knownTarget.chat_id);
+        clearChatIdFromUrl();
+      });
       return;
     }
 
@@ -698,8 +742,11 @@ export default function ChatsPage() {
         if (!isMounted) return;
         const target = data.find((chat) => chat.chat_id === targetChatId || chat.id === targetChatId) || data[0];
         if (!target) return;
+
         mergeFreshChats([target]);
         setSelectedChatId(target.id);
+        window.localStorage.setItem(LAST_OPEN_CHAT_STORAGE_KEY, target.id);
+        clearChatIdFromUrl();
       })
       .catch((err) => {
         if (!isMounted) return;
@@ -709,7 +756,7 @@ export default function ChatsPage() {
     return () => {
       isMounted = false;
     };
-  }, [knownChats, mergeFreshChats, targetChatId]);
+  }, [knownChats, mergeFreshChats, targetChatId, chatIdFromUrl, storedTargetChatId, setSelectedChatId]);
 
   const updateChatPreviewForMessages = useCallback((chatId: string, freshMessages: MessageRecord[]) => {
     if (freshMessages.length === 0) return;
@@ -1088,6 +1135,9 @@ export default function ChatsPage() {
     const requestId = ++searchRequestIdRef.current;
 
     if (!term) {
+      setSearchChats([]);
+      setSearchChatsTerm("");
+      setHasMoreSearchChats(false);
       return;
     }
 
@@ -1095,7 +1145,7 @@ export default function ChatsPage() {
 
     let isMounted = true;
 
-    fetchChats({ limit: CHAT_PAGE_SIZE, offset: 0, search: term })
+    fetchChats({ limit: CHAT_PAGE_SIZE, offset: 0, search: "" })
       .then((data) => {
         if (!isMounted || requestId !== searchRequestIdRef.current) return;
         const filtered = data.filter((chat) => {
