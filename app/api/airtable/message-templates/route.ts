@@ -3,10 +3,12 @@ import type { RoutineMessageTemplate } from "@/lib/routines";
 
 const AIRTABLE_BASE_ID = "app03ti52QQD3W9L2";
 const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY;
-const MESSAGE_TEMPLATES_TABLE = process.env.AIRTABLE_MESSAGE_TEMPLATES_TABLE || "Template de mensagens";
+const MESSAGE_TEMPLATES_TABLE = process.env.AIRTABLE_MESSAGE_TEMPLATES_TABLE || "Templates mensagens";
 const TEMPLATE_NAME_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_NAME_FIELDS, ["Template", "Nome", "Name"]);
 const TEMPLATE_CONTENT_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_CONTENT_FIELDS, ["Mensagem", "Conteudo", "Conteúdo", "Texto", "Message", "Content"]);
+const TEMPLATE_DESCRIPTION_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_DESCRIPTION_FIELDS, ["Descrição", "Descricao", "Description"]);
 const TEMPLATE_TYPE_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_TYPE_FIELDS, ["Tipo_mensagem", "Tipo", "Categoria"]);
+const TEMPLATE_COLOR_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_COLOR_FIELDS, ["HEXCOLOR", "HEXCOR", "Cor", "Color"]);
 const TEMPLATE_ACTIVE_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_ACTIVE_FIELDS, ["Ativo", "Active", "Status"]);
 
 type AirtableRecord = {
@@ -54,12 +56,15 @@ function getActiveValue(fields: Record<string, unknown>) {
   return true;
 }
 
-async function airtableRequest(path = "") {
+async function airtableRequest(path = "", init?: RequestInit) {
   if (!AIRTABLE_TOKEN) throw new Error("Configure AIRTABLE_TOKEN.");
 
   const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(MESSAGE_TEMPLATES_TABLE)}${path}`, {
+    ...init,
     headers: {
       Authorization: `Bearer ${AIRTABLE_TOKEN}`,
+      "Content-Type": "application/json",
+      ...init?.headers,
     },
     cache: "no-store",
   });
@@ -86,15 +91,52 @@ async function fetchTemplateRecords() {
 
 function mapTemplate(record: AirtableRecord): RoutineMessageTemplate {
   const fields = record.fields ?? {};
-  const label = getStringField(fields, TEMPLATE_NAME_FIELDS) || record.id;
+  const type = getStringField(fields, TEMPLATE_TYPE_FIELDS);
+  const label = getStringField(fields, TEMPLATE_NAME_FIELDS) || type || record.id;
 
   return {
     id: record.id,
     label,
     content: getStringField(fields, TEMPLATE_CONTENT_FIELDS),
-    type: getStringField(fields, TEMPLATE_TYPE_FIELDS),
+    description: getStringField(fields, TEMPLATE_DESCRIPTION_FIELDS),
+    type,
+    color: getStringField(fields, TEMPLATE_COLOR_FIELDS),
     active: getActiveValue(fields),
   };
+}
+
+function getFirstFieldName(candidates: string[]) {
+  return candidates[0];
+}
+
+function buildTemplateFields(input: Partial<RoutineMessageTemplate>) {
+  const label = typeof input.label === "string" ? input.label.trim() : "";
+  const content = typeof input.content === "string" ? input.content.trim() : "";
+  const type = typeof input.type === "string" ? input.type.trim() : "";
+
+  if (!label) throw new Error("Informe o nome do template.");
+  if (!content) throw new Error("Informe o conteúdo da mensagem.");
+
+  const fields: Record<string, unknown> = {
+    [getFirstFieldName(TEMPLATE_NAME_FIELDS)]: label,
+    [getFirstFieldName(TEMPLATE_CONTENT_FIELDS)]: content,
+  };
+
+  if (type) fields[getFirstFieldName(TEMPLATE_TYPE_FIELDS)] = type;
+
+  return fields;
+}
+
+async function createTemplate(fields: Record<string, unknown>) {
+  const data = (await airtableRequest("", {
+    method: "POST",
+    body: JSON.stringify({ records: [{ fields }] }),
+  })) as { records?: AirtableRecord[] };
+
+  const record = data.records?.[0];
+  if (!record) throw new Error("Airtable não retornou o template criado.");
+
+  return record;
 }
 
 function getAirtableErrorMessage(error: unknown, fallback: string) {
@@ -112,11 +154,23 @@ export async function GET() {
   try {
     const templates = (await fetchTemplateRecords())
       .map(mapTemplate)
-      .filter((template) => template.active && template.content)
+      .filter((template) => template.active)
       .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 
     return NextResponse.json({ templates });
   } catch (error) {
     return NextResponse.json({ templates: [], message: getAirtableErrorMessage(error, "Não foi possível carregar templates de mensagem.") }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = (await request.json()) as Partial<RoutineMessageTemplate>;
+    const record = await createTemplate(buildTemplateFields(body));
+    const template = mapTemplate(record);
+
+    return NextResponse.json({ template }, { status: 201 });
+  } catch (error) {
+    return NextResponse.json({ message: getAirtableErrorMessage(error, "Não foi possível criar o template de mensagem.") }, { status: 500 });
   }
 }

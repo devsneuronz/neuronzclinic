@@ -1140,32 +1140,21 @@ export default function ChatsPage() {
     const requestId = ++searchRequestIdRef.current;
 
     if (!term) {
-      setSearchChats([]);
-      setSearchChatsTerm("");
-      setHasMoreSearchChats(false);
+      window.queueMicrotask(() => {
+        if (requestId !== searchRequestIdRef.current) return;
+        setSearchChats([]);
+        setSearchChatsTerm("");
+        setHasMoreSearchChats(false);
+      });
       return;
     }
 
-    const terms = term.split(/\s+/).filter(Boolean);
-
     let isMounted = true;
 
-    fetchChats({ limit: CHAT_PAGE_SIZE, offset: 0, search: "" })
+    fetchChats({ limit: CHAT_PAGE_SIZE, offset: 0, search: term })
       .then((data) => {
         if (!isMounted || requestId !== searchRequestIdRef.current) return;
-        const filtered = data.filter((chat) => {
-          const originalSearchable = ((chat.nome_contato || "") + " " + (chat.chat_id || "") + " " + (chat.text_last_message || "")).toLowerCase();
-          const normalizedSearchable = originalSearchable.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-          return terms.every((t) => {
-            const termLower = t.toLowerCase();
-            const hasAccent = termLower.normalize("NFD").replace(/[\u0300-\u036f]/g, "") !== termLower;
-            if (hasAccent) {
-              return originalSearchable.includes(termLower);
-            }
-            return normalizedSearchable.includes(termLower);
-          });
-        });
-        setSearchChats(filtered);
+        setSearchChats(data);
         setSearchChatsTerm(term);
         setHasMoreSearchChats(data.length === CHAT_PAGE_SIZE);
       })

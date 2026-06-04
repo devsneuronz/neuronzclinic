@@ -24,7 +24,9 @@ export interface RoutineMessageTemplate {
   id: string;
   label: string;
   content: string;
+  description?: string;
   type?: string;
+  color?: string;
   active: boolean;
 }
 

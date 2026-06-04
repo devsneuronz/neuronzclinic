@@ -295,27 +295,33 @@ interface ChatQueryOptions extends PaginationOptions {
 }
 
 function escapePostgrestPattern(value: string) {
-  return value.replace(/[%*_]/g, (character) => `\\${character}`)
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/[%*_]/g, (character) => `\\${character}`)
+}
+
+function buildChatSearchFilter(term: string) {
+  const pattern = `"*${escapePostgrestPattern(term)}*"`
+  const fields = [
+    "nome_contato",
+    "pushname",
+    "phone_contact",
+    "cidade_residencia",
+    "cidade_desejada",
+    "email_contato",
+    "chat_id",
+    "text_last_message",
+    "Status_chat",
+  ]
+
+  const params = new URLSearchParams()
+  params.set("or", `(${fields.map((field) => `${field}.ilike.${pattern}`).join(",")})`)
+
+  return `&${params.toString()}`
 }
 
 export function fetchChats({ limit = 50, offset = 0, search }: ChatQueryOptions = {}) {
   const select = "*"
   const term = search?.trim()
-  const searchFilter = term
-    ? `&or=(${[
-        "nome_contato",
-        "pushname",
-        "phone_contact",
-        "cidade_residencia",
-        "cidade_desejada",
-        "email_contato",
-        "chat_id",
-        "text_last_message",
-        "Status_chat",
-      ]
-        .map((field) => `${field}.ilike.*${encodeURIComponent(escapePostgrestPattern(term))}*`)
-        .join(",")})`
-    : ""
+  const searchFilter = term ? buildChatSearchFilter(term) : ""
 
   return supabaseGet<ChatRecord[]>(
     `chats?select=${select}&archived=is.false${searchFilter}&order=last_message_time.desc.nullslast&limit=${limit}&offset=${offset}`,
