@@ -1,6 +1,7 @@
 "use client";
 
 import { ContactDetails } from "@/components/contact-details/contact-details";
+import { ExpandedImageModal } from "@/components/chat/expanded-image-modal";
 import type { ContactInfoValues } from "@/components/contact-details/profile-view";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -104,6 +105,7 @@ export default function ContatosPage() {
   const [contacts, setContacts] = useState<ChatRecord[]>([]);
   const contactsRef = useRef<ChatRecord[]>([]);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  const [expandedContactPhoto, setExpandedContactPhoto] = useState<{ url: string; alt: string } | null>(null);
   const [statusFilter, setStatusFilter] = useState(ALL_FILTERS);
   const [cityFilter, setCityFilter] = useState(ALL_FILTERS);
   const [search, setSearch] = useState("");
@@ -464,10 +466,19 @@ export default function ContatosPage() {
                             onClick={() => setSelectedContactId(contact.id)}
                           >
                             <span className="flex min-w-0 items-center gap-3">
-                              <Avatar className="h-10 w-10 shrink-0">
-                                <AvatarImage src={contact.url_foto_perfil ?? undefined} alt={name} />
-                                <AvatarFallback className="text-sm">{getAvatarInitials(name)}</AvatarFallback>
-                              </Avatar>
+                              <span
+                                className={cn("shrink-0 rounded-full", contact.url_foto_perfil && "cursor-zoom-in")}
+                                onClick={(event) => {
+                                  if (!contact.url_foto_perfil) return;
+                                  event.stopPropagation();
+                                  setExpandedContactPhoto({ url: contact.url_foto_perfil, alt: `Foto de ${name}` });
+                                }}
+                              >
+                                <Avatar className="h-10 w-10">
+                                  <AvatarImage src={contact.url_foto_perfil ?? undefined} alt={name} />
+                                  <AvatarFallback className="text-sm">{getAvatarInitials(name)}</AvatarFallback>
+                                </Avatar>
+                              </span>
                               <span className="min-w-0">
                                 <span className="block truncate text-sm font-semibold text-foreground">{name}</span>
                                 <span className="block truncate text-xs text-muted-foreground">{getContactPhone(contact)}</span>
@@ -566,6 +577,7 @@ export default function ContatosPage() {
           )}
         </DialogContent>
       </Dialog>
+      {expandedContactPhoto && <ExpandedImageModal image={expandedContactPhoto} onClose={() => setExpandedContactPhoto(null)} />}
     </div>
   );
 }

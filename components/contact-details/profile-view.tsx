@@ -1,6 +1,7 @@
 import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getChatInterestTags, getChatTags, getReadableTextColor } from "@/lib/chat-tags";
+import { formatDateTime } from "@/lib/date";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { createContactNote, deleteContactNote, fetchContactNotes, importAirtableContactNotes, type ChatRecord, type ContactNoteRecord } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
@@ -187,14 +188,11 @@ function getAppointmentDateLabel(value?: string) {
 function getTaskDateLabel(value?: string) {
   if (!value) return "Sem prazo";
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
-  return new Intl.DateTimeFormat("pt-BR", {
+  return formatDateTime(value, {
     day: "2-digit",
     month: "2-digit",
     year: "2-digit",
-  }).format(date);
+  }) || value;
 }
 
 function normalizeTaskStatus(value: string): ContactTask["status"] {

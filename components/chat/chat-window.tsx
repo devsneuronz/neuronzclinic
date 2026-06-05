@@ -1179,6 +1179,10 @@ export function ChatWindow({
           onDeleteSelected={beginDeleteSelected}
           onToggleDetails={onToggleDetails}
           onToggleStatus={onToggleStatus}
+          onOpenContactPhoto={() => {
+            if (!chat.url_foto_perfil) return;
+            setExpandedImage({ url: chat.url_foto_perfil, alt: `Foto de ${chat.nome_contato || chat.pushname || "contato"}` });
+          }}
           isMobile={isMobile}
           onCloseChat={onCloseChat}
         />

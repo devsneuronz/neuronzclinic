@@ -17,11 +17,14 @@ type ChatHeaderProps = {
   onDeleteSelected: () => void;
   onToggleDetails: () => void;
   onToggleStatus: () => void;
+  onOpenContactPhoto?: () => void;
   isMobile?: boolean;
   onCloseChat?: () => void;
 };
 
-export function ChatHeader({ chat, isSelectionMode, selectedMessagesCount, canDeleteSelectedMessages, onClearSelection, onForwardSelected, onDeleteSelected, onToggleDetails, onToggleStatus, isMobile, onCloseChat }: ChatHeaderProps) {
+export function ChatHeader({ chat, isSelectionMode, selectedMessagesCount, canDeleteSelectedMessages, onClearSelection, onForwardSelected, onDeleteSelected, onToggleDetails, onToggleStatus, onOpenContactPhoto, isMobile, onCloseChat }: ChatHeaderProps) {
+  const hasContactPhoto = !!chat.url_foto_perfil;
+
   return (
     <div className="flex items-center justify-between border-b border-border bg-card px-4 min-h-15.25">
       {isSelectionMode ? (
@@ -54,7 +57,20 @@ export function ChatHeader({ chat, isSelectionMode, selectedMessagesCount, canDe
                 <ChevronLeft className="h-5 w-5" />
               </Button>
             )}
-            <button className="cursor-pointer rounded-full transition-opacity hover:opacity-90" aria-label="Abrir detalhes do contato">
+            <button
+              type="button"
+              className="cursor-pointer rounded-full transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              aria-label={hasContactPhoto ? "Ampliar foto do contato" : "Abrir detalhes do contato"}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (hasContactPhoto) {
+                  onOpenContactPhoto?.();
+                  return;
+                }
+
+                onToggleDetails();
+              }}
+            >
               <Avatar className="h-10 w-10">
                 <AvatarImage src={chat.url_foto_perfil ?? undefined} alt={getDisplayName(chat)} />
                 <AvatarFallback className="bg-gradient-to-br from-teal-500 to-teal-700 text-sm font-semibold text-white">{getAvatarInitials(getDisplayName(chat), "C")}</AvatarFallback>

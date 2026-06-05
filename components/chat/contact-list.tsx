@@ -22,6 +22,7 @@ import { ChevronDown, ChevronUp, Feather, FilterX, HatGlasses, Loader2, Search, 
 import type { FormEvent, UIEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { ExpandedImageModal } from "./expanded-image-modal";
 import { MessageStatusIcon } from "./message-status-icon";
 
 interface ContactListProps {
@@ -189,6 +190,7 @@ export function ContactList({
   const [newContactMessage, setNewContactMessage] = useState("");
   const [newContactError, setNewContactError] = useState("");
   const [isCreatingContact, setIsCreatingContact] = useState(false);
+  const [expandedContactPhoto, setExpandedContactPhoto] = useState<{ url: string; alt: string } | null>(null);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const autoLoadKeyRef = useRef("");
 
@@ -637,7 +639,23 @@ export function ContactList({
                 onClick={() => onSelect?.(chat.id)}
                 className={cn("flex w-full items-start gap-3 border-b border-border/50 p-3 text-left transition-colors hover:bg-theme-accent/30", selectedId === chat.id && "bg-theme-accent/10")}
               >
-                <div className="relative h-11 w-11 shrink-0">
+                <span
+                  className={cn("relative h-11 w-11 shrink-0 rounded-full", chat.url_foto_perfil && "cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2")}
+                  role={chat.url_foto_perfil ? "button" : undefined}
+                  tabIndex={chat.url_foto_perfil ? 0 : undefined}
+                  aria-label={chat.url_foto_perfil ? `Ampliar foto de ${name}` : undefined}
+                  onClick={(event) => {
+                    if (!chat.url_foto_perfil) return;
+                    event.stopPropagation();
+                    setExpandedContactPhoto({ url: chat.url_foto_perfil, alt: `Foto de ${name}` });
+                  }}
+                  onKeyDown={(event) => {
+                    if (!chat.url_foto_perfil || (event.key !== "Enter" && event.key !== " ")) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setExpandedContactPhoto({ url: chat.url_foto_perfil, alt: `Foto de ${name}` });
+                  }}
+                >
                   <Avatar className="h-11 w-11">
                     <AvatarImage src={chat.url_foto_perfil ?? undefined} alt={name} />
                     <AvatarFallback className="bg-muted text-sm font-medium text-muted-foreground">{getAvatarInitials(name)}</AvatarFallback>
@@ -648,7 +666,7 @@ export function ContactList({
                     title={`Status: ${getChatStatusLabel(chat)}`}
                     aria-label={`Status: ${getChatStatusLabel(chat)}`}
                   />
-                </div>
+                </span>
 
                 <div className="min-w-0 flex-1 overflow-hidden">
                   <div className="flex items-center justify-between gap-2">
@@ -746,6 +764,7 @@ export function ContactList({
           </form>
         </DialogContent>
       </Dialog>
+      {expandedContactPhoto && <ExpandedImageModal image={expandedContactPhoto} onClose={() => setExpandedContactPhoto(null)} />}
     </div>
   );
 }

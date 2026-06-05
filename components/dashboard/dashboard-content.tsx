@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { formatDateTime, parseDateOnly } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import { addDays, addHours, format, isBefore, isToday, startOfToday } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -83,9 +84,7 @@ function formatTime(value: string) {
 }
 
 function formatDateLabel(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Sem prazo";
-  return format(date, "dd/MM", { locale: ptBR });
+  return formatDateTime(value, { day: "2-digit", month: "2-digit" }) || "Sem prazo";
 }
 
 function normalizeStatus(value: string) {
@@ -241,7 +240,7 @@ function PendingTasks({ tasks }: { tasks: Task[] }) {
         ) : (
           <div className="divide-y divide-border">
             {openTasks.map((task) => {
-              const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+              const dueDate = task.dueDate ? parseDateOnly(task.dueDate) ?? new Date(task.dueDate) : null;
               const isLate = dueDate && !Number.isNaN(dueDate.getTime()) && isBefore(dueDate, startOfToday());
 
               return (
@@ -424,7 +423,7 @@ export function DashboardContent() {
     });
     const pendingTasks = tasks.filter((task) => task.status !== "finalizado");
     const overdueTasks = pendingTasks.filter((task) => {
-      const date = task.dueDate ? new Date(task.dueDate) : null;
+      const date = task.dueDate ? parseDateOnly(task.dueDate) ?? new Date(task.dueDate) : null;
       return date && !Number.isNaN(date.getTime()) && isBefore(date, startOfToday());
     });
     const patients = new Set(appointments.map((appointment) => appointment.patient).filter(Boolean));
