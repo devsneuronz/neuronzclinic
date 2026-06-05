@@ -86,6 +86,20 @@ function getFallbackTagOptions(chats: ChatRecord[]) {
   return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }));
 }
 
+function getFallbackInterestOptions(chats: ChatRecord[]) {
+  const options = new Map<string, ChatTag>();
+
+  for (const chat of chats) {
+    for (const interest of getChatInterestTags(chat)) {
+      const key = interest.id || interest.label;
+      if (options.has(key)) continue;
+      options.set(key, interest);
+    }
+  }
+
+  return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }));
+}
+
 function getTagKey(tag: ChatTag) {
   return tag.id || tag.label;
 }
@@ -108,6 +122,7 @@ export default function ContatosPage() {
   const [expandedContactPhoto, setExpandedContactPhoto] = useState<{ url: string; alt: string } | null>(null);
   const [statusFilter, setStatusFilter] = useState(ALL_FILTERS);
   const [cityFilter, setCityFilter] = useState(ALL_FILTERS);
+  const [interestFilter, setInterestFilter] = useState(ALL_FILTERS);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -125,8 +140,10 @@ export default function ContatosPage() {
   const selectedContact = contacts.find((contact) => contact.id === selectedContactId);
   const fallbackStatusOptions = useMemo(() => getFallbackStatusOptions(contacts), [contacts]);
   const fallbackTagOptions = useMemo(() => getFallbackTagOptions(contacts), [contacts]);
+  const fallbackInterestOptions = useMemo(() => getFallbackInterestOptions(contacts), [contacts]);
   const contactStatusOptions = statusOptions.length > 0 ? statusOptions : fallbackStatusOptions;
   const contactTagOptions = tagOptions.length > 0 ? tagOptions : fallbackTagOptions;
+  const contactInterestOptions = fallbackInterestOptions;
   const cityOptions = useMemo(() => uniqueSorted(contacts.map(getContactCity)), [contacts]);
   const debouncedSearch = useDebouncedValue(search.trim(), 300);
   const hasSearch = debouncedSearch.length > 0;
@@ -135,9 +152,10 @@ export default function ContatosPage() {
     return contacts.filter((contact) => {
       if (statusFilter !== ALL_FILTERS && getChatStatusLabel(contact) !== statusFilter) return false;
       if (cityFilter !== ALL_FILTERS && getContactCity(contact) !== cityFilter) return false;
+      if (interestFilter !== ALL_FILTERS && !getChatInterestTags(contact).some((interest) => interest.label === interestFilter)) return false;
       return true;
     });
-  }, [cityFilter, contacts, statusFilter]);
+  }, [cityFilter, contacts, interestFilter, statusFilter]);
 
   const loadContacts = useCallback(
     async ({ refresh = false, offset = 0, searchTerm = "" }: { refresh?: boolean; offset?: number; searchTerm?: string } = {}) => {
@@ -430,6 +448,19 @@ export default function ContatosPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <Select value={interestFilter} onValueChange={setInterestFilter}>
+                <SelectTrigger className="h-10!">
+                  <SelectValue placeholder="Interesse" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_FILTERS}>Interesse</SelectItem>
+                  {contactInterestOptions.map((interest) => (
+                    <SelectItem key={getTagKey(interest)} value={interest.label}>
+                      {interest.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <Button className="h-10" type="button" variant="outline" onClick={() => void loadContacts({ refresh: true, searchTerm: debouncedSearch })} disabled={isLoading}>
               <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
@@ -553,6 +584,7 @@ export default function ContatosPage() {
                   onToggleIA={() => void handleToggleIA(selectedContact)}
                   statusOptions={contactStatusOptions}
                   tagOptions={contactTagOptions}
+                  interestOptions={contactInterestOptions}
                   onChangeStatus={(status) => void handleChangeContactStatus(selectedContact, status)}
                   onToggleTag={(tag) => void handleToggleContactTag(selectedContact, tag)}
                   onToggleInterest={(interest) => void handleToggleContactInterest(selectedContact, interest)}
