@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn, normalizeText } from "@/lib/utils";
 import { addDays, addMonths, addWeeks, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek, subMonths, subWeeks } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Calendar1, CalendarDays, CalendarIcon, ChevronLeft, ChevronRight, Circle, Clock, Columns3, List, Loader2, Pencil, Phone, Pin, Plus, Search, Stethoscope, Trash2, User, UserPlus } from "lucide-react";
+import { Calendar1, CalendarDays, CalendarIcon, ChevronLeft, ChevronRight, Circle, Clock, Columns3, List, Loader2, Phone, Pin, Plus, Search, SquarePen, Stethoscope, Trash2, User, UserPlus } from "lucide-react";
 
 import type { MouseEvent } from "react";
 import React, { useEffect, useMemo, useState } from "react";
@@ -673,7 +673,7 @@ export function WeeklyCalendar() {
                                 disabled={isSavingAppointment}
                                 aria-label="Editar"
                               >
-                                <Pencil className="h-4 w-4" />
+                                <SquarePen className="h-4 w-4" />
                               </Button>
                               <Button variant="ghost" size="icon" onClick={() => handleDeleteAppointment(selectedAppointment?.id ?? "")} disabled={isSavingAppointment} aria-label="Excluir">
                                 <Trash2 className="h-4 w-4" />
@@ -873,7 +873,7 @@ export function WeeklyCalendar() {
                     disabled={isSavingAppointment}
                     aria-label="Editar"
                   >
-                    <Pencil className="h-4 w-4" />
+                    <SquarePen className="h-4 w-4" />
                   </Button>
                   <Button variant="ghost" size="icon" onClick={() => handleDeleteAppointment(selectedAppointment?.id ?? "")} disabled={isSavingAppointment} aria-label="Excluir">
                     <Trash2 className="h-4 w-4" />

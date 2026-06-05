@@ -3,8 +3,9 @@
 import { Button } from "@/components/ui/button";
 import type { ChatRecord, MessageRecord } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
+import { StickyNoteCheck } from "@/public/custom-icons/sticky-note-plus";
 import { formatBoldText } from "@/utils/utils";
-import { Check, CheckSquare, Download, FileImage, FileText, Forward, Mic, PenLine, Reply, Trash2, Video } from "lucide-react";
+import { Check, CheckSquare, Download, FileImage, FileText, Forward, Mic, Reply, Trash2, Video } from "lucide-react";
 import Image from "next/image";
 import { memo } from "react";
 import { MessageAudioPlayer } from "./message-audio-player";
@@ -113,8 +114,8 @@ export const MessageBubble = memo(
               <Button type="button" variant="ghost" size="icon-sm" className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground" onClick={() => onToggleSelection(message)} aria-label="Selecionar mensagem">
                 <CheckSquare className="h-4 w-4" />
               </Button>
-              <Button type="button" variant="ghost" size="icon-sm" className="h-7 w-7 rounded-full text-muted-foreground hover:text-amber-600" onClick={() => onCreateNote(message)} aria-label="Criar anotação vinculada">
-                <PenLine className="h-4 w-4" />
+              <Button type="button" variant="ghost" size="icon-sm" className="h-7 w-7 rounded-full text-muted-foreground hover:text-yellow-300" onClick={() => onCreateNote(message)} aria-label="Criar anotação vinculada">
+                <StickyNoteCheck />
               </Button>
               {fromMe && (
                 <Button type="button" variant="ghost" size="icon-sm" className="h-7 w-7 rounded-full text-muted-foreground hover:text-red-500" onClick={() => onDelete(message)} aria-label="Apagar mensagem">

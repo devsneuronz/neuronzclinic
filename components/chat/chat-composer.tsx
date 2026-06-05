@@ -147,7 +147,7 @@ export function ChatComposer({
           {noteLinkedMessage && (
             <div className="mb-3 max-w-2xl shrink-0 border-l-2 border-yellow-300 bg-yellow-500/10 backdrop-blur-sm px-3 py-2 rounded-r-md text-xs text-foreground/90">
               <p className="font-medium text-yellow-400 ">Vinculada a uma mensagem</p>
-              <p className="mt-0.5 line-clamp-1 italic text-muted-foreground">aaa</p>
+              <p className="mt-0.5 line-clamp-1 italic text-muted-foreground">{noteLinkedMessage.content}</p>
             </div>
           )}
 
@@ -305,7 +305,7 @@ export function ChatComposer({
           ) : (
             <>
               {!isMobile && (
-                <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-foreground" onClick={onOpenInternalNote} aria-label="Criar anotação interna">
+                <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-yellow-300" onClick={onOpenInternalNote} aria-label="Criar anotação interna">
                   <StickyNote className="h-5 w-5" />
                 </Button>
               )}
@@ -372,7 +372,7 @@ export function ChatComposer({
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
-                <ScheduleMessagePopover isSending={isSending} attachment={attachment} draft={draft} onScheduleMessage={onScheduleMessage} />
+                <ScheduleMessagePopover canSend={canSend} isSending={isSending} attachment={attachment} draft={draft} onScheduleMessage={onScheduleMessage} />
               )}
               <div className="relative flex flex-1 gap-2 items-center h-full">
                 {isSignatureMode && !attachment && <span className="shrink-0 select-none rounded-md text-xs py-1.5 px-2 ml-2 bg-theme-primary text-theme-primary-fg font-bold">{userName}</span>}
