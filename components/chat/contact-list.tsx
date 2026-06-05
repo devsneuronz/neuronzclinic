@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { CHAT_DRAFT_CHANGED_EVENT, CHAT_DRAFT_STORAGE_PREFIX, readChatDraft, type ChatDraftChangedDetail } from "@/lib/chat-drafts";
-import { getChatStatusColor, getChatStatusLabel } from "@/lib/chat-status";
+import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
 import { getChatInterestTags, getChatTags, getReadableTextColor } from "@/lib/chat-tags";
 import { ChatRecord, LatestMessageStatus } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
@@ -34,6 +34,7 @@ interface ContactListProps {
   hasMore?: boolean;
   selectedId?: string;
   latestMessageStatuses?: Record<string, LatestMessageStatus>;
+  statusOptions?: ChatStatusOption[];
   onSearchChange?: (value: string) => void;
   onSelect?: (id: string) => void;
   onLoadMore?: () => void;
@@ -164,6 +165,7 @@ export function ContactList({
   hasMore,
   selectedId,
   latestMessageStatuses = {},
+  statusOptions: catalogStatusOptions = [],
   onSearchChange,
   onSelect,
   onLoadMore,
@@ -195,7 +197,10 @@ export function ContactList({
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const autoLoadKeyRef = useRef("");
 
-  const statusOptions = useMemo(() => getUniqueOptions(chats.map(getChatStatusLabel)), [chats]);
+  const statusOptions = useMemo(() => {
+    const catalogLabels = catalogStatusOptions.map((status) => status.label);
+    return getUniqueOptions([...catalogLabels, ...chats.map(getChatStatusLabel)]);
+  }, [catalogStatusOptions, chats]);
   const tagOptions = useMemo(() => getUniqueOptions(chats.flatMap((chat) => getChatTags(chat).map((tag) => tag.label))), [chats]);
   const interestOptions = useMemo(() => getUniqueOptions(chats.flatMap((chat) => getChatInterestTags(chat).map((tag) => tag.label))), [chats]);
   const sectorIds = useMemo(() => Array.from(new Set(chats.flatMap((chat) => getSectorIds(chat.setor)))), [chats]);
