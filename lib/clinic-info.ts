@@ -8,7 +8,9 @@ export type ClinicAssistantInfo = {
 export type ClinicProcedure = {
   id: string
   name: string
+  interestId?: string
   interest: string
+  interestColor?: string
   description: string
   active: boolean
 }
