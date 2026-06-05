@@ -1,5 +1,6 @@
 "use client";
 
+import { ExpandedImageModal } from "@/components/chat/expanded-image-modal";
 import { ContactDetails } from "@/components/contact-details/contact-details";
 import type { ContactInfoValues } from "@/components/contact-details/profile-view";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -85,6 +86,20 @@ function getFallbackTagOptions(chats: ChatRecord[]) {
   return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }));
 }
 
+function getFallbackInterestOptions(chats: ChatRecord[]) {
+  const options = new Map<string, ChatTag>();
+
+  for (const chat of chats) {
+    for (const interest of getChatInterestTags(chat)) {
+      const key = interest.id || interest.label;
+      if (options.has(key)) continue;
+      options.set(key, interest);
+    }
+  }
+
+  return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }));
+}
+
 function getTagKey(tag: ChatTag) {
   return tag.id || tag.label;
 }
@@ -104,8 +119,10 @@ export default function ContatosPage() {
   const [contacts, setContacts] = useState<ChatRecord[]>([]);
   const contactsRef = useRef<ChatRecord[]>([]);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  const [expandedContactPhoto, setExpandedContactPhoto] = useState<{ url: string; alt: string } | null>(null);
   const [statusFilter, setStatusFilter] = useState(ALL_FILTERS);
   const [cityFilter, setCityFilter] = useState(ALL_FILTERS);
+  const [interestFilter, setInterestFilter] = useState(ALL_FILTERS);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -123,8 +140,10 @@ export default function ContatosPage() {
   const selectedContact = contacts.find((contact) => contact.id === selectedContactId);
   const fallbackStatusOptions = useMemo(() => getFallbackStatusOptions(contacts), [contacts]);
   const fallbackTagOptions = useMemo(() => getFallbackTagOptions(contacts), [contacts]);
+  const fallbackInterestOptions = useMemo(() => getFallbackInterestOptions(contacts), [contacts]);
   const contactStatusOptions = statusOptions.length > 0 ? statusOptions : fallbackStatusOptions;
   const contactTagOptions = tagOptions.length > 0 ? tagOptions : fallbackTagOptions;
+  const contactInterestOptions = fallbackInterestOptions;
   const cityOptions = useMemo(() => uniqueSorted(contacts.map(getContactCity)), [contacts]);
   const debouncedSearch = useDebouncedValue(search.trim(), 300);
   const hasSearch = debouncedSearch.length > 0;
@@ -133,9 +152,10 @@ export default function ContatosPage() {
     return contacts.filter((contact) => {
       if (statusFilter !== ALL_FILTERS && getChatStatusLabel(contact) !== statusFilter) return false;
       if (cityFilter !== ALL_FILTERS && getContactCity(contact) !== cityFilter) return false;
+      if (interestFilter !== ALL_FILTERS && !getChatInterestTags(contact).some((interest) => interest.label === interestFilter)) return false;
       return true;
     });
-  }, [cityFilter, contacts, statusFilter]);
+  }, [cityFilter, contacts, interestFilter, statusFilter]);
 
   const loadContacts = useCallback(
     async ({ refresh = false, offset = 0, searchTerm = "" }: { refresh?: boolean; offset?: number; searchTerm?: string } = {}) => {
@@ -378,15 +398,15 @@ export default function ContatosPage() {
   }
 
   return (
-    <div className="flex h-full bg-background">
+    <div className="flex min-h-dvh h-full bg-background">
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex min-h-15.25 items-center justify-between border-b border-border bg-card px-6 ">
+        <header className="flex min-h-15.25 items-center justify-between border-b border-border bg-card px-6">
           <h1 className="text-xl font-semibold text-foreground">Contatos</h1>
         </header>
+
         <main className="flex-1 overflow-y-auto p-6">
           <div className="h-full mx-auto max-w-7xl flex flex-col gap-6">
-            <div className="flex w-full flex-col bg-card rounded-xl p-4 sm:p-6 border border-border shadow-sm">
-              {/* Cabeçalho */}
+            <div className="flex w-full flex-col bg-card rounded-xl p-4 sm:p-6 border border-border shadow-sm gap-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
@@ -399,15 +419,17 @@ export default function ContatosPage() {
                   </p>
                 </div>
               </div>
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div className="flex flex-row flex-wrap items-center justify-between gap-3 flex-1 w-full md:max-w-4xl">
+
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-row flex-wrap items-center justify-between gap-3 flex-1 w-full lg:max-w-6xl">
                   <div className="relative flex-1 min-w-[200px] sm:min-w-[300px]">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Busque por nome ou telefone" className="h-9 pl-9 w-full" />
+                    <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome, telefone, cidade, email ou status" className="h-9 pl-9 w-full" />
                   </div>
-                  <div className="flex flex-1 sm:flex-initial gap-3 min-w-[200px] sm:w-auto">
+
+                  <div className="flex flex-1 flex-wrap sm:flex-initial gap-3 min-w-[200px]">
                     <Select value={statusFilter} onValueChange={setStatusFilter}>
-                      <SelectTrigger className="h-10 flex-1 sm:w-36">
+                      <SelectTrigger className="h-9 flex-1 sm:w-36">
                         <SelectValue placeholder="Status" />
                       </SelectTrigger>
                       <SelectContent>
@@ -419,8 +441,9 @@ export default function ContatosPage() {
                         ))}
                       </SelectContent>
                     </Select>
+
                     <Select value={cityFilter} onValueChange={setCityFilter}>
-                      <SelectTrigger className="h-10 flex-1 sm:w-40">
+                      <SelectTrigger className="h-9 flex-1 sm:w-40">
                         <SelectValue placeholder="Cidade" />
                       </SelectTrigger>
                       <SelectContent>
@@ -432,7 +455,22 @@ export default function ContatosPage() {
                         ))}
                       </SelectContent>
                     </Select>
+
+                    <Select value={interestFilter} onValueChange={setInterestFilter}>
+                      <SelectTrigger className="h-9 flex-1 sm:w-40">
+                        <SelectValue placeholder="Interesse" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ALL_FILTERS}>Interesse</SelectItem>
+                        {contactInterestOptions.map((interest) => (
+                          <SelectItem key={getTagKey(interest)} value={interest.label}>
+                            {interest.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
+
                   <Button
                     className="h-9 w-9 sm:w-fit shrink-0 gap-2 px-3 sm:px-4"
                     type="button"
@@ -448,8 +486,8 @@ export default function ContatosPage() {
               </div>
               {error && <p className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
             </div>
-            {/* ------------------------------------- */}
-            <div className="mx-auto flex w-full flex-col bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+
+            <div className="mx-auto flex w-full flex-col bg-card rounded-xl border border-border shadow-sm overflow-hidden ">
               <div className="flex flex-col min-h-0">
                 <div className="hidden md:grid w-full grid-cols-[1.4fr_140px_160px_160px_80px] border-b border-border bg-muted/60 pl-5 pr-8 py-3 gap-4 text-xs font-semibold uppercase text-muted-foreground shrink-0">
                   <span>Nome</span>
@@ -458,7 +496,7 @@ export default function ContatosPage() {
                   <span>Último contato</span>
                   <span className="text-right">Ações</span>
                 </div>
-                <div className="min-h-18.25 w-full overflow-y-auto split-scroll flex flex-col items-center justify-center">
+                <div className="w-full  min-h-18.25 overflow-y-auto split-scroll flex flex-col items-center justify-center">
                   {isLoading ? (
                     <div className="my-auto w-fit inline-flex items-center justify-center gap-2 rounded-xl bg-muted/80 px-5 text-xs font-semibold text-foreground border border-border/80 shadow-xs py-2">
                       <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--sidebar-custom-primary)]" />
@@ -478,10 +516,19 @@ export default function ContatosPage() {
                               onClick={() => setSelectedContactId(contact.id)}
                             >
                               <div className="flex min-w-0 items-center gap-3 w-full md:w-auto">
-                                <Avatar className="h-10 w-10 shrink-0">
-                                  <AvatarImage src={contact.url_foto_perfil ?? undefined} alt={name} />
-                                  <AvatarFallback className="text-sm">{getAvatarInitials(name)}</AvatarFallback>
-                                </Avatar>
+                                <span
+                                  className={cn("shrink-0 rounded-full", contact.url_foto_perfil && "cursor-zoom-in")}
+                                  onClick={(event) => {
+                                    if (!contact.url_foto_perfil) return;
+                                    event.stopPropagation();
+                                    setExpandedContactPhoto({ url: contact.url_foto_perfil, alt: `Foto de ${name}` });
+                                  }}
+                                >
+                                  <Avatar className="h-10 w-10 shrink-0">
+                                    <AvatarImage src={contact.url_foto_perfil ?? undefined} alt={name} />
+                                    <AvatarFallback className="text-sm">{getAvatarInitials(name)}</AvatarFallback>
+                                  </Avatar>
+                                </span>
                                 <div className="min-w-0 flex-1">
                                   <span className="block truncate text-sm font-semibold text-foreground">{name}</span>
                                   <span className="block truncate text-xs text-muted-foreground">{getContactPhone(contact)}</span>
@@ -497,6 +544,7 @@ export default function ContatosPage() {
                                   )}
                                 </div>
                               </div>
+
                               <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:contents">
                                 <div className="inline-flex max-w-full md:w-auto">
                                   <Badge className="border-0 px-2 py-0.5 text-[10px] text-white rounded-md" style={{ backgroundColor: getChatStatusColor(contact) }}>
@@ -514,6 +562,7 @@ export default function ContatosPage() {
                                   {getLastContactLabel(contact)}
                                 </span>
                               </div>
+
                               <div className="absolute right-4 top-4 md:static md:flex md:w-full md:justify-end shrink-0">
                                 <span className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted group-hover:text-foreground md:hover:bg-background">
                                   <Maximize2 className="h-4 w-4" />
@@ -523,6 +572,7 @@ export default function ContatosPage() {
                           );
                         })}
                       </div>
+
                       {hasMore && !hasSearch && (
                         <div className="flex w-full justify-center py-6 border-t border-border/20 bg-linear-to-t from-background/40 to-transparent shrink-0">
                           <Button
@@ -547,13 +597,14 @@ export default function ContatosPage() {
                       )}
                     </div>
                   ) : (
-                    <p className=" text-sm text-muted-foreground">Nenhum contato encontrado.</p>
+                    <p className="text-sm text-muted-foreground py-6">Nenhum contato encontrado.</p>
                   )}
                 </div>
               </div>
             </div>
           </div>
         </main>
+
         <Dialog open={Boolean(selectedContact)} onOpenChange={(open) => !open && setSelectedContactId(null)}>
           <DialogContent className="max-h-[92vh] max-w-2xl overflow-hidden p-0" showCloseButton={false}>
             {selectedContact && (
@@ -567,6 +618,7 @@ export default function ContatosPage() {
                     onToggleIA={() => void handleToggleIA(selectedContact)}
                     statusOptions={contactStatusOptions}
                     tagOptions={contactTagOptions}
+                    interestOptions={contactInterestOptions}
                     onChangeStatus={(status) => void handleChangeContactStatus(selectedContact, status)}
                     onToggleTag={(tag) => void handleToggleContactTag(selectedContact, tag)}
                     onToggleInterest={(interest) => void handleToggleContactInterest(selectedContact, interest)}
@@ -591,6 +643,8 @@ export default function ContatosPage() {
             )}
           </DialogContent>
         </Dialog>
+
+        {expandedContactPhoto && <ExpandedImageModal image={expandedContactPhoto} onClose={() => setExpandedContactPhoto(null)} />}
       </div>
     </div>
   );

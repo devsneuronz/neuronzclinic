@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
+import { ExpandedImageModal } from "../chat/expanded-image-modal";
 import { IATrainingView } from "./ia-training-view";
 import { ProfileView, type ContactInfoValues } from "./profile-view";
 
@@ -73,6 +74,8 @@ export function ContactDetails({
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
+  const [expandedContactPhoto, setExpandedContactPhoto] = useState<{ url: string; alt: string } | null>(null);
+  const hasContactPhoto = !!chat?.url_foto_perfil;
 
   async function handleEditNameToggle() {
     if (!isEditingName) {
@@ -117,12 +120,21 @@ export function ContactDetails({
             {/* Avatar e Status */}
             <div className="flex flex-row gap-3 items-center ">
               {/* AVatar */}
-              <div className="bg-neutral-800 rounded-full">
+              <button
+                type="button"
+                className={cn("rounded-full bg-neutral-800", hasContactPhoto && "cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2")}
+                aria-label={hasContactPhoto ? `Ampliar foto de ${getDisplayName(chat)}` : "Foto do contato"}
+                disabled={!hasContactPhoto}
+                onClick={() => {
+                  if (!chat?.url_foto_perfil) return;
+                  setExpandedContactPhoto({ url: chat.url_foto_perfil, alt: `Foto de ${getDisplayName(chat)}` });
+                }}
+              >
                 <Avatar className={cn("h-16 w-16 shrink-0 shadow-sm", chat?.finalizada ? "opacity-30" : "ring-2 ring-blue-500")}>
                   <AvatarImage src={chat?.url_foto_perfil ?? undefined} alt={chat?.nome_contato || ""} className="rounded-full" />
                   <AvatarFallback className="bg-(--chat-muted) text-(--chat-muted-foreground)">{chat?.nome_contato?.charAt(0) || "U"}</AvatarFallback>
                 </Avatar>
-              </div>
+              </button>
               {/* Status */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -243,6 +255,7 @@ export function ContactDetails({
           )}
         </div>
       </div>
+      {expandedContactPhoto && <ExpandedImageModal image={expandedContactPhoto} onClose={() => setExpandedContactPhoto(null)} />}
     </div>
   );
 }

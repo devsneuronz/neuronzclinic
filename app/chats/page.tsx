@@ -1715,6 +1715,7 @@ export default function ChatsPage() {
           hasMore={isSearching ? hasMoreSearchChats : hasMoreChats}
           selectedId={undefined}
           latestMessageStatuses={latestMessageStatuses}
+          statusOptions={contactStatusOptions}
           onSearchChange={setSearch}
           onSelect={(id) => {
             handleSelectChat(id);
@@ -1792,6 +1793,7 @@ export default function ChatsPage() {
         hasMore={isSearching ? hasMoreSearchChats : hasMoreChats}
         selectedId={selectedChat?.id}
         latestMessageStatuses={latestMessageStatuses}
+        statusOptions={contactStatusOptions}
         onSearchChange={handleSearchChange}
         onSelect={handleSelectChat}
         onLoadMore={loadMoreChats}

@@ -6,6 +6,15 @@ const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
 const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 const AIRTABLE_BASE_ID = "app03ti52QQD3W9L2"
 const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY
+const AIRTABLE_CONTACT_TABLE_CANDIDATES = [
+  process.env.AIRTABLE_CONTACTS_TABLE,
+  "Contatos",
+  "Contato",
+  "Contacts",
+  "Contact",
+  "Pacientes",
+  "Paciente",
+].filter(Boolean) as string[]
 const AIRTABLE_TAG_TABLE_CANDIDATES = [
   process.env.AIRTABLE_TAGS_TABLE,
   "tblP68L7jNYctqKAq",
@@ -23,6 +32,15 @@ const AIRTABLE_TAG_TABLE_CANDIDATES = [
   "tag",
 ].filter(Boolean) as string[]
 const PAGE_SIZE = 1000
+const STATUS_FIELD_CANDIDATES = [
+  "Status_chat",
+  "Status Chat",
+  "Status do chat",
+  "Status do contato",
+  "Status contato",
+  "Status",
+  "status",
+]
 
 interface CatalogChatRecord {
   Status_chat: string | null
@@ -36,6 +54,16 @@ interface CatalogChatRecord {
 type AirtableRecord = {
   id: string
   fields?: Record<string, unknown>
+}
+
+type AirtableTable = {
+  name?: string
+  fields?: Array<{
+    name?: string
+    options?: {
+      choices?: Array<{ name?: string }>
+    }
+  }>
 }
 
 async function fetchCatalogChats() {
@@ -92,6 +120,25 @@ function getStatusOptions(chats: CatalogChatRecord[]) {
   return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }))
 }
 
+function mergeStatusOptions(...groups: ChatStatusOption[][]) {
+  const options = new Map<string, ChatStatusOption>()
+
+  for (const group of groups) {
+    for (const status of group) {
+      const label = status.label.trim()
+      if (!label) continue
+
+      const current = options.get(label)
+      options.set(label, {
+        label,
+        color: current?.color || status.color,
+      })
+    }
+  }
+
+  return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }))
+}
+
 function getTagOptions(chats: CatalogChatRecord[]) {
   const options = new Map<string, ChatTag>()
 
@@ -139,6 +186,35 @@ function getFirstReadableStringField(fields: Record<string, unknown>) {
   }
 
   return ""
+}
+
+function getChoiceNames(table: AirtableTable | undefined, fieldCandidates: string[]) {
+  const fields = table?.fields ?? []
+  const field = fields.find((candidate) => {
+    const fieldName = candidate.name?.toLowerCase()
+    return fieldName ? fieldCandidates.some((name) => name.toLowerCase() === fieldName) : false
+  })
+
+  return Array.from(
+    new Set(
+      (field?.options?.choices ?? [])
+        .map((choice) => choice.name?.trim())
+        .filter((choice): choice is string => Boolean(choice)),
+    ),
+  ).sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }))
+}
+
+function getTableByCandidates(tables: AirtableTable[], candidates: string[]) {
+  const normalizedCandidates = candidates.map((candidate) => candidate.toLowerCase())
+
+  return tables.find((table) => {
+    const tableName = table.name?.toLowerCase()
+    return tableName ? normalizedCandidates.includes(tableName) : false
+  })
+}
+
+function getTableWithStatusField(tables: AirtableTable[]) {
+  return tables.find((table) => getChoiceNames(table, STATUS_FIELD_CANDIDATES).length > 0)
 }
 
 function isInactiveAirtableTag(record: AirtableRecord) {
@@ -189,10 +265,7 @@ async function fetchAirtableTagTableNamesFromMetadata() {
   if (!response.ok) return []
 
   const data = (await response.json()) as {
-    tables?: Array<{
-      name?: string
-      fields?: Array<{ name?: string }>
-    }>
+    tables?: AirtableTable[]
   }
 
   return (data.tables ?? [])
@@ -208,6 +281,26 @@ async function fetchAirtableTagTableNamesFromMetadata() {
     })
     .map((table) => table.name)
     .filter((name): name is string => Boolean(name))
+}
+
+async function fetchAirtableStatusOptions() {
+  if (!AIRTABLE_TOKEN) return []
+
+  const response = await fetch(`https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables`, {
+    headers: {
+      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
+    },
+    cache: "no-store",
+  })
+
+  if (!response.ok) return []
+
+  const data = (await response.json()) as { tables?: AirtableTable[] }
+  const tables = data.tables ?? []
+  const contactTable = getTableByCandidates(tables, AIRTABLE_CONTACT_TABLE_CANDIDATES) ?? getTableWithStatusField(tables)
+  const choices = getChoiceNames(contactTable, STATUS_FIELD_CANDIDATES)
+
+  return choices.map((label) => ({ label }))
 }
 
 async function fetchAirtableTagOptions() {
@@ -241,6 +334,7 @@ export async function GET() {
   const errors: string[] = []
   let chats: CatalogChatRecord[] = []
   let airtableTags: ChatTag[] = []
+  let airtableStatuses: ChatStatusOption[] = []
 
   try {
     chats = await fetchCatalogChats()
@@ -254,10 +348,16 @@ export async function GET() {
     errors.push(error instanceof Error ? error.message : "Não foi possível carregar tags do Airtable.")
   }
 
+  try {
+    airtableStatuses = await fetchAirtableStatusOptions()
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : "Não foi possível carregar status do Airtable.")
+  }
+
   const fallbackTags = getTagOptions(chats).filter((tag) => /^rec[a-zA-Z0-9]+$/.test(tag.id))
 
   return NextResponse.json({
-    statuses: getStatusOptions(chats),
+    statuses: mergeStatusOptions(getStatusOptions(chats), airtableStatuses),
     tags: airtableTags.length > 0 ? airtableTags : fallbackTags,
     errors,
   })

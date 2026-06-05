@@ -2,14 +2,16 @@
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { cn, normalizeText } from "@/lib/utils";
 import { addDays, addMonths, addWeeks, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek, subMonths, subWeeks } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AlertTriangle, Calendar1, CalendarDays, CalendarIcon, ChevronLeft, ChevronRight, Circle, Clock, Columns3, List, Loader2, Phone, Pin, Plus, Search, SquarePen, Stethoscope, Trash2, User, UserPlus } from "lucide-react";
 
 import type { MouseEvent } from "react";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Calendar } from "../ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
@@ -223,6 +225,13 @@ export function WeeklyCalendar() {
   const [editingAppointment, setEditingAppointment] = useState<CalendarAppointment | null>(null);
   const [pendingDeleteAppointment, setPendingDeleteAppointment] = useState<CalendarAppointment | null>(null);
   const [isAppointmentDialogOpen, setIsAppointmentDialogOpen] = useState(false);
+  const [isNewPatientDialogOpen, setIsNewPatientDialogOpen] = useState(false);
+  const [isCreatingPatient, setIsCreatingPatient] = useState(false);
+  const [newPatientName, setNewPatientName] = useState("");
+  const [newPatientPhone, setNewPatientPhone] = useState("");
+  const [newPatientEmail, setNewPatientEmail] = useState("");
+  const [newPatientObservations, setNewPatientObservations] = useState("");
+  const [initialAppointmentPatient, setInitialAppointmentPatient] = useState<{ id: string; label: string } | null>(null);
 
   const range = useMemo(() => getRange(currentDate, activeView), [activeView, currentDate]);
   const professionalLabels = useMemo(() => new Map(options.professionals.map((professional) => [professional.id, professional.label])), [options.professionals]);
@@ -277,38 +286,45 @@ export function WeeklyCalendar() {
     return grouped;
   }, [filteredAppointments]);
 
+  const loadOptions = useCallback(async (optionsConfig?: { silent?: boolean }) => {
+    if (!optionsConfig?.silent) setIsLoadingOptions(true);
+
+    try {
+      const response = await fetch("/api/airtable/appointment-options");
+      const data = (await response.json()) as Partial<AppointmentOptions>;
+      const nextOptions = {
+        status: Array.isArray(data.status) ? data.status : [],
+        types: Array.isArray(data.types) ? data.types : [],
+        attendanceModes: Array.isArray(data.attendanceModes) ? data.attendanceModes : [],
+        professionals: Array.isArray(data.professionals) ? data.professionals : [],
+        patients: Array.isArray(data.patients) ? data.patients : [],
+      };
+
+      setOptions(nextOptions);
+      return nextOptions;
+    } catch {
+      setErrorMessage("Não foi possível carregar os filtros do Airtable.");
+      return null;
+    } finally {
+      if (!optionsConfig?.silent) setIsLoadingOptions(false);
+    }
+  }, []);
+
   useEffect(() => {
     let isActive = true;
 
-    async function loadOptions() {
+    async function loadInitialOptions() {
       await Promise.resolve();
-      if (isActive) setIsLoadingOptions(true);
-
-      try {
-        const response = await fetch("/api/airtable/appointment-options");
-        const data = (await response.json()) as Partial<AppointmentOptions>;
-        if (!isActive) return;
-
-        setOptions({
-          status: Array.isArray(data.status) ? data.status : [],
-          types: Array.isArray(data.types) ? data.types : [],
-          attendanceModes: Array.isArray(data.attendanceModes) ? data.attendanceModes : [],
-          professionals: Array.isArray(data.professionals) ? data.professionals : [],
-          patients: Array.isArray(data.patients) ? data.patients : [],
-        });
-      } catch {
-        if (isActive) setErrorMessage("Não foi possível carregar os filtros do Airtable.");
-      } finally {
-        if (isActive) setIsLoadingOptions(false);
-      }
+      if (!isActive) return;
+      await loadOptions();
     }
 
-    void loadOptions();
+    void loadInitialOptions();
 
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [loadOptions]);
 
   useEffect(() => {
     let isActive = true;
@@ -371,6 +387,7 @@ export function WeeklyCalendar() {
 
     setSelectedAppointment(null);
     setEditingAppointment(null);
+    setInitialAppointmentPatient(null);
 
     setDialogStartDate(startDate);
     setDialogEndDate(endDate);
@@ -383,6 +400,7 @@ export function WeeklyCalendar() {
     setDialogEndDate(appointment.endDateTime ? new Date(appointment.endDateTime) : null);
     setSelectedAppointment(null);
     setEditingAppointment(appointment);
+    setInitialAppointmentPatient(null);
     setIsAppointmentDialogOpen(true);
   }
 
@@ -442,6 +460,54 @@ export function WeeklyCalendar() {
       throw error;
     } finally {
       setIsSavingAppointment(false);
+    }
+  }
+
+  async function handleCreatePatient(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    setIsCreatingPatient(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const response = await fetch("/api/airtable/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newPatientName,
+          phone: newPatientPhone,
+          email: newPatientEmail,
+          observations: newPatientObservations,
+        }),
+      });
+
+      const data = (await response.json()) as { contact?: { id: string; label: string }; message?: string };
+
+      if (!response.ok || !data.contact) {
+        throw new Error(data.message || "Não foi possível criar o contato.");
+      }
+
+      const contact = data.contact;
+      const refreshedOptions = await loadOptions({ silent: true });
+      const patient = refreshedOptions?.patients.find((item) => item.id === contact.id) ?? contact;
+
+      setInitialAppointmentPatient(patient);
+      setNewPatientName("");
+      setNewPatientPhone("");
+      setNewPatientEmail("");
+      setNewPatientObservations("");
+      setIsNewPatientDialogOpen(false);
+      setSelectedAppointment(null);
+      setEditingAppointment(null);
+      setDialogStartDate(null);
+      setDialogEndDate(null);
+      setIsAppointmentDialogOpen(true);
+      setSuccessMessage(data.message || "Contato criado com sucesso.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Não foi possível criar o contato.");
+    } finally {
+      setIsCreatingPatient(false);
     }
   }
 
@@ -627,6 +693,8 @@ export function WeeklyCalendar() {
               setDialogStartDate(null);
               setDialogEndDate(null);
               setSelectedAppointment(null);
+              setEditingAppointment(null);
+              setInitialAppointmentPatient(null);
               setIsAppointmentDialogOpen(true);
             }}
           >
@@ -634,7 +702,18 @@ export function WeeklyCalendar() {
             <span className="truncate">Novo Agendamento</span>
           </Button>
 
-          <Button variant="outline" className="gap-2 text-xs sm:text-sm px-3 sm:px-4">
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2 text-xs sm:text-sm px-3 sm:px-4"
+            onClick={() => {
+              setNewPatientName("");
+              setNewPatientPhone("");
+              setNewPatientEmail("");
+              setNewPatientObservations("");
+              setIsNewPatientDialogOpen(true);
+            }}
+          >
             <UserPlus className="h-4 w-4 shrink-0" />
             <span className="truncate">Novo Paciente</span>
           </Button>
@@ -1065,11 +1144,66 @@ export function WeeklyCalendar() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={isNewPatientDialogOpen}
+        onOpenChange={(open) => {
+          if (isCreatingPatient) return;
+          setIsNewPatientDialogOpen(open);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <UserPlus className="h-4 w-4 text-primary" />
+              Novo paciente
+            </DialogTitle>
+            <DialogDescription>Crie um contato para usar nos agendamentos.</DialogDescription>
+          </DialogHeader>
+
+          <form className="space-y-4" onSubmit={handleCreatePatient}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2 sm:col-span-2">
+                <label className="text-xs font-semibold text-foreground">Nome</label>
+                <Input value={newPatientName} onChange={(event) => setNewPatientName(event.target.value)} placeholder="Nome do contato" required disabled={isCreatingPatient} />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground">WhatsApp</label>
+                <Input value={newPatientPhone} onChange={(event) => setNewPatientPhone(event.target.value)} placeholder="(00) 00000-0000" disabled={isCreatingPatient} />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground">E-mail</label>
+                <Input type="email" value={newPatientEmail} onChange={(event) => setNewPatientEmail(event.target.value)} placeholder="email@exemplo.com" disabled={isCreatingPatient} />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-foreground">Observações</label>
+              <Textarea className="min-h-24 resize-none" value={newPatientObservations} onChange={(event) => setNewPatientObservations(event.target.value)} disabled={isCreatingPatient} />
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsNewPatientDialogOpen(false)} disabled={isCreatingPatient}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isCreatingPatient}>
+                {isCreatingPatient && <Loader2 className="h-4 w-4 animate-spin" />}
+                Criar e agendar
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <AppointmentCreationDialog
         open={isAppointmentDialogOpen}
         onOpenChange={(open) => {
           setIsAppointmentDialogOpen(open);
-          if (!open) setEditingAppointment(null);
+          if (!open) {
+            setEditingAppointment(null);
+            setInitialAppointmentPatient(null);
+          }
         }}
         appointment={editingAppointment ?? undefined}
         options={options}
@@ -1078,6 +1212,7 @@ export function WeeklyCalendar() {
         isSaving={isSavingAppointment}
         startDate={dialogStartDate ?? undefined}
         endDate={dialogEndDate ?? undefined}
+        initialPatient={initialAppointmentPatient}
       />
     </div>
   );

@@ -7,13 +7,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { getTodayDate } from "@/lib/date";
-import { fetchChats, type ChatRecord } from "@/lib/supabase-rest";
+import { getTodayDate, parseDateOnly } from "@/lib/date";
+import { fetchChats, fetchMessages, type ChatRecord, type MessageRecord } from "@/lib/supabase-rest";
 import { fallbackTaskOptions, getTaskNoteAttachmentType, type StatusConfigMap, type Task, type TaskOptions, type TaskResolutionNote, type TaskStatus } from "@/lib/task";
 import { getDraTatianaResponsibleFilter, isDraTatianaUser } from "@/lib/user-access";
 import { cn } from "@/lib/utils";
 import { AlertCircle, CheckCircle2, Circle, CircleDashed, IdCardLanyard, Loader2, Plus, RefreshCw, Search, Tag, Timer, UserPlus } from "lucide-react";
-import { useRouter } from "next/navigation";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -23,6 +22,7 @@ import { FilterMenu } from "./filter-menu";
 import { KanbanColumn } from "./kanban-column";
 import { TaskDetailsDialog } from "./task-details-dialog";
 import { TaskStatusGrid } from "./task-grid";
+import { TaskPatientMessagesDialog } from "./task-patient-messages-dialog";
 type TaskView = "todas" | TaskStatus;
 
 const statusOrder: TaskStatus[] = ["aguardando", "resolvendo", "finalizado"];
@@ -70,7 +70,8 @@ const statusConfig: StatusConfigMap = {
 };
 
 function getTaskSortTime(task: Task) {
-  const date = new Date(task.dueDate || task.createdAt || 0);
+  const value = task.dueDate || task.createdAt || "";
+  const date = parseDateOnly(value) ?? new Date(value || 0);
   return Number.isNaN(date.getTime()) ? 0 : date.getTime();
 }
 
@@ -237,7 +238,6 @@ function FieldLabel({ children }: { children: ReactNode }) {
 }
 
 export function KanbanBoard() {
-  const router = useRouter();
   const { user, isLoading: isCurrentUserLoading } = useCurrentUser();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [chats, setChats] = useState<ChatRecord[]>([]);
@@ -264,6 +264,10 @@ export function KanbanBoard() {
   const [deletingTaskResolutionNoteId, setDeletingTaskResolutionNoteId] = useState("");
   const [taskResolutionNoteError, setTaskResolutionNoteError] = useState("");
   const [taskActionError, setTaskActionError] = useState("");
+  const [patientMessagesTask, setPatientMessagesTask] = useState<Task | null>(null);
+  const [patientMessages, setPatientMessages] = useState<MessageRecord[]>([]);
+  const [isLoadingPatientMessages, setIsLoadingPatientMessages] = useState(false);
+  const [patientMessagesError, setPatientMessagesError] = useState("");
   const [createTaskError, setCreateTaskError] = useState("");
   const [taskType, setTaskType] = useState(fallbackTaskOptions.types[0]);
   const [taskStatus, setTaskStatus] = useState(fallbackTaskOptions.statuses[0]);
@@ -275,7 +279,8 @@ export function KanbanBoard() {
   const [taskResponsibleUserId, setTaskResponsibleUserId] = useState("");
   const [taskSubject, setTaskSubject] = useState("");
   const [taskObservations, setTaskObservations] = useState("");
-  const hasAppliedInitialResponsibleFilterRef = useRef(false);
+  const [hasAppliedInitialResponsibleFilter, setHasAppliedInitialResponsibleFilter] = useState(false);
+  const patientMessagesRequestIdRef = useRef(0);
 
   useEffect(() => {
     if (isCurrentUserLoading) return;
@@ -374,17 +379,43 @@ export function KanbanBoard() {
       .finally(() => setIsLoadingTaskResolutionNotes(false));
   };
 
-  const handleOpenPatientChat = (task: Task) => {
+  const handleOpenPatientMessages = (task: Task) => {
     if (!task.patientChatId) return;
-    router.push(`/chats?chatId=${encodeURIComponent(task.patientChatId)}`);
+
+    const requestId = patientMessagesRequestIdRef.current + 1;
+    patientMessagesRequestIdRef.current = requestId;
+    setPatientMessagesTask(task);
+    setPatientMessages([]);
+    setPatientMessagesError("");
+    setIsLoadingPatientMessages(true);
+
+    fetchMessages(task.patientChatId, { limit: 15 })
+      .then((messages) => {
+        if (patientMessagesRequestIdRef.current !== requestId) return;
+        setPatientMessages(messages);
+      })
+      .catch((error) => {
+        if (patientMessagesRequestIdRef.current !== requestId) return;
+        setPatientMessagesError(error instanceof Error ? error.message : "Não foi possível carregar as mensagens do paciente.");
+      })
+      .finally(() => {
+        if (patientMessagesRequestIdRef.current === requestId) setIsLoadingPatientMessages(false);
+      });
   };
 
   const isSmallScreen = useIsMobile(640);
 
   useEffect(() => {
-    if (isSmallScreen && activeView === "todas") {
-      setActiveView("aguardando");
-    }
+    if (!isSmallScreen || activeView !== "todas") return;
+
+    let isCurrent = true;
+    queueMicrotask(() => {
+      if (isCurrent) setActiveView("aguardando");
+    });
+
+    return () => {
+      isCurrent = false;
+    };
   }, [isSmallScreen, activeView, setActiveView]);
 
   const handleUpdateTask = async (task: Task, values: { type: string; status: string; dueDate: string; responsibleUserId: string; subject: string; observations: string }) => {
@@ -593,15 +624,21 @@ export function KanbanBoard() {
   const initialTatianaResponsibleFilter = useMemo(() => getDraTatianaResponsibleFilter(responsibleOptions), [responsibleOptions]);
 
   useEffect(() => {
-    if (hasAppliedInitialResponsibleFilterRef.current || isCurrentUserLoading || !isDraTatianaUser(user)) return;
+    if (hasAppliedInitialResponsibleFilter || isCurrentUserLoading || !isDraTatianaUser(user) || !initialTatianaResponsibleFilter) return;
 
-    if (!initialTatianaResponsibleFilter) return;
+    let isCurrent = true;
+    queueMicrotask(() => {
+      if (!isCurrent) return;
+      setHasAppliedInitialResponsibleFilter(true);
+      setResponsibleFilter(initialTatianaResponsibleFilter);
+    });
 
-    hasAppliedInitialResponsibleFilterRef.current = true;
-    setResponsibleFilter(initialTatianaResponsibleFilter);
-  }, [initialTatianaResponsibleFilter, isCurrentUserLoading, user]);
+    return () => {
+      isCurrent = false;
+    };
+  }, [hasAppliedInitialResponsibleFilter, initialTatianaResponsibleFilter, isCurrentUserLoading, user]);
 
-  const effectiveResponsibleFilter = responsibleFilter === filterAll && !hasAppliedInitialResponsibleFilterRef.current && isDraTatianaUser(user) && initialTatianaResponsibleFilter ? initialTatianaResponsibleFilter : responsibleFilter;
+  const effectiveResponsibleFilter = responsibleFilter === filterAll && !hasAppliedInitialResponsibleFilter && isDraTatianaUser(user) && initialTatianaResponsibleFilter ? initialTatianaResponsibleFilter : responsibleFilter;
 
   const filtersConfig = [
     {
@@ -774,10 +811,10 @@ export function KanbanBoard() {
                 </div>
               ) : view.value === "todas" ? (
                 statusOrder.map((status) => (
-                  <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} isFiltering={isFiltering} onSelectTask={handleSelectTask} onOpenPatientChat={handleOpenPatientChat} statusConfig={statusConfig} />
+                  <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} isFiltering={isFiltering} onSelectTask={handleSelectTask} onOpenPatientMessages={handleOpenPatientMessages} statusConfig={statusConfig} />
                 ))
               ) : (
-                <TaskStatusGrid status={view.value} tasks={tasksByStatus[view.value]} isFiltering={isFiltering} onSelectTask={handleSelectTask} onOpenPatientChat={handleOpenPatientChat} statusConfig={statusConfig} />
+                <TaskStatusGrid status={view.value} tasks={tasksByStatus[view.value]} isFiltering={isFiltering} onSelectTask={handleSelectTask} onOpenPatientMessages={handleOpenPatientMessages} statusConfig={statusConfig} />
               )}
             </main>
           </TabsContent>
@@ -954,7 +991,7 @@ export function KanbanBoard() {
             setSelectedTask(null);
           }
         }}
-        onOpenPatientChat={handleOpenPatientChat}
+        onOpenPatientMessages={handleOpenPatientMessages}
         onDelete={handleDeleteTask}
         onUpdate={handleUpdateTask}
         notes={taskResolutionNotes}
@@ -974,6 +1011,22 @@ export function KanbanBoard() {
         errorMessage={taskActionError}
         noteErrorMessage={taskResolutionNoteError}
         statusConfig={statusConfig}
+      />
+      <TaskPatientMessagesDialog
+        task={patientMessagesTask}
+        open={Boolean(patientMessagesTask)}
+        onOpenChange={(open) => {
+          if (!open) {
+            patientMessagesRequestIdRef.current += 1;
+            setPatientMessagesTask(null);
+            setPatientMessages([]);
+            setPatientMessagesError("");
+            setIsLoadingPatientMessages(false);
+          }
+        }}
+        messages={patientMessages}
+        isLoading={isLoadingPatientMessages}
+        errorMessage={patientMessagesError}
       />
     </div>
   );

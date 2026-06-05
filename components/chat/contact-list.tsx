@@ -12,8 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { CHAT_DRAFT_CHANGED_EVENT, CHAT_DRAFT_STORAGE_PREFIX, readChatDraft, type ChatDraftChangedDetail } from "@/lib/chat-drafts";
-import { getChatStatusColor, getChatStatusLabel } from "@/lib/chat-status";
-import { getChatTags, getReadableTextColor } from "@/lib/chat-tags";
+import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
+import { getChatInterestTags, getChatTags, getReadableTextColor } from "@/lib/chat-tags";
 import { ChatRecord, LatestMessageStatus } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 import { formatBoldText } from "@/utils/utils";
@@ -22,6 +22,7 @@ import { ChevronDown, ChevronUp, Feather, FilterX, HatGlasses, Loader2, Search, 
 import type { FormEvent, UIEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { ExpandedImageModal } from "./expanded-image-modal";
 import { MessageStatusIcon } from "./message-status-icon";
 
 interface ContactListProps {
@@ -33,6 +34,7 @@ interface ContactListProps {
   hasMore?: boolean;
   selectedId?: string;
   latestMessageStatuses?: Record<string, LatestMessageStatus>;
+  statusOptions?: ChatStatusOption[];
   onSearchChange?: (value: string) => void;
   onSelect?: (id: string) => void;
   onLoadMore?: () => void;
@@ -163,6 +165,7 @@ export function ContactList({
   hasMore,
   selectedId,
   latestMessageStatuses = {},
+  statusOptions: catalogStatusOptions = [],
   onSearchChange,
   onSelect,
   onLoadMore,
@@ -177,6 +180,7 @@ export function ContactList({
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState(ALL_FILTERS);
   const [tagFilter, setTagFilter] = useState(ALL_FILTERS);
+  const [interestFilter, setInterestFilter] = useState(ALL_FILTERS);
   const [sectorFilter, setSectorFilter] = useState(ALL_FILTERS);
   const [scopeTab, setScopeTab] = useState<ScopeTab>("all");
   const [stateTab, setStateTab] = useState<StateTab>("entrada");
@@ -189,15 +193,20 @@ export function ContactList({
   const [newContactMessage, setNewContactMessage] = useState("");
   const [newContactError, setNewContactError] = useState("");
   const [isCreatingContact, setIsCreatingContact] = useState(false);
+  const [expandedContactPhoto, setExpandedContactPhoto] = useState<{ url: string; alt: string } | null>(null);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const autoLoadKeyRef = useRef("");
 
-  const statusOptions = useMemo(() => getUniqueOptions(chats.map(getChatStatusLabel)), [chats]);
+  const statusOptions = useMemo(() => {
+    const catalogLabels = catalogStatusOptions.map((status) => status.label);
+    return getUniqueOptions([...catalogLabels, ...chats.map(getChatStatusLabel)]);
+  }, [catalogStatusOptions, chats]);
   const tagOptions = useMemo(() => getUniqueOptions(chats.flatMap((chat) => getChatTags(chat).map((tag) => tag.label))), [chats]);
+  const interestOptions = useMemo(() => getUniqueOptions(chats.flatMap((chat) => getChatInterestTags(chat).map((tag) => tag.label))), [chats]);
   const sectorIds = useMemo(() => Array.from(new Set(chats.flatMap((chat) => getSectorIds(chat.setor)))), [chats]);
   const sectorOptions = useMemo(() => (sectorCatalog.length > 0 ? sectorCatalog : getUniqueOptions(sectorIds.map((id) => getSectorLabel(id, sectorLabels)))), [sectorCatalog, sectorIds, sectorLabels]);
 
-  const hasActiveFilters = statusFilter !== ALL_FILTERS || tagFilter !== ALL_FILTERS || sectorFilter !== ALL_FILTERS || !!search.trim();
+  const hasActiveFilters = statusFilter !== ALL_FILTERS || tagFilter !== ALL_FILTERS || interestFilter !== ALL_FILTERS || sectorFilter !== ALL_FILTERS || !!search.trim();
 
   const { user, isLoading } = useCurrentUser();
   const userName = user?.name ?? "Usuário";
@@ -326,10 +335,11 @@ export function ContactList({
         return false;
       }
       if (tagFilter !== ALL_FILTERS && !getChatTags(chat).some((tag) => tag.label === tagFilter)) return false;
+      if (interestFilter !== ALL_FILTERS && !getChatInterestTags(chat).some((interest) => interest.label === interestFilter)) return false;
 
       return true;
     });
-  }, [chats, sectorFilter, sectorLabels, statusFilter, tagFilter]);
+  }, [chats, interestFilter, sectorFilter, sectorLabels, statusFilter, tagFilter]);
 
   const visibleChats = useMemo(() => {
     const stateFilteredChats = filteredChats.filter((chat) => {
@@ -376,6 +386,7 @@ export function ContactList({
   function clearFilters() {
     setStatusFilter(ALL_FILTERS);
     setTagFilter(ALL_FILTERS);
+    setInterestFilter(ALL_FILTERS);
     setSectorFilter(ALL_FILTERS);
     onSearchChange?.("");
   }
@@ -436,7 +447,7 @@ export function ContactList({
 
       const hasFilledVisibleArea = target.scrollHeight > target.clientHeight + 24;
       if (!hasFilledVisibleArea) {
-        const autoLoadKey = [chats.length, visibleChats.length, scopeTab, stateTab, statusFilter, tagFilter, sectorFilter].join("|");
+        const autoLoadKey = [chats.length, visibleChats.length, scopeTab, stateTab, statusFilter, tagFilter, interestFilter, sectorFilter].join("|");
         if (autoLoadKeyRef.current === autoLoadKey) return;
 
         autoLoadKeyRef.current = autoLoadKey;
@@ -445,7 +456,7 @@ export function ContactList({
     });
 
     return () => window.cancelAnimationFrame(frameId);
-  }, [chats.length, hasMore, isLoading, isLoadingMore, isSearching, onLoadMore, scopeTab, sectorFilter, stateTab, statusFilter, tagFilter, visibleChats.length]);
+  }, [chats.length, hasMore, interestFilter, isLoading, isLoadingMore, isSearching, onLoadMore, scopeTab, sectorFilter, stateTab, statusFilter, tagFilter, visibleChats.length]);
 
   return (
     <div className={cn("flex h-full shrink-0 flex-col border-r border-border bg-card", isMobile ? "w-full" : "w-[340px]")}>
@@ -555,6 +566,22 @@ export function ContactList({
               </SelectContent>
             </Select>
 
+            <Select value={interestFilter} onValueChange={setInterestFilter}>
+              <SelectTrigger className="h-8 w-full bg-card text-xs">
+                <SelectValue placeholder="Interesse" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_FILTERS}>
+                  <span className="text-muted-foreground">Selecione um interesse</span>
+                </SelectItem>
+                {interestOptions.map((interest) => (
+                  <SelectItem key={interest} value={interest}>
+                    {interest}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             <Select value={sectorFilter} onValueChange={setSectorFilter}>
               <SelectTrigger className="h-8 w-full bg-card text-xs">
                 <SelectValue placeholder="Setor" />
@@ -637,7 +664,23 @@ export function ContactList({
                 onClick={() => onSelect?.(chat.id)}
                 className={cn("flex w-full items-start gap-3 border-b border-border/50 p-3 text-left transition-colors hover:bg-theme-accent/30", selectedId === chat.id && "bg-theme-accent/10")}
               >
-                <div className="relative h-11 w-11 shrink-0">
+                <span
+                  className={cn("relative h-11 w-11 shrink-0 rounded-full", chat.url_foto_perfil && "cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2")}
+                  role={chat.url_foto_perfil ? "button" : undefined}
+                  tabIndex={chat.url_foto_perfil ? 0 : undefined}
+                  aria-label={chat.url_foto_perfil ? `Ampliar foto de ${name}` : undefined}
+                  onClick={(event) => {
+                    if (!chat.url_foto_perfil) return;
+                    event.stopPropagation();
+                    setExpandedContactPhoto({ url: chat.url_foto_perfil, alt: `Foto de ${name}` });
+                  }}
+                  onKeyDown={(event) => {
+                    if (!chat.url_foto_perfil || (event.key !== "Enter" && event.key !== " ")) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setExpandedContactPhoto({ url: chat.url_foto_perfil, alt: `Foto de ${name}` });
+                  }}
+                >
                   <Avatar className="h-11 w-11">
                     <AvatarImage src={chat.url_foto_perfil ?? undefined} alt={name} />
                     <AvatarFallback className="bg-muted text-sm font-medium text-muted-foreground">{getAvatarInitials(name)}</AvatarFallback>
@@ -648,7 +691,7 @@ export function ContactList({
                     title={`Status: ${getChatStatusLabel(chat)}`}
                     aria-label={`Status: ${getChatStatusLabel(chat)}`}
                   />
-                </div>
+                </span>
 
                 <div className="min-w-0 flex-1 overflow-hidden">
                   <div className="flex items-center justify-between gap-2">
@@ -746,6 +789,7 @@ export function ContactList({
           </form>
         </DialogContent>
       </Dialog>
+      {expandedContactPhoto && <ExpandedImageModal image={expandedContactPhoto} onClose={() => setExpandedContactPhoto(null)} />}
     </div>
   );
 }

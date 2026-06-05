@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import type { ClinicAssistantInfo, ClinicInfoPayload, ClinicProcedure } from "@/lib/clinic-info"
+import { getReadableTextColor } from "@/lib/chat-tags"
 
 type EditableProcedure = ClinicProcedure & {
   draftName: string
@@ -189,6 +190,7 @@ export function ClinicInfoManager() {
           procedure: {
             id: procedure.id,
             name: procedure.draftName,
+            interestId: procedure.draftInterest.trim() === procedure.interest ? procedure.interestId : undefined,
             interest: procedure.draftInterest,
             description: procedure.draftDescription,
             active: procedure.draftActive,
@@ -359,6 +361,12 @@ export function ClinicInfoManager() {
           <div className="mt-3 space-y-3">
             {sortedProcedures.map((procedure) => {
               const isSaving = savingId === procedure.id
+              const interestStyle = procedure.interestColor
+                ? {
+                    backgroundColor: procedure.interestColor,
+                    color: getReadableTextColor(procedure.interestColor),
+                  }
+                : undefined
 
               return (
                 <article key={procedure.id} className="rounded-md border border-border bg-background shadow-sm">
@@ -413,7 +421,7 @@ export function ClinicInfoManager() {
                       <div className="flex min-h-12 items-center bg-emerald-600 px-4 text-sm font-medium text-white md:rounded-l-md">
                         {procedure.active ? procedure.name || "Ativo" : "Inativo"}
                       </div>
-                      <div className="flex min-h-12 items-center bg-primary px-4 text-sm font-medium text-primary-foreground">
+                      <div className="flex min-h-12 items-center bg-primary px-4 text-sm font-medium text-primary-foreground" style={interestStyle}>
                         {procedure.interest || "-"}
                       </div>
                       <div className="min-h-12 whitespace-pre-wrap px-4 py-3 text-sm leading-relaxed text-foreground">{procedure.description}</div>

@@ -3,11 +3,11 @@ import { formatDateTime } from "@/lib/date";
 import { isOverdue, Task } from "@/lib/task";
 import { cn } from "@/lib/utils";
 import { AvatarImage } from "@radix-ui/react-avatar";
-import { AlertCircle, ArrowRight, Clock3 } from "lucide-react";
+import { AlertCircle, Clock3, MessageCircle } from "lucide-react";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import { Badge } from "../ui/badge";
 
-export function TaskCard({ task, onSelect, onOpenPatientChat }: { task: Task; onSelect: (task: Task) => void; onOpenPatientChat: (task: Task) => void }) {
+export function TaskCard({ task, onSelect, onOpenPatientMessages }: { task: Task; onSelect: (task: Task) => void; onOpenPatientMessages: (task: Task) => void }) {
   const overdue = isOverdue(task);
   const dueDate = formatDateTime(task.dueDate, { day: "2-digit", month: "short", year: "numeric" });
   const createdAt = formatDateTime(task.createdAt, {
@@ -82,7 +82,7 @@ export function TaskCard({ task, onSelect, onOpenPatientChat }: { task: Task; on
             )}
             onClick={(event) => {
               event.stopPropagation();
-              if (task.patientChatId) onOpenPatientChat(task);
+              if (task.patientChatId) onOpenPatientMessages(task);
             }}
             disabled={!task.patientChatId}
           >
@@ -91,7 +91,7 @@ export function TaskCard({ task, onSelect, onOpenPatientChat }: { task: Task; on
               <AvatarFallback className="bg-muted text-[10px] font-semibold text-muted-foreground">{getAvatarInitials(task.patient)}</AvatarFallback>
             </Avatar>
             <span className="min-w-0 truncate font-medium text-foreground">{task.patient}</span>
-            {task.patientChatId ? <ArrowRight className="h-3.5 w-3.5 shrink-0 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-70" /> : null}
+            {task.patientChatId ? <MessageCircle className="h-3.5 w-3.5 shrink-0 opacity-0 transition group-hover:opacity-70" /> : null}
           </button>
         ) : null}
 

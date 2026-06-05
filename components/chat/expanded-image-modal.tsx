@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -10,7 +11,9 @@ type ExpandedImageModalProps = {
 };
 
 export function ExpandedImageModal({ image, onClose }: ExpandedImageModalProps) {
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-50 flex flex-col bg-black/85 backdrop-blur-sm">
       <div className="flex h-14 items-center justify-end px-4">
         <Button type="button" variant="ghost" size="icon" onClick={onClose} className="text-white hover:bg-white/10 hover:text-white" aria-label="Fechar imagem">
@@ -23,6 +26,7 @@ export function ExpandedImageModal({ image, onClose }: ExpandedImageModalProps) 
           <Image src={image.url} alt={image.alt} fill sizes="100vw" className="object-contain" priority unoptimized />
         </span>
       </button>
-    </div>
+    </div>,
+    document.body,
   );
 }

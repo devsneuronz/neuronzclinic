@@ -1,5 +1,5 @@
 import { getAvatarInitials } from "@/lib/avatar-initials";
-import { formatDateTime, getTodayDate } from "@/lib/date";
+import { formatDateTime, getDateInputValue, getTodayDate } from "@/lib/date";
 import { fallbackTaskOptions, getTaskNoteAttachmentType, isOverdue, ParsedTaskResolutionNote, StatusConfigMap, Task, TaskOptions, TaskResolutionNote } from "@/lib/task";
 import { cn } from "@/lib/utils";
 import { AlertCircle, ArrowRight, CalendarDays, ImageIcon, Loader2, Mic, Plus, Save, Square, Trash2, X } from "lucide-react";
@@ -17,7 +17,7 @@ interface TaskDetailsDialogProps {
   task: Task | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onOpenPatientChat: (task: Task) => void;
+  onOpenPatientMessages: (task: Task) => void;
   onDelete: (task: Task) => void;
   onUpdate: (task: Task, values: { type: string; status: string; dueDate: string; responsibleUserId: string; subject: string; observations: string }) => void;
   notes: TaskResolutionNote[];
@@ -43,7 +43,7 @@ export function TaskDetailsDialog({
   task,
   open,
   onOpenChange,
-  onOpenPatientChat,
+  onOpenPatientMessages,
   onDelete,
   onUpdate,
   notes,
@@ -66,7 +66,7 @@ export function TaskDetailsDialog({
 }: TaskDetailsDialogProps) {
   const [type, setType] = useState(task?.type || fallbackTaskOptions.types[0]);
   const [status, setStatus] = useState(task ? task.statusLabel || statusConfig[task.status].label : fallbackTaskOptions.statuses[0]);
-  const [dueDate, setDueDate] = useState(task ? getDateInputValue(task.dueDate) || getTodayDate() : getTodayDate());
+  const [dueDate, setDueDate] = useState(task ? getDateInputValue(task.dueDate) : getTodayDate());
   const [responsibleUserId, setResponsibleUserId] = useState(task?.responsibleUserId || "");
   const [subject, setSubject] = useState(task?.subject || "");
   const [observations, setObservations] = useState(task?.description || "");
@@ -86,15 +86,6 @@ export function TaskDetailsDialog({
         minute: "2-digit",
       })
     : "";
-
-  function getDateInputValue(value: string) {
-    if (!value) return "";
-
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
-
-    return date.toISOString().slice(0, 10);
-  }
 
   function mergeOptions(options: string[], currentValue: string) {
     return Array.from(new Set([currentValue, ...options].map((option) => option.trim()).filter(Boolean)));
@@ -179,6 +170,25 @@ export function TaskDetailsDialog({
   const attachmentType = getTaskNoteAttachmentType(noteAttachment);
   const canCreateNote = Boolean(noteDraft.trim() || noteAttachment) && attachmentType !== "unsupported";
   const noteMediaPreviewUrl = useMemo(() => (["image", "audio"].includes(attachmentType || "") && noteAttachment ? URL.createObjectURL(noteAttachment) : ""), [attachmentType, noteAttachment]);
+
+  useEffect(() => {
+    if (!task) return;
+
+    let isCurrent = true;
+    queueMicrotask(() => {
+      if (!isCurrent) return;
+      setType(task.type || fallbackTaskOptions.types[0]);
+      setStatus(task.statusLabel || statusConfig[task.status].label);
+      setDueDate(getDateInputValue(task.dueDate));
+      setResponsibleUserId(task.responsibleUserId || "");
+      setSubject(task.subject || "");
+      setObservations(task.description || "");
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [task, statusConfig]);
 
   useEffect(() => {
     if (!noteMediaPreviewUrl) return;
@@ -358,7 +368,7 @@ export function TaskDetailsDialog({
                       task.patientChatId ? "-mx-1 px-1.5 py-1 hover:bg-primary/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" : "cursor-default",
                     )}
                     onClick={() => {
-                      if (task.patientChatId) onOpenPatientChat(task);
+                      if (task.patientChatId) onOpenPatientMessages(task);
                     }}
                     disabled={!task.patientChatId}
                   >

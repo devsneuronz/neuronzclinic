@@ -8,11 +8,11 @@ interface KanbanColumnProps {
   tasks: Task[];
   isFiltering: boolean;
   onSelectTask: (task: Task) => void;
-  onOpenPatientChat: (task: Task) => void;
+  onOpenPatientMessages: (task: Task) => void;
   statusConfig: StatusConfigMap;
 }
 
-export function KanbanColumn({ status, tasks, isFiltering, onSelectTask, onOpenPatientChat, statusConfig }: KanbanColumnProps) {
+export function KanbanColumn({ status, tasks, isFiltering, onSelectTask, onOpenPatientMessages, statusConfig }: KanbanColumnProps) {
   const config = statusConfig[status];
   const Icon = config.icon;
 
@@ -36,7 +36,7 @@ export function KanbanColumn({ status, tasks, isFiltering, onSelectTask, onOpenP
         {tasks.length > 0 ? (
           tasks.map((task) => (
             <div key={task.id} className={cn("group cursor-pointer rounded-md border bg-card p-4 text-left shadow-xs transition hover:ring-2 hover:shadow-sm focus-visible:outline-hidden focus-visible:ring-2", config.ringClassName)}>
-              <TaskCard task={task} onSelect={onSelectTask} onOpenPatientChat={onOpenPatientChat} />
+              <TaskCard task={task} onSelect={onSelectTask} onOpenPatientMessages={onOpenPatientMessages} />
             </div>
           ))
         ) : (

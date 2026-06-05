@@ -21,6 +21,23 @@ const PROCEDURES_TABLE_CANDIDATES = [
   "procedimento",
 ].filter(Boolean) as string[]
 
+const TAG_TABLE_CANDIDATES = [
+  process.env.AIRTABLE_TAGS_TABLE,
+  "tblP68L7jNYctqKAq",
+  "Tag",
+  "TAG",
+  "Tags",
+  "TAGS",
+  "Tags do contato",
+  "Tags contato",
+  "Tag Chat",
+  "Tags Chat",
+  "Etiquetas",
+  "Etiqueta",
+  "tags",
+  "tag",
+].filter(Boolean) as string[]
+
 type AirtableRecord = {
   id: string
   fields?: Record<string, unknown>
@@ -54,6 +71,16 @@ type ProceduresTableConfig = {
   activeFieldType?: string
 }
 
+type TagTableConfig = {
+  table: string
+}
+
+type TagInfo = {
+  id: string
+  label: string
+  color?: string
+}
+
 function assertAirtableToken() {
   if (!AIRTABLE_TOKEN) {
     throw new Error("Configure AIRTABLE_TOKEN ou AIRTABLE_API_KEY.")
@@ -80,6 +107,19 @@ function getStringField(fields: Record<string, unknown>, candidates: string[]) {
   }
 
   return ""
+}
+
+function getRecordIdsField(fields: Record<string, unknown>, candidates: string[]) {
+  for (const candidate of candidates) {
+    const value = fields[candidate]
+
+    if (typeof value === "string" && /^rec[a-zA-Z0-9]+$/.test(value.trim())) return [value.trim()]
+    if (Array.isArray(value)) {
+      return value.filter((item): item is string => typeof item === "string" && /^rec[a-zA-Z0-9]+$/.test(item.trim()))
+    }
+  }
+
+  return []
 }
 
 function getBooleanField(fields: Record<string, unknown>, candidates: string[], fallback = true) {
@@ -121,6 +161,17 @@ function getTableByCandidates(tables: AirtableTable[], candidates: string[]) {
 
     return normalizedCandidates.includes(id) || normalizedCandidates.includes(name)
   })
+}
+
+function hasTagShape(table: AirtableTable) {
+  const tableName = table.name ? normalize(table.name) : ""
+  const fieldNames = (table.fields ?? []).map((field) => (field.name ? normalize(field.name) : ""))
+
+  return (
+    tableName.includes("tag") ||
+    tableName.includes("etiqueta") ||
+    fieldNames.some((field) => ["tag", "tags", "ida tag", "hexcor", "cor", "color"].includes(field))
+  )
 }
 
 async function airtableRequest(path: string, init?: RequestInit) {
@@ -206,6 +257,17 @@ async function getProceduresTableConfig(tables?: AirtableTable[]): Promise<Proce
   }
 }
 
+async function getTagTableConfig(tables?: AirtableTable[]): Promise<TagTableConfig | null> {
+  const metadata = tables ?? (await fetchMetadata())
+  const table = getTableByCandidates(metadata, TAG_TABLE_CANDIDATES) ?? metadata.find(hasTagShape)
+
+  if (!table?.id && !table?.name) return null
+
+  return {
+    table: table.id ?? table.name ?? TAG_TABLE_CANDIDATES[0],
+  }
+}
+
 function mapAssistant(record: AirtableRecord | null, config?: AssistantTableConfig): ClinicAssistantInfo {
   const fields = record?.fields ?? {}
 
@@ -223,13 +285,37 @@ function mapAssistant(record: AirtableRecord | null, config?: AssistantTableConf
   }
 }
 
-function mapProcedure(record: AirtableRecord, config?: ProceduresTableConfig): ClinicProcedure {
+function getTagInfo(record: AirtableRecord): TagInfo | null {
   const fields = record.fields ?? {}
+  const label =
+    getStringField(fields, ["Tag", "tag", "Nome", "nome", "Name", "name", "label", "Label"]) ||
+    Object.entries(fields).find(([key, value]) => {
+      const normalizedKey = normalize(key)
+      return !["status", "ativo", "hexcor", "hex_status", "color", "cor"].includes(normalizedKey) && typeof value === "string" && value.trim() && !value.startsWith("rec")
+    })?.[1]?.toString().trim() ||
+    ""
+  if (!label) return null
+
+  const color = getStringField(fields, ["HEXCOR", "hexcor", "hex_status", "Color", "color", "Cor", "cor"])
+  const tag: TagInfo = { id: record.id, label }
+
+  if (/^#[0-9a-f]{6}$/i.test(color)) tag.color = color
+
+  return tag
+}
+
+function mapProcedure(record: AirtableRecord, config?: ProceduresTableConfig, tagMap?: Map<string, TagInfo>): ClinicProcedure {
+  const fields = record.fields ?? {}
+  const interestIds = getRecordIdsField(fields, [config?.interestField ?? "", "Interesse", "interesse", "Categoria", "Tipo"])
+  const linkedInterest = interestIds.map((id) => tagMap?.get(id)).find((tag): tag is TagInfo => Boolean(tag))
+  const directInterest = getStringField(fields, [config?.interestField ?? "", "Interesse", "interesse", "Categoria", "Tipo"])
 
   return {
     id: record.id,
     name: getStringField(fields, [config?.nameField ?? "", "Nome", "Name", "Procedimento", "procedimento"]),
-    interest: getStringField(fields, [config?.interestField ?? "", "Interesse", "interesse", "Categoria", "Tipo"]),
+    interestId: linkedInterest?.id ?? interestIds[0],
+    interest: linkedInterest?.label ?? directInterest,
+    interestColor: linkedInterest?.color,
     description: getStringField(fields, [config?.descriptionField ?? "", "Descrição", "Descricao", "description", "Description"]),
     active: getBooleanField(fields, [config?.activeField ?? "", "Ativo", "ativo", "Active", "Status"], true),
   }
@@ -253,22 +339,23 @@ function getProcedurePayload(input: unknown) {
 
   const payload = input as Partial<ClinicProcedure>
   const name = typeof payload.name === "string" ? payload.name.trim() : ""
+  const interestId = typeof payload.interestId === "string" && /^rec[a-zA-Z0-9]+$/.test(payload.interestId.trim()) ? payload.interestId.trim() : ""
   const interest = typeof payload.interest === "string" ? payload.interest.trim() : ""
   const description = typeof payload.description === "string" ? payload.description.trim() : ""
   const active = typeof payload.active === "boolean" ? payload.active : true
 
-  if (!name && !interest) throw new Error("Informe o nome ou interesse do procedimento.")
+  if (!name && !interest && !interestId) throw new Error("Informe o nome ou interesse do procedimento.")
   if (!description) throw new Error("Informe a descrição do procedimento.")
 
-  return { name, interest, description, active }
+  return { name, interestId, interest, description, active }
 }
 
-function getProcedureFields(config: ProceduresTableConfig, payload: Omit<ClinicProcedure, "id">) {
+function getProcedureFields(config: ProceduresTableConfig, payload: Omit<ClinicProcedure, "id" | "interestColor">) {
   const activeValue = config.activeFieldType === "checkbox" ? payload.active : payload.active ? "Ativo" : "Inativo"
 
   return {
     [config.nameField]: payload.name,
-    [config.interestField]: payload.interest,
+    [config.interestField]: payload.interestId ? [payload.interestId] : payload.interest,
     [config.descriptionField]: payload.description,
     [config.activeField]: activeValue,
   }
@@ -290,14 +377,17 @@ export async function GET() {
     const tables = await fetchMetadata()
     const assistantConfig = await getAssistantTableConfig(tables)
     const proceduresConfig = await getProceduresTableConfig(tables)
-    const [assistantRecords, procedureRecords] = await Promise.all([
+    const tagConfig = await getTagTableConfig(tables)
+    const [assistantRecords, procedureRecords, tagRecords] = await Promise.all([
       fetchAllRecords(assistantConfig.table),
       fetchAllRecords(proceduresConfig.table),
+      tagConfig ? fetchAllRecords(tagConfig.table).catch(() => []) : Promise.resolve([]),
     ])
+    const tagMap = new Map(tagRecords.map(getTagInfo).filter((tag): tag is TagInfo => Boolean(tag)).map((tag) => [tag.id, tag]))
 
     const assistantRecord = assistantRecords.find((record) => !isInactive(record.fields ?? {})) ?? assistantRecords[0] ?? null
     const procedures = procedureRecords
-      .map((record) => mapProcedure(record, proceduresConfig))
+      .map((record) => mapProcedure(record, proceduresConfig, tagMap))
       .sort((a, b) => (a.interest || a.name).localeCompare(b.interest || b.name, "pt-BR", { sensitivity: "base" }))
 
     return NextResponse.json({ assistant: mapAssistant(assistantRecord, assistantConfig), procedures })

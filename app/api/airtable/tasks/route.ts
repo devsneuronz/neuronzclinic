@@ -79,6 +79,15 @@ function getDateField(fields: Record<string, unknown>, candidates: string[]) {
   return date && !Number.isNaN(date.getTime()) ? date.toISOString() : ""
 }
 
+function getDateOnlyField(fields: Record<string, unknown>, candidates: string[]) {
+  const value = getStringField(fields, candidates)
+  const dateOnlyMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (dateOnlyMatch) return `${dateOnlyMatch[1]}-${dateOnlyMatch[2]}-${dateOnlyMatch[3]}`
+
+  const date = value ? new Date(value) : null
+  return date && !Number.isNaN(date.getTime()) ? date.toISOString().slice(0, 10) : ""
+}
+
 function normalizeStatus(value: string) {
   const normalized = value
     .normalize("NFD")
@@ -152,7 +161,7 @@ function mapTaskRecord(record: AirtableRecord, linkedNames: { users: Map<string,
   const patientName = linkedContact?.name || (isAirtableRecordId(patient) ? "" : patient)
   const creatorName = creatorIds.map((id) => linkedNames.users.get(id)).find(Boolean) || creator || "Sistema"
   const createdAt = getDateField(fields, ["Data e Hora", "Criado em", "Created At", "createdAt"]) || record.createdTime || ""
-  const dueDate = getDateField(fields, ["Data_prazo", "Data prazo", "Prazo", "Due date", "Due Date"])
+  const dueDate = getDateOnlyField(fields, ["Data_prazo", "Data prazo", "Prazo", "Due date", "Due Date"])
 
   return {
     id: record.id,

@@ -1,4 +1,5 @@
 import { ComponentType } from "react";
+import { parseDateOnly } from "./date";
 
 export type TaskStatus = "aguardando" | "resolvendo" | "finalizado";
 
@@ -62,7 +63,7 @@ export type StatusConfigMap = Record<TaskStatus, StatusConfigItem>;
 export function isOverdue(task: Task) {
   if (!task.dueDate || task.status === "finalizado") return false;
 
-  const dueDate = new Date(task.dueDate);
+  const dueDate = parseDateOnly(task.dueDate) ?? new Date(task.dueDate);
   if (Number.isNaN(dueDate.getTime())) return false;
 
   dueDate.setHours(23, 59, 59, 999);
@@ -81,4 +82,3 @@ export function getTaskNoteAttachmentType(file: File | null) {
   if (file.type.startsWith("audio/")) return "audio";
   return "unsupported";
 }
-

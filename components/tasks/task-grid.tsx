@@ -8,11 +8,11 @@ interface TaskStatusGridProps {
   tasks: Task[];
   isFiltering: boolean;
   onSelectTask: (task: Task) => void;
-  onOpenPatientChat: (task: Task) => void;
+  onOpenPatientMessages: (task: Task) => void;
   statusConfig: StatusConfigMap;
 }
 
-export function TaskStatusGrid({ status, tasks, isFiltering, onSelectTask, onOpenPatientChat, statusConfig }: TaskStatusGridProps) {
+export function TaskStatusGrid({ status, tasks, isFiltering, onSelectTask, onOpenPatientMessages, statusConfig }: TaskStatusGridProps) {
   const config = statusConfig[status];
   const Icon = config.icon;
 
@@ -36,7 +36,7 @@ export function TaskStatusGrid({ status, tasks, isFiltering, onSelectTask, onOpe
         <div className="p-1 grid flex-1 auto-rows-max grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 overflow-y-auto pr-1">
           {tasks.map((task) => (
             <div key={task.id} className={cn("group cursor-pointer rounded-md border bg-card p-4 text-left shadow-xs transition hover:ring-2 hover:shadow-sm focus-visible:outline-hidden focus-visible:ring-2", config.ringClassName)}>
-              <TaskCard task={task} onSelect={onSelectTask} onOpenPatientChat={onOpenPatientChat} />
+              <TaskCard task={task} onSelect={onSelectTask} onOpenPatientMessages={onOpenPatientMessages} />
             </div>
           ))}
         </div>
