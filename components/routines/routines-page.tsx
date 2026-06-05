@@ -7,12 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import type { ChatStatusOption } from "@/lib/chat-status";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getReadableTextColor } from "@/lib/chat-tags";
-import type { ChatStatusOption } from "@/lib/chat-status";
 import { actionLabels, createEmptyAction, triggerColors, triggerLabels, type Routine, type RoutineAction, type RoutineActionType, type RoutineMessageTemplate, type RoutineTrigger } from "@/lib/routines";
 import { cn } from "@/lib/utils";
-import { Bot, Clock3, CopyPlus, Edit3, Loader2, Play, Plus, Save, Search, Trash2, Wand2, Workflow, X } from "lucide-react";
+import { Bot, Clock3, CopyPlus, Loader2, Play, Plus, Save, Search, SquarePen, Trash2, Wand2, Workflow, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 type RoutineForm = Omit<Routine, "id" | "createdAt" | "updatedAt"> & { id?: string };
@@ -298,180 +298,161 @@ export function RoutinesPage() {
   }
 
   return (
-    <div className="flex min-h-full w-full flex-col bg-background">
-      <header className="flex min-h-15.25 items-center justify-between border-b border-border bg-card px-6">
-        <div className="flex min-w-0 items-center gap-3">
-          <Workflow className="h-5 w-5 text-theme-primary" />
-          <h1 className="truncate text-xl font-semibold text-foreground">Rotinas</h1>
-        </div>
-        <Button onClick={openNewRoutine} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Nova rotina
-        </Button>
-      </header>
-
-      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-5 p-4 md:p-6">
-        <section className="grid gap-3 md:grid-cols-3">
-          <Metric label="Rotinas ativas" value={stats.active} />
-          <Metric label="Gatilhos automáticos" value={stats.triggerBased} />
-          <Metric label="Ações configuradas" value={stats.actions} />
-        </section>
-
-        <section className="flex flex-col gap-3 rounded-md border border-border bg-card p-3 shadow-sm md:flex-row md:items-center">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar rotina, gatilho ou alvo" className="pl-9" />
+    <div className="flex h-full bg-background">
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <header className="flex h-15.25 items-center justify-between border-b border-border bg-card px-6 ">
+          <div className="flex min-w-0 items-center gap-3">
+            <h1 className="truncate text-xl font-semibold text-foreground">Rotinas</h1>
           </div>
-          <Select value={triggerFilter} onValueChange={(value) => setTriggerFilter(value as RoutineTrigger | "all")}>
-            <SelectTrigger className="w-full md:w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os gatilhos</SelectItem>
-              {triggerOrder.map((trigger) => (
-                <SelectItem key={trigger} value={trigger}>
-                  {triggerLabels[trigger]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </section>
-
-        {error ? (
-          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        ) : null}
-
-        <section className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
-          <div className="grid grid-cols-[140px_minmax(0,1fr)_160px_110px] border-b border-border px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground max-md:hidden">
-            <span>Gatilho</span>
-            <span>Descrição</span>
-            <span>Alvo</span>
-            <span className="text-right">Ações</span>
-          </div>
-
-          {isLoading ? (
-            <div className="flex h-44 items-center justify-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Carregando rotinas
-            </div>
-          ) : filteredRoutines.length === 0 ? (
-            <div className="flex h-44 flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">
-              <Workflow className="h-8 w-8" />
-              Nenhuma rotina encontrada.
-            </div>
-          ) : (
-            <div className="divide-y divide-border">
-              {filteredRoutines.map((routine) => (
-                <RoutineRow key={routine.id} routine={routine} onOpen={() => openRoutine(routine)} onDelete={() => void deleteRoutine(routine)} />
-              ))}
-            </div>
-          )}
-        </section>
-      </main>
-
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-h-[92dvh] max-w-5xl overflow-y-auto p-0">
-          <DialogHeader className="border-b border-border px-5 py-4">
-            <DialogTitle>{form.id ? "Editar rotina" : "Nova rotina"}</DialogTitle>
-            <DialogDescription>Configure o gatilho e a sequência de ações que será executada para cada contato elegível.</DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-5 px-5 py-4">
-            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px]">
-              <Input value={form.name} onChange={(event) => updateForm({ name: event.target.value })} placeholder="Nome da rotina" />
-              <label className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
-                <span>Ativa</span>
-                <Switch checked={form.active} onCheckedChange={(active) => updateForm({ active })} />
-              </label>
-            </div>
-
-            <Textarea value={form.description} onChange={(event) => updateForm({ description: event.target.value })} placeholder="Descrição curta da rotina" className="min-h-20" />
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-muted-foreground">Gatilho</label>
-                <Select
-                  value={form.trigger}
-                  onValueChange={(value) =>
-                    updateForm({
-                      trigger: value as RoutineTrigger,
-                      targetId: "",
-                      targetLabel: "",
-                      targetColor: "",
-                      specificDate: value === "specific_date" ? form.specificDate : "",
-                    })
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {triggerOrder.map((trigger) => (
-                      <SelectItem key={trigger} value={trigger}>
-                        {triggerLabels[trigger]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <TargetField form={form} targetOptions={targetOptions} onApplyTarget={applyTarget} onUpdate={updateForm} />
-            </div>
-
-            <section className="rounded-md border border-border bg-muted/30 p-3">
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                <Bot className="h-4 w-4 text-theme-primary" />
-                Assistente de ações
-              </div>
-              <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
-                <Textarea value={assistantPrompt} onChange={(event) => setAssistantPrompt(event.target.value)} placeholder="Ex: depois de 10 minutos criar aviso, depois de 10 minutos criar tarefa para ver o repasse" className="min-h-16" />
-                <Button type="button" variant="outline" onClick={applyAssistantPrompt} disabled={!assistantPrompt.trim()} className="gap-2">
-                  <Wand2 className="h-4 w-4" />
-                  Interpretar
-                </Button>
-              </div>
+          <Button onClick={openNewRoutine} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Nova rotina
+          </Button>
+        </header>
+        <main className="flex-1 overflow-y-auto p-6">
+          <div className="mx-auto max-w-7xl space-y-6 gap-5">
+            <section className="grid gap-3 md:grid-cols-3">
+              <Metric label="Rotinas ativas" value={stats.active} />
+              <Metric label="Gatilhos automáticos" value={stats.triggerBased} />
+              <Metric label="Ações configuradas" value={stats.actions} />
             </section>
-
-            <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-foreground">Ações da rotina</h2>
-                <Button type="button" variant="outline" size="sm" onClick={() => updateForm({ actions: [...form.actions, createEmptyAction(form.actions.length)] })} className="gap-2">
-                  <CopyPlus className="h-4 w-4" />
-                  Adicionar ação
-                </Button>
+            <section className="flex flex-col gap-3 rounded-md border border-border bg-card p-3 shadow-sm md:flex-row md:items-center">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar rotina, gatilho ou alvo" className="pl-9" />
               </div>
-
-              <div className="space-y-3">
-                {form.actions.map((action, index) => (
-                  <ActionEditor
-                    key={action.id}
-                    action={action}
-                    index={index}
-                    users={users}
-                    tags={tags}
-                    messageTemplates={messageTemplates}
-                    onChange={(patch) => updateAction(action.id, patch)}
-                    onRemove={() => removeAction(action.id)}
+              <Select value={triggerFilter} onValueChange={(value) => setTriggerFilter(value as RoutineTrigger | "all")}>
+                <SelectTrigger className="w-full md:w-56">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os gatilhos</SelectItem>
+                  {triggerOrder.map((trigger) => (
+                    <SelectItem key={trigger} value={trigger}>
+                      {triggerLabels[trigger]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </section>
+            {error ? <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div> : null}
+            <section className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
+              <div className="grid grid-cols-[140px_minmax(0,1fr)_160px_110px] border-b border-border px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground max-md:hidden">
+                <span>Gatilho</span>
+                <span>Descrição</span>
+                <span>Alvo</span>
+                <span className="text-right">Ações</span>
+              </div>
+              {isLoading ? (
+                <div className="flex h-44 items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Carregando rotinas
+                </div>
+              ) : filteredRoutines.length === 0 ? (
+                <div className="flex h-44 flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">
+                  <Workflow className="h-8 w-8" />
+                  Nenhuma rotina encontrada.
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {filteredRoutines.map((routine) => (
+                    <RoutineRow key={routine.id} routine={routine} onOpen={() => openRoutine(routine)} onDelete={() => void deleteRoutine(routine)} />
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        </main>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent className="max-h-[92dvh] max-w-5xl overflow-y-auto p-0">
+            <DialogHeader className="border-b border-border px-5 py-4">
+              <DialogTitle>{form.id ? "Editar rotina" : "Nova rotina"}</DialogTitle>
+              <DialogDescription>Configure o gatilho e a sequência de ações que será executada para cada contato elegível.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-5 px-5 py-4">
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px]">
+                <Input value={form.name} onChange={(event) => updateForm({ name: event.target.value })} placeholder="Nome da rotina" />
+                <label className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
+                  <span>Ativa</span>
+                  <Switch checked={form.active} onCheckedChange={(active) => updateForm({ active })} />
+                </label>
+              </div>
+              <Textarea value={form.description} onChange={(event) => updateForm({ description: event.target.value })} placeholder="Descrição curta da rotina" className="min-h-20" />
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-muted-foreground">Gatilho</label>
+                  <Select
+                    value={form.trigger}
+                    onValueChange={(value) =>
+                      updateForm({
+                        trigger: value as RoutineTrigger,
+                        targetId: "",
+                        targetLabel: "",
+                        targetColor: "",
+                        specificDate: value === "specific_date" ? form.specificDate : "",
+                      })
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {triggerOrder.map((trigger) => (
+                        <SelectItem key={trigger} value={trigger}>
+                          {triggerLabels[trigger]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <TargetField form={form} targetOptions={targetOptions} onApplyTarget={applyTarget} onUpdate={updateForm} />
+              </div>
+              <section className="rounded-md border border-border bg-muted/30 p-3">
+                <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                  <Bot className="h-4 w-4 text-theme-primary" />
+                  Assistente de ações
+                </div>
+                <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                  <Textarea
+                    value={assistantPrompt}
+                    onChange={(event) => setAssistantPrompt(event.target.value)}
+                    placeholder="Ex: depois de 10 minutos criar aviso, depois de 10 minutos criar tarefa para ver o repasse"
+                    className="min-h-16"
                   />
-                ))}
-              </div>
-            </section>
-          </div>
-
-          <DialogFooter className="border-t border-border px-5 py-4">
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="gap-2">
-              <X className="h-4 w-4" />
-              Cancelar
-            </Button>
-            <Button onClick={() => void saveRoutine()} disabled={isSaving || !form.name.trim() || hasInvalidMessageAction} className="gap-2">
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                  <Button type="button" variant="outline" onClick={applyAssistantPrompt} disabled={!assistantPrompt.trim()} className="gap-2">
+                    <Wand2 className="h-4 w-4" />
+                    Interpretar
+                  </Button>
+                </div>
+              </section>
+              <section className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-foreground">Ações da rotina</h2>
+                  <Button type="button" variant="outline" size="sm" onClick={() => updateForm({ actions: [...form.actions, createEmptyAction(form.actions.length)] })} className="gap-2">
+                    <CopyPlus className="h-4 w-4" />
+                    Adicionar ação
+                  </Button>
+                </div>
+                <div className="space-y-3">
+                  {form.actions.map((action, index) => (
+                    <ActionEditor key={action.id} action={action} index={index} users={users} tags={tags} messageTemplates={messageTemplates} onChange={(patch) => updateAction(action.id, patch)} onRemove={() => removeAction(action.id)} />
+                  ))}
+                </div>
+              </section>
+            </div>
+            <DialogFooter className="border-t border-border px-5 py-4">
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="gap-2">
+                <X className="h-4 w-4" />
+                Cancelar
+              </Button>
+              <Button onClick={() => void saveRoutine()} disabled={isSaving || !form.name.trim() || hasInvalidMessageAction} className="gap-2">
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Salvar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
     </div>
   );
 }
@@ -515,7 +496,7 @@ function RoutineRow({ routine, onOpen, onDelete }: { routine: Routine; onOpen: (
           </Button>
         ) : null}
         <Button type="button" variant="ghost" size="icon" onClick={onOpen} title="Editar">
-          <Edit3 className="h-4 w-4" />
+          <SquarePen className="h-4 w-4" />
         </Button>
         <Button type="button" variant="ghost" size="icon" onClick={onDelete} title="Excluir">
           <Trash2 className="h-4 w-4" />
@@ -676,11 +657,13 @@ function ActionEditor({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Sem responsável</SelectItem>
-                {users.filter((user) => user.id).map((user) => (
-                  <SelectItem key={user.id} value={user.id!}>
-                    {user.name}
-                  </SelectItem>
-                ))}
+                {users
+                  .filter((user) => user.id)
+                  .map((user) => (
+                    <SelectItem key={user.id} value={user.id!}>
+                      {user.name}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </>
@@ -725,9 +708,7 @@ function ActionEditor({
           </Select>
         ) : null}
 
-        {action.type === "webhook" ? (
-          <Input value={action.webhookUrl ?? ""} onChange={(event) => onChange({ webhookUrl: event.target.value })} placeholder="URL do webhook" className="md:col-span-5" />
-        ) : null}
+        {action.type === "webhook" ? <Input value={action.webhookUrl ?? ""} onChange={(event) => onChange({ webhookUrl: event.target.value })} placeholder="URL do webhook" className="md:col-span-5" /> : null}
       </div>
     </div>
   );
