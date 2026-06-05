@@ -6,6 +6,7 @@ import { Bolt, Bot, CalendarClock, CopyPlus, Tags, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BackgroundOptions } from "./background-options";
 import ColorScheme from "./color-scheme";
+import { SavedAttachmentsManager } from "./saved-attachments-manager";
 import { ScheduledMessagesManager } from "./scheduled-messages-manager";
 import { TagsManager } from "./tags-manager";
 import { UsersGrid } from "./users";
@@ -137,7 +138,15 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="anexos" className="outline-none">
-          <SettingsEmptySection icon={CopyPlus} title="Nenhum anexo configurado." />
+          <Card className="border border-border bg-card shadow-sm">
+            <CardHeader className="space-y-1">
+              <CardTitle className="text-xl font-semibold text-foreground">Anexos Rápidos</CardTitle>
+              <CardDescription className="text-sm text-muted-foreground">Gerencie mensagens, imagens, vídeos e áudios reutilizáveis no menu de clipe dos chats.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <SavedAttachmentsManager />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="informacoes" className="outline-none">

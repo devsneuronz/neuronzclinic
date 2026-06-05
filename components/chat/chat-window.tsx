@@ -13,10 +13,12 @@ import {
   fetchChatNotes,
   fetchChats,
   fetchScheduledMessages,
+  fetchSavedAttachments,
   scheduleMessage,
   updateScheduledMessage,
   type ChatNoteRecord,
   type ScheduledMessageRecord,
+  type SavedAttachmentRecord,
 } from "@/lib/supabase-rest";
 import { fetchMentionableUsers } from "@/lib/user-mentions";
 import type { MentionableUser } from "@/lib/user-roles";
@@ -70,6 +72,36 @@ function getAudioFileExtension(mimeType: string) {
   if (mimeType.includes("mp4")) return "m4a";
   if (mimeType.includes("ogg")) return "ogg";
   return "webm";
+}
+
+function getSavedAttachmentFileName(attachment: SavedAttachmentRecord) {
+  const explicitName = attachment.file_name?.trim();
+  if (explicitName) return explicitName;
+
+  try {
+    const url = new URL(attachment.media_url || "");
+    const lastSegment = url.pathname.split("/").filter(Boolean).pop();
+    if (lastSegment) return decodeURIComponent(lastSegment);
+  } catch {}
+
+  return attachment.title || "anexo";
+}
+
+async function savedAttachmentToFile(attachment: SavedAttachmentRecord) {
+  if (!attachment.media_url) {
+    throw new Error("Este anexo não possui URL de mídia.");
+  }
+
+  const response = await fetch(attachment.media_url, { cache: "no-store" });
+
+  if (!response.ok) {
+    throw new Error(`Não foi possível baixar o anexo salvo (${response.status}).`);
+  }
+
+  const blob = await response.blob();
+  const type = attachment.media_mime_type || blob.type || "application/octet-stream";
+
+  return new File([blob], getSavedAttachmentFileName(attachment), { type });
 }
 
 function mapChatNoteRecord(note: ChatNoteRecord): InternalNote {
@@ -149,6 +181,8 @@ export function ChatWindow({
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [internalNotes, setInternalNotes] = useState<InternalNote[]>([]);
   const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessageRecord[]>([]);
+  const [savedAttachments, setSavedAttachments] = useState<SavedAttachmentRecord[]>([]);
+  const [isLoadingSavedAttachments, setIsLoadingSavedAttachments] = useState(false);
   const [noteMentionUsers, setNoteMentionUsers] = useState<MentionableUser[]>([]);
   const [isInternalNoteOpen, setIsInternalNoteOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
@@ -531,6 +565,26 @@ export function ChatWindow({
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+    setIsLoadingSavedAttachments(true);
+
+    fetchSavedAttachments({ activeOnly: true })
+      .then((attachments) => {
+        if (isMounted) setSavedAttachments(attachments);
+      })
+      .catch(() => {
+        if (isMounted) setSavedAttachments([]);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingSavedAttachments(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     return () => {
       shouldSendRecordingRef.current = false;
 
@@ -648,6 +702,25 @@ export function ChatWindow({
     const selectedFile = file ?? null;
     setAttachment(selectedFile);
     setIsAttachmentPreviewOpen(!!selectedFile);
+  }
+
+  async function handleSavedAttachmentSelected(savedAttachment: SavedAttachmentRecord) {
+    setMessageActionError(null);
+
+    if (savedAttachment.kind === "text") {
+      setDraft(savedAttachment.body?.trim() || "");
+      removeAttachment();
+      return;
+    }
+
+    try {
+      const file = await savedAttachmentToFile(savedAttachment);
+      setDraft(savedAttachment.body?.trim() || "");
+      setAttachment(file);
+      setIsAttachmentPreviewOpen(true);
+    } catch (error) {
+      setMessageActionError(error instanceof Error ? error.message : "Não foi possível preparar o anexo salvo.");
+    }
   }
 
   function isDraggingFiles(event: DragEvent<HTMLDivElement>) {
@@ -1168,12 +1241,15 @@ export function ChatWindow({
               photoInputRef={photoInputRef}
               videoInputRef={videoInputRef}
               cameraInputRef={cameraInputRef}
+              savedAttachments={savedAttachments}
+              isLoadingSavedAttachments={isLoadingSavedAttachments}
               onSubmit={handleSubmit}
               onDraftChange={setDraft}
               onOpenAttachmentPreview={() => setIsAttachmentPreviewOpen(true)}
               onRemoveAttachment={removeAttachment}
               onCancelReply={() => setReplyTo(null)}
               onAttachmentSelected={handleAttachmentSelected}
+              onSavedAttachmentSelected={handleSavedAttachmentSelected}
               onStartRecording={startRecording}
               onCancelRecording={cancelRecording}
               onToggleRecordingPause={toggleRecordingPause}

@@ -241,6 +241,43 @@ export interface ImportAirtableContactNotesResult {
   fields?: string[]
 }
 
+export type SavedAttachmentKind = "text" | "image" | "video" | "audio"
+
+export interface SavedAttachmentRecord {
+  id: string
+  title: string
+  kind: SavedAttachmentKind
+  body: string | null
+  media_url: string | null
+  media_path: string | null
+  media_mime_type: string | null
+  file_name: string | null
+  is_active: boolean | null
+  created_by: string | null
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SavedAttachmentInput {
+  title: string
+  kind: SavedAttachmentKind
+  body?: string | null
+  mediaUrl?: string | null
+  mediaPath?: string | null
+  mediaMimeType?: string | null
+  fileName?: string | null
+  isActive?: boolean
+  userEmail?: string | null
+}
+
+export interface SavedAttachmentUploadResult {
+  mediaUrl: string
+  mediaPath: string
+  mediaMimeType: string
+  fileName: string
+}
+
 function getTimestampValue(value?: string | null) {
   if (!value) return 0
   const time = Date.parse(value)
@@ -275,6 +312,26 @@ async function supabaseGet<T>(path: string): Promise<T> {
   const response = await fetch(url, {
     headers,
     cache: "no-store",
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(error || `Supabase request failed with ${response.status}`)
+  }
+
+  return response.json() as Promise<T>
+}
+
+async function supabaseWrite<T>(path: string, init: RequestInit): Promise<T> {
+  const url = `${supabaseRestUrl.replace(/\/$/, "")}/${path}`
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      ...headers,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+      ...init.headers,
+    },
   })
 
   if (!response.ok) {
@@ -405,6 +462,77 @@ export function fetchLatestMessagesForChats(chatIds: string[]): Promise<Record<s
 
     return latestMessages
   })
+}
+
+function mapSavedAttachmentInput(input: SavedAttachmentInput) {
+  return {
+    title: input.title.trim(),
+    kind: input.kind,
+    body: input.body?.trim() || null,
+    media_url: input.mediaUrl?.trim() || null,
+    media_path: input.mediaPath?.trim() || null,
+    media_mime_type: input.mediaMimeType?.trim() || null,
+    file_name: input.fileName?.trim() || null,
+    is_active: input.isActive ?? true,
+    updated_by: input.userEmail?.trim() || null,
+  }
+}
+
+export function fetchSavedAttachments({ activeOnly = false }: { activeOnly?: boolean } = {}) {
+  const activeFilter = activeOnly ? "&is_active=is.true" : ""
+  return supabaseGet<SavedAttachmentRecord[]>(
+    `saved_attachments?select=*&order=title.asc&order=created_at.desc${activeFilter}`,
+  )
+}
+
+export async function createSavedAttachment(input: SavedAttachmentInput) {
+  const payload = {
+    ...mapSavedAttachmentInput(input),
+    created_by: input.userEmail?.trim() || null,
+  }
+
+  const [attachment] = await supabaseWrite<SavedAttachmentRecord[]>("saved_attachments", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+
+  return attachment
+}
+
+export async function updateSavedAttachment(id: string, input: SavedAttachmentInput) {
+  const [attachment] = await supabaseWrite<SavedAttachmentRecord[]>(
+    `saved_attachments?id=eq.${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(mapSavedAttachmentInput(input)),
+    },
+  )
+
+  return attachment
+}
+
+export async function deleteSavedAttachment(id: string) {
+  await supabaseWrite<SavedAttachmentRecord[]>(`saved_attachments?id=eq.${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
+}
+
+export async function uploadSavedAttachmentFile(file: File, kind: Exclude<SavedAttachmentKind, "text">) {
+  const formData = new FormData()
+  formData.append("file", file)
+  formData.append("kind", kind)
+
+  const response = await fetch("/api/saved-attachments/upload", {
+    method: "POST",
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || `Não foi possível enviar o arquivo (${response.status}).`)
+  }
+
+  return response.json() as Promise<SavedAttachmentUploadResult>
 }
 
 export async function sendMessage({ chatId, text, file, replyTo, contactName }: SendMessageInput) {

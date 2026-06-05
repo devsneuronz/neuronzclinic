@@ -5,11 +5,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useIsMobile } from "@/hooks/use-mobile";
-import type { ChatRecord, MessageRecord } from "@/lib/supabase-rest";
+import type { ChatRecord, MessageRecord, SavedAttachmentRecord } from "@/lib/supabase-rest";
 import { getMentionLabel, getMentionSlug } from "@/lib/user-mentions";
 import type { MentionableUser } from "@/lib/user-roles";
 import { cn } from "@/lib/utils";
-import { CalendarClock, Camera, Check, Clock, FileImage, FileText, Loader2, MapPin, Mic, Paperclip, Pause, PenLine, Pin, Reply, Send, Trash2, UserRound, Video, X } from "lucide-react";
+import { CalendarClock, Camera, Check, Clock, FileAudio, FileImage, FileText, Loader2, MapPin, MessageSquareText, Mic, Paperclip, Pause, PenLine, Pin, Reply, Send, Trash2, UserRound, Video, X } from "lucide-react";
 import type { FormEvent, RefObject } from "react";
 import { useMemo, useState } from "react";
 import { Textarea } from "../ui/textarea";
@@ -38,6 +38,8 @@ type ChatComposerProps = {
   photoInputRef: RefObject<HTMLInputElement | null>;
   videoInputRef: RefObject<HTMLInputElement | null>;
   cameraInputRef: RefObject<HTMLInputElement | null>;
+  savedAttachments: SavedAttachmentRecord[];
+  isLoadingSavedAttachments: boolean;
 
   isSignatureMode: boolean;
 
@@ -47,6 +49,7 @@ type ChatComposerProps = {
   onRemoveAttachment: () => void;
   onCancelReply: () => void;
   onAttachmentSelected: (file?: File | null) => void;
+  onSavedAttachmentSelected: (attachment: SavedAttachmentRecord) => void;
   onStartRecording: () => void;
   onCancelRecording: () => void;
   onToggleRecordingPause: () => void;
@@ -83,12 +86,15 @@ export function ChatComposer({
   photoInputRef,
   videoInputRef,
   cameraInputRef,
+  savedAttachments,
+  isLoadingSavedAttachments,
   onSubmit,
   onDraftChange,
   onOpenAttachmentPreview,
   onRemoveAttachment,
   onCancelReply,
   onAttachmentSelected,
+  onSavedAttachmentSelected,
   onStartRecording,
   onCancelRecording,
   onToggleRecordingPause,
@@ -133,6 +139,38 @@ export function ChatComposer({
 
   const { user } = useCurrentUser();
   const userName = user?.name ?? "Usuário";
+
+  function renderSavedAttachmentsMenu() {
+    if (isLoadingSavedAttachments) {
+      return <p className="px-1 pt-3 text-xs text-muted-foreground">Carregando anexos salvos...</p>;
+    }
+
+    if (savedAttachments.length === 0) {
+      return null;
+    }
+
+    return (
+      <div className="mt-3 border-t border-border pt-3">
+        <p className="mb-2 px-1 text-xs font-medium text-muted-foreground">Anexos salvos</p>
+        <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+          {savedAttachments.map((savedAttachment) => {
+            const Icon = savedAttachment.kind === "text" ? MessageSquareText : savedAttachment.kind === "audio" ? FileAudio : savedAttachment.kind === "video" ? Video : FileImage;
+            const description = savedAttachment.body?.trim() || savedAttachment.file_name?.trim() || savedAttachment.media_url?.trim() || "Anexo";
+
+            return (
+              <DropdownMenuItem key={savedAttachment.id} className="cursor-pointer rounded-md px-2 py-2" onSelect={() => onSavedAttachmentSelected(savedAttachment)}>
+                <Icon className="h-4 w-4 shrink-0 text-teal-500" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{savedAttachment.title}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{description}</span>
+                </span>
+              </DropdownMenuItem>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -410,6 +448,7 @@ export function ChatComposer({
                         Contato
                       </DropdownMenuItem>
                     </div>
+                    {renderSavedAttachmentsMenu()}
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
@@ -520,6 +559,7 @@ export function ChatComposer({
                           Contato
                         </DropdownMenuItem>
                       </div>
+                      {renderSavedAttachmentsMenu()}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
