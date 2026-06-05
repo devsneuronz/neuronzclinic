@@ -1,12 +1,12 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn, normalizeText } from "@/lib/utils";
 import { addDays, addMonths, addWeeks, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek, subMonths, subWeeks } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Calendar1, CalendarDays, CalendarIcon, ChevronLeft, ChevronRight, Circle, Clock, Columns3, List, Loader2, Pencil, Phone, Pin, Plus, Search, Stethoscope, Trash2, User, UserPlus } from "lucide-react";
+import { AlertTriangle, Calendar1, CalendarDays, CalendarIcon, ChevronLeft, ChevronRight, Circle, Clock, Columns3, List, Loader2, Pencil, Phone, Pin, Plus, Search, Stethoscope, Trash2, User, UserPlus } from "lucide-react";
 
 import type { MouseEvent } from "react";
 import React, { useEffect, useMemo, useState } from "react";
@@ -220,6 +220,8 @@ export function WeeklyCalendar() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [selection, setSelection] = useState<{ day: Date; startMinute: number; endMinute: number } | null>(null);
   const [selectedAppointment, setSelectedAppointment] = useState<CalendarAppointment | null>(null);
+  const [editingAppointment, setEditingAppointment] = useState<CalendarAppointment | null>(null);
+  const [pendingDeleteAppointment, setPendingDeleteAppointment] = useState<CalendarAppointment | null>(null);
   const [isAppointmentDialogOpen, setIsAppointmentDialogOpen] = useState(false);
 
   const range = useMemo(() => getRange(currentDate, activeView), [activeView, currentDate]);
@@ -368,10 +370,19 @@ export function WeeklyCalendar() {
     const endDate = getDateAtMinute(selectionValue.day, Math.max(endMinute, startMinute + 60));
 
     setSelectedAppointment(null);
+    setEditingAppointment(null);
 
     setDialogStartDate(startDate);
     setDialogEndDate(endDate);
 
+    setIsAppointmentDialogOpen(true);
+  }
+
+  function openEditAppointmentDialog(appointment: CalendarAppointment) {
+    setDialogStartDate(new Date(appointment.startDateTime));
+    setDialogEndDate(appointment.endDateTime ? new Date(appointment.endDateTime) : null);
+    setSelectedAppointment(null);
+    setEditingAppointment(appointment);
     setIsAppointmentDialogOpen(true);
   }
 
@@ -428,18 +439,84 @@ export function WeeklyCalendar() {
       setRefreshKey((key) => key + 1);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Não foi possível criar o agendamento.");
+      throw error;
     } finally {
       setIsSavingAppointment(false);
     }
   }
 
   const handleUpdateAppointment = async (id: string, data: FormData) => {
-    /* Implementar aqui */
+    setIsSavingAppointment(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const response = await fetch(`/api/airtable/appointments?id=${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: data.get("status"),
+          type: data.get("type"),
+          attendanceMode: data.get("attendanceMode"),
+          startDateTime: data.get("startDateTime"),
+          endDateTime: data.get("endDateTime"),
+          professionalId: data.get("professionalId"),
+          patientId: data.get("patientId"),
+          observations: data.get("observations"),
+        }),
+      });
+
+      const responseData = (await response.json()) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(responseData.message || "Não foi possível editar o agendamento.");
+      }
+
+      setSuccessMessage(responseData.message || "Agendamento atualizado.");
+      setIsAppointmentDialogOpen(false);
+      setEditingAppointment(null);
+      setRefreshKey((key) => key + 1);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Não foi possível editar o agendamento.");
+      throw error;
+    } finally {
+      setIsSavingAppointment(false);
+    }
   };
 
   const handleDeleteAppointment = async (id: string) => {
-    /* Implementar aqui */
+    if (!id) return;
+
+    setIsSavingAppointment(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const response = await fetch(`/api/airtable/appointments?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      const data = (await response.json()) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(data.message || "Não foi possível excluir o agendamento.");
+      }
+
+      setAppointments((current) => current.filter((appointment) => appointment.id !== id));
+      setSelectedAppointment(null);
+      setEditingAppointment(null);
+      setPendingDeleteAppointment(null);
+      setSuccessMessage(data.message || "Agendamento excluído.");
+      setRefreshKey((key) => key + 1);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Não foi possível excluir o agendamento.");
+    } finally {
+      setIsSavingAppointment(false);
+    }
   };
+
+  function requestDeleteAppointment(appointment: CalendarAppointment) {
+    setPendingDeleteAppointment(appointment);
+  }
 
   function renderAppointmentCard(appointment: CalendarAppointment) {
     const startDate = getAppointmentDate(appointment);
@@ -663,19 +740,25 @@ export function WeeklyCalendar() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => {
-                                  setDialogStartDate(new Date(appointment.startDateTime));
-                                  setDialogEndDate(new Date(appointment.endDateTime));
-                                  setSelectedAppointment(appointment);
-
-                                  setIsAppointmentDialogOpen(true);
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openEditAppointmentDialog(appointment);
                                 }}
                                 disabled={isSavingAppointment}
                                 aria-label="Editar"
                               >
                                 <Pencil className="h-4 w-4" />
                               </Button>
-                              <Button variant="ghost" size="icon" onClick={() => handleDeleteAppointment(selectedAppointment?.id ?? "")} disabled={isSavingAppointment} aria-label="Excluir">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  requestDeleteAppointment(appointment);
+                                }}
+                                disabled={isSavingAppointment}
+                                aria-label="Excluir"
+                              >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
@@ -864,10 +947,7 @@ export function WeeklyCalendar() {
                     size="icon"
                     onClick={() => {
                       if (selectedAppointment) {
-                        setDialogStartDate(new Date(selectedAppointment.startDateTime));
-                        setDialogEndDate(new Date(selectedAppointment.endDateTime));
-                        setIsAppointmentDialogOpen(true);
-                        setSelectedAppointment(selectedAppointment);
+                        openEditAppointmentDialog(selectedAppointment);
                       }
                     }}
                     disabled={isSavingAppointment}
@@ -875,7 +955,15 @@ export function WeeklyCalendar() {
                   >
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={() => handleDeleteAppointment(selectedAppointment?.id ?? "")} disabled={isSavingAppointment} aria-label="Excluir">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      if (selectedAppointment) requestDeleteAppointment(selectedAppointment);
+                    }}
+                    disabled={isSavingAppointment}
+                    aria-label="Excluir"
+                  >
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -932,10 +1020,58 @@ export function WeeklyCalendar() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={!!pendingDeleteAppointment}
+        onOpenChange={(open) => {
+          if (!open && !isSavingAppointment) setPendingDeleteAppointment(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader className="gap-3 pr-8">
+            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-destructive/10 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div className="space-y-2">
+              <DialogTitle>Excluir agendamento?</DialogTitle>
+              <DialogDescription>Esta ação remove o registro do Airtable e não pode ser desfeita.</DialogDescription>
+            </div>
+          </DialogHeader>
+
+          {pendingDeleteAppointment && (
+            <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
+              <p className="font-medium text-foreground">{pendingDeleteAppointment.patient || "Paciente sem nome"}</p>
+              <p className="mt-1 text-muted-foreground">
+                {pendingDeleteAppointment.type || "Agendamento"} · {formatAppointmentTime(pendingDeleteAppointment)}
+              </p>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPendingDeleteAppointment(null)} disabled={isSavingAppointment}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                if (pendingDeleteAppointment) void handleDeleteAppointment(pendingDeleteAppointment.id);
+              }}
+              disabled={isSavingAppointment}
+            >
+              {isSavingAppointment && <Loader2 className="h-4 w-4 animate-spin" />}
+              Excluir agendamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <AppointmentCreationDialog
         open={isAppointmentDialogOpen}
-        onOpenChange={setIsAppointmentDialogOpen}
-        appointment={selectedAppointment ?? undefined}
+        onOpenChange={(open) => {
+          setIsAppointmentDialogOpen(open);
+          if (!open) setEditingAppointment(null);
+        }}
+        appointment={editingAppointment ?? undefined}
         options={options}
         onCreate={handleCreateAppointment}
         onUpdate={handleUpdateAppointment}

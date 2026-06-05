@@ -93,12 +93,16 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
     if (appointmentPatientId) formData.append("patientId", appointmentPatientId);
     if (appointmentObservations) formData.append("observations", appointmentObservations);
 
-    if (isEdit && appointment && onUpdate) {
-      await onUpdate(appointment.id, formData);
-    } else {
-      await onCreate(formData);
+    try {
+      if (isEdit && appointment && onUpdate) {
+        await onUpdate(appointment.id, formData);
+      } else {
+        await onCreate(formData);
+      }
+      onOpenChange(false);
+    } catch {
+      // The parent already displays the API error and keeps the form open.
     }
-    onOpenChange(false);
   };
 
   return (
@@ -261,4 +265,3 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
 };
 
 export default AppointmentCreationDialog;
-

@@ -19,6 +19,8 @@ type CreateAppointmentBody = {
   observations?: unknown
 }
 
+type UpdateAppointmentBody = CreateAppointmentBody
+
 type AirtableRecord = {
   id: string
   fields?: Record<string, unknown>
@@ -385,6 +387,24 @@ async function createAppointment(fields: Record<string, unknown>) {
   return data.records?.[0]
 }
 
+async function updateAppointment(id: string, fields: Record<string, unknown>) {
+  const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(APPOINTMENT_TABLE)}/${id}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    cache: "no-store",
+    body: JSON.stringify({ fields }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await response.text())
+  }
+
+  return (await response.json()) as AirtableRecord
+}
+
 export async function GET(request: Request) {
   if (!AIRTABLE_TOKEN) {
     return NextResponse.json({ appointments: [], latestAppointment: null, message: "Missing AIRTABLE_TOKEN or AIRTABLE_API_KEY" }, { status: 200 })
@@ -516,11 +536,100 @@ export async function POST(request: Request) {
   }
 }
 export async function PATCH(request: Request) {
-  // EDITAR AQUI: implement appointment update logic
-  return NextResponse.json({ message: "Update endpoint not implemented yet." }, { status: 501 });
+  if (!AIRTABLE_TOKEN) {
+    return NextResponse.json({ message: "Missing AIRTABLE_TOKEN or AIRTABLE_API_KEY" }, { status: 500 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const id = getString(searchParams.get("id"))
+
+  if (!isAirtableRecordId(id)) {
+    return NextResponse.json({ message: "Agendamento inválido." }, { status: 400 })
+  }
+
+  const body = (await request.json()) as UpdateAppointmentBody
+  const status = getString(body.status)
+  const type = getString(body.type)
+  const attendanceMode = getString(body.attendanceMode)
+  const startDateTime = getString(body.startDateTime)
+  const endDateTime = getString(body.endDateTime)
+  const professionalId = getString(body.professionalId)
+  const patientId = getString(body.patientId)
+  const observations = getString(body.observations)
+
+  if (!status || !type || !attendanceMode || !startDateTime || !professionalId || !patientId) {
+    return NextResponse.json({ message: "Preencha status, tipo, formato, data/hora, profissional e paciente." }, { status: 400 })
+  }
+
+  if (!isAirtableRecordId(professionalId)) {
+    return NextResponse.json({ message: "Profissional inválido." }, { status: 400 })
+  }
+
+  if (!isAirtableRecordId(patientId)) {
+    return NextResponse.json({ message: "Paciente inválido." }, { status: 400 })
+  }
+
+  const startDate = new Date(startDateTime)
+  if (Number.isNaN(startDate.getTime())) {
+    return NextResponse.json({ message: "Data e hora invalidas." }, { status: 400 })
+  }
+
+  const endDate = endDateTime ? new Date(endDateTime) : null
+  if (endDateTime && (!endDate || Number.isNaN(endDate.getTime()) || endDate.getTime() <= startDate.getTime())) {
+    return NextResponse.json({ message: "Data e hora final inválidas." }, { status: 400 })
+  }
+
+  try {
+    await updateAppointment(id, {
+      Status: status,
+      Tipo: type,
+      "Presencial/Online": attendanceMode,
+      "Data e Hora - Inicio": startDate.toISOString(),
+      "Data e Hora - Fim": endDate ? endDate.toISOString() : null,
+      Profissional: [professionalId],
+      Paciente: [patientId],
+      Observações: observations,
+    })
+
+    return NextResponse.json({ id, message: "Agendamento atualizado." })
+  } catch (error) {
+    return NextResponse.json(
+      { message: error instanceof Error ? error.message : "Não foi possível atualizar o agendamento no Airtable." },
+      { status: 500 },
+    )
+  }
 }
 
 export async function DELETE(request: Request) {
-  // EDITAR AQUI: implement appointment delete logic
-  return NextResponse.json({ message: "Delete endpoint not implemented yet." }, { status: 501 });
+  if (!AIRTABLE_TOKEN) {
+    return NextResponse.json({ message: "Missing AIRTABLE_TOKEN or AIRTABLE_API_KEY" }, { status: 500 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const id = getString(searchParams.get("id"))
+
+  if (!isAirtableRecordId(id)) {
+    return NextResponse.json({ message: "Agendamento inválido." }, { status: 400 })
+  }
+
+  try {
+    const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(APPOINTMENT_TABLE)}/${id}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${AIRTABLE_TOKEN}`,
+      },
+      cache: "no-store",
+    })
+
+    if (!response.ok) {
+      throw new Error(await response.text())
+    }
+
+    return NextResponse.json({ id, message: "Agendamento excluído." })
+  } catch (error) {
+    return NextResponse.json(
+      { message: error instanceof Error ? error.message : "Não foi possível excluir o agendamento no Airtable." },
+      { status: 500 },
+    )
+  }
 }
