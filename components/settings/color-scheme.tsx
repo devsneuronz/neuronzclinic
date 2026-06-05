@@ -9,7 +9,6 @@ import { useTheme } from "next-themes";
 import { TabsList, TabsTrigger } from "../ui/tabs";
 import { ThemeCircle } from "./colors";
 
-// Definição das paletas de cores baseadas no Chrome (nome do tema para aplicar na classe do HTML)
 const colorThemes = [
   { id: "default", name: "Padrão", primary: "#e5ddd5", secondary: "#5e5c47", muted: "#6c6a55" },
   { id: "theme-sand", name: "Areia Premium", primary: "#795548", secondary: "#ffe0b2", muted: "#bcaaa4" },
@@ -35,7 +34,7 @@ export default function ColorScheme() {
   return (
     <Card className="border border-border bg-card shadow-sm w-full mb-0">
       <CardContent className="space-y-6">
-        {/* 1. SELETOR DE MODO (Claro / Escuro / Dispositivo) */}
+        {/* SELETOR DE MODO (Claro / Escuro / Dispositivo) */}
         <div className="space-y-2">
           <Label className="text-sm font-medium text-foreground">Tema</Label>
           <Tabs value={theme} onValueChange={(value) => setTheme(value)} className="w-full">
@@ -58,7 +57,7 @@ export default function ColorScheme() {
           </Tabs>
         </div>
 
-        {/* 2. SELETOR DE PALETAS DE CORES (Círculos do Chrome) */}
+        {/* SELETOR DE PALETAS DE CORES */}
         <div className="space-y-3 pt-2">
           <Label className="text-sm font-medium text-foreground">Esquema de cores</Label>
 

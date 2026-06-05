@@ -1,8 +1,9 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import type { ChatRecord, MessageRecord, ScheduledMessageRecord } from "@/lib/supabase-rest";
-import { ArrowDown, MessageSquareText, Trash2 } from "lucide-react";
+import { ArrowDown, Pin, Trash2 } from "lucide-react";
 import type { RefObject, UIEvent } from "react";
 import { MessageBubble } from "./message-bubble";
 import { getDisplayName, getTimeLabel } from "./message-utils";
@@ -58,38 +59,48 @@ type MessageListProps = {
 };
 
 function InternalNoteBubble({ chat, note, onScrollToMessage, onDeleteNote }: { chat: ChatRecord; note: InternalNote; onScrollToMessage: (id: string) => void; onDeleteNote: (noteId: string) => void }) {
+  const { user } = useCurrentUser();
+
   return (
     <div id={`note-${note.id}`} className="mb-2 flex justify-center px-4">
-      <div className="group relative w-full max-w-[74%] overflow-hidden rounded-sm border border-amber-300/70 bg-[#fff7a8] text-yellow-950 shadow-sm ring-1 ring-black/5 dark:border-amber-500/60 dark:bg-[#f8ec82] dark:text-yellow-950">
-        <div className="flex items-center gap-2 border-b border-amber-300/55 bg-amber-200/35 px-3 py-1.5 text-xs">
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-700">
-            <MessageSquareText className="h-3.5 w-3.5" />
-          </span>
-          <span className="font-semibold text-red-600">Pedro</span>
-          <span className="text-yellow-950/55">anotação interna</span>
-          <button
-            type="button"
-            className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-yellow-950/45 opacity-0 transition hover:bg-red-500/10 hover:text-red-600 group-hover:opacity-100"
-            onClick={() => onDeleteNote(note.id)}
-            aria-label="Apagar anotação"
-          >
+      <div
+        className="group relative w-fit max-w-[74%] rounded-sm border border-yellow-300 bg-yellow-100 text-yellow-950 transition-all text-left"
+        style={{
+          clipPath: "polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%)",
+        }}
+      >
+        <div
+          className="absolute top-0 right-0 h-4 w-4 pointer-events-none border-l border-b border-yellow-300 bg-yellow-500/10 "
+          style={{
+            clipPath: "polygon(0 0, 100% 100%, 0 100%)",
+          }}
+        />
+
+        <div className="flex items-center gap-2 border-b border-amber-300/45 px-3 py-1.5 text-xs pr-6">
+          <Pin className="h-4 w-4 text-amber-600 rotate-45 shrink-0" />
+          <span className="font-semibold text-amber-600">{user?.name}</span>
+          <span className="text-yellow-950/50">anotação interna</span>
+
+          <button type="button" className="ml-3 flex h-6 w-6 items-center justify-center rounded-full text-yellow-950/45 transition hover:bg-red-500/10 hover:text-red-600" onClick={() => onDeleteNote(note.id)} aria-label="Apagar anotação">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
 
-        <div className="px-3 py-2">
+        <div className="px-3 py-2.5">
           {note.linkedMessageId && note.linkedMessagePreview && (
             <button
               type="button"
-              className="mb-2 w-full rounded border-l-4 border-amber-500 bg-white/55 px-2.5 py-2 text-left text-xs text-yellow-950 transition-colors hover:bg-white/85"
+              className="mb-2.5 w-full rounded-r-md border-l-2 border-amber-400 bg-white/40 px-2.5 py-1.5 text-left text-xs text-yellow-950 transition-colors hover:bg-white/70"
               onClick={() => onScrollToMessage(note.linkedMessageId!)}
             >
-              <span className="block truncate font-semibold">{note.linkedMessageFromMe ? "Você" : getDisplayName(chat)}</span>
-              <span className="mt-0.5 line-clamp-2 text-yellow-950/70">{note.linkedMessagePreview}</span>
+              <span className="block truncate font-medium text-[11px] text-amber-800 ">Vinculada a uma mensagem de {note.linkedMessageFromMe ? "Você" : getDisplayName(chat)}</span>
+              <span className="mt-0.5 line-clamp-1 italic text-yellow-950/70 text-[11px]">{note.linkedMessagePreview}</span>
             </button>
           )}
-          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{note.content}</p>
-          <div className="mt-2 flex justify-end text-[10px] text-yellow-950/60">
+
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed font-normal">{note.content}</p>
+
+          <div className="mt-2 flex justify-end text-[9px] font-medium text-yellow-950/45 select-none">
             <span>{getTimeLabel(note.createdAt)}</span>
           </div>
         </div>
@@ -191,10 +202,9 @@ export function MessageList({
               ))}
             </>
           )}
-
-          {!isInternalNoteOpen && <ScheduledMessagesStrip messages={messages} onCancel={onCancel} onUpdate={onUpdate} />}
-          <div ref={bottomRef} />
         </div>
+        {!isInternalNoteOpen && <ScheduledMessagesStrip messages={messages} onCancel={onCancel} onUpdate={onUpdate} />}
+        <div ref={bottomRef} />
       </div>
 
       {showScrollButton && (

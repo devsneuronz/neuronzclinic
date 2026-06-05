@@ -140,6 +140,8 @@
     --chat-reply-me-border: #00a884;
     --chat-reply-other-border: #53bdeb;
 
+    --chat-scheduled: #e8fce7;
+
     /* Login */
     --login-custom-bg: url(https://images.pexels.com/photos/33797647/pexels-photo-33797647.jpeg?_gl=1*1r1azh5*_ga*MjE3MDg1NjY4LjE3Nzk3MjQ0Nzk.*_ga_8JE65Q40S6*czE3Nzk3MjQ0NzkkbzEkZzAkdDE3Nzk3MjQ0NzkkajYwJGwwJGgw);
   }
@@ -206,6 +208,8 @@
     --chat-other: #242626;
     --chat-reply-me-bg: #0f3f2d;
     --chat-reply-other-bg: #1d1e1e;
+
+    --chat-scheduled: #122a20;
   }
 }
 
