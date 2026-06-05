@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bolt, CalendarClock, Tags, Users } from "lucide-react";
+import { Bolt, Bot, CalendarClock, CopyPlus, Tags, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BackgroundOptions } from "./background-options";
 import ColorScheme from "./color-scheme";
@@ -55,7 +55,7 @@ export default function SettingsPage() {
       </header>
 
       <Tabs defaultValue="geral" className="mx-auto w-full max-w-7xl gap-6 p-6">
-        <TabsList className="w-full gap-2 rounded-full px-1 h-10!">
+        <TabsList className="h-auto! min-h-10 w-full flex-wrap gap-2 rounded-full px-1 py-1">
           <TabsTrigger value="geral" className="group relative data-[state=active]:bg-card">
             <Bolt className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
             <span className="truncate">Geral</span>
@@ -74,6 +74,16 @@ export default function SettingsPage() {
           <TabsTrigger value="agendadas" className=" group relative data-[state=active]:bg-card">
             <CalendarClock className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
             <span className="truncate">Agendadas</span>
+          </TabsTrigger>
+
+          <TabsTrigger value="anexos" className=" group relative data-[state=active]:bg-card">
+            <CopyPlus className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
+            <span className="truncate">Anexos</span>
+          </TabsTrigger>
+
+          <TabsTrigger value="informacoes" className=" group relative data-[state=active]:bg-card">
+            <Bot className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
+            <span className="truncate">Informações</span>
           </TabsTrigger>
         </TabsList>
 
@@ -125,7 +135,24 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="anexos" className="outline-none">
+          <SettingsEmptySection icon={CopyPlus} title="Nenhum anexo configurado." />
+        </TabsContent>
+
+        <TabsContent value="informacoes" className="outline-none">
+          <SettingsEmptySection icon={Bot} title="Nenhuma informação cadastrada." />
+        </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function SettingsEmptySection({ icon: Icon, title }: { icon: typeof Bot; title: string }) {
+  return (
+    <section className="flex h-64 flex-col items-center justify-center gap-3 rounded-md border border-border bg-card text-sm text-muted-foreground shadow-sm">
+      <Icon className="h-8 w-8" />
+      {title}
+    </section>
   );
 }

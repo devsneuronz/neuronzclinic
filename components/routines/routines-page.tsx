@@ -25,7 +25,7 @@ type UserOption = {
   role: "admin" | "manager" | "user";
 };
 
-type RoutineTab = "routines" | "templates" | "attachments" | "info";
+type RoutineTab = "routines" | "templates";
 
 type MessageTemplateForm = {
   label: string;
@@ -417,8 +417,6 @@ export function RoutinesPage() {
           <TabsList variant="line" className="h-10 gap-6">
             <TabsTrigger value="routines" className="px-0">Rotinas</TabsTrigger>
             <TabsTrigger value="templates" className="px-0">Template de mensagens</TabsTrigger>
-            <TabsTrigger value="attachments" className="px-0">Anexos</TabsTrigger>
-            <TabsTrigger value="info" className="px-0">Informações</TabsTrigger>
           </TabsList>
 
           <TabsContent value="routines" className="flex flex-col gap-5">
@@ -493,13 +491,6 @@ export function RoutinesPage() {
             />
           </TabsContent>
 
-          <TabsContent value="attachments">
-            <EmptyRoutineSection icon={CopyPlus} title="Nenhum anexo configurado." />
-          </TabsContent>
-
-          <TabsContent value="info">
-            <EmptyRoutineSection icon={Bot} title="Nenhuma informação cadastrada." />
-          </TabsContent>
         </Tabs>
       </main>
 
@@ -756,15 +747,6 @@ function TemplateRow({ template, onEdit }: { template: RoutineMessageTemplate; o
         </Button>
       </div>
     </div>
-  );
-}
-
-function EmptyRoutineSection({ icon: Icon, title }: { icon: typeof Bot; title: string }) {
-  return (
-    <section className="flex h-64 flex-col items-center justify-center gap-3 rounded-md border border-border bg-card text-sm text-muted-foreground shadow-sm">
-      <Icon className="h-8 w-8" />
-      {title}
-    </section>
   );
 }
 
