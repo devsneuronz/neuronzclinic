@@ -139,6 +139,17 @@ async function createTemplate(fields: Record<string, unknown>) {
   return record;
 }
 
+async function updateTemplate(id: string, fields: Record<string, unknown>) {
+  const record = (await airtableRequest(`/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ fields }),
+  })) as AirtableRecord;
+
+  if (!record?.id) throw new Error("Airtable não retornou o template atualizado.");
+
+  return record;
+}
+
 function getAirtableErrorMessage(error: unknown, fallback: string) {
   const rawMessage = error instanceof Error ? error.message : "";
 
@@ -172,5 +183,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ template }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ message: getAirtableErrorMessage(error, "Não foi possível criar o template de mensagem.") }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const body = (await request.json()) as Partial<RoutineMessageTemplate>;
+    const id = typeof body.id === "string" ? body.id.trim() : "";
+
+    if (!id) return NextResponse.json({ message: "Informe o template que será editado." }, { status: 400 });
+
+    const record = await updateTemplate(id, buildTemplateFields(body));
+    const template = mapTemplate(record);
+
+    return NextResponse.json({ template });
+  } catch (error) {
+    return NextResponse.json({ message: getAirtableErrorMessage(error, "Não foi possível atualizar o template de mensagem.") }, { status: 500 });
   }
 }

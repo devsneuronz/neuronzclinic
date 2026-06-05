@@ -86,6 +86,7 @@ const templateTypeColors: Record<string, string> = {
   informação: "#4f86d7",
   informacao: "#4f86d7",
 };
+const MAX_MESSAGE_TEMPLATES = 6;
 const templateTypeOptions = ["Relacionamento", "Marketing", "Vendas", "Aviso", "Informação"];
 
 function cloneRoutine(routine: Routine): RoutineForm {
@@ -120,6 +121,10 @@ function readApiMessage(response: Response, fallback: string) {
     .json()
     .then((data: { message?: string; error?: string }) => data.message || data.error || fallback)
     .catch(() => fallback);
+}
+
+function limitMessageTemplates(templates: RoutineMessageTemplate[] = []) {
+  return templates.slice(0, MAX_MESSAGE_TEMPLATES);
 }
 
 function parsePromptToActions(prompt: string): RoutineAction[] {
@@ -169,6 +174,7 @@ export function RoutinesPage() {
   const [error, setError] = useState("");
   const [templateError, setTemplateError] = useState("");
   const [assistantPrompt, setAssistantPrompt] = useState("");
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [templateForm, setTemplateForm] = useState<MessageTemplateForm>({ label: "", type: "Marketing", content: "" });
 
   useEffect(() => {
@@ -191,7 +197,7 @@ export function RoutinesPage() {
         setTags(optionData.tags ?? []);
         setStatuses(optionData.statuses ?? []);
         setUsers((userData.users ?? []).sort((a, b) => a.name.localeCompare(b.name, "pt-BR")));
-        setMessageTemplates(templateData.templates ?? []);
+        setMessageTemplates(limitMessageTemplates(templateData.templates));
       })
       .catch((err) => {
         if (!isMounted) return;
@@ -215,7 +221,7 @@ export function RoutinesPage() {
       const response = await fetch("/api/airtable/message-templates", { cache: "no-store" });
       if (!response.ok) throw new Error(await readApiMessage(response, "Não foi possível carregar templates de mensagem."));
       const data = (await response.json()) as { templates?: RoutineMessageTemplate[] };
-      setMessageTemplates(data.templates ?? []);
+      setMessageTemplates(limitMessageTemplates(data.templates));
     } catch (err) {
       setTemplateError(err instanceof Error ? err.message : "Não foi possível carregar templates de mensagem.");
     } finally {
@@ -254,7 +260,19 @@ export function RoutinesPage() {
   }
 
   function openNewTemplate() {
+    setEditingTemplateId(null);
     setTemplateForm({ label: "", type: "Marketing", content: "" });
+    setTemplateError("");
+    setIsTemplateDialogOpen(true);
+  }
+
+  function openTemplate(template: RoutineMessageTemplate) {
+    setEditingTemplateId(template.id);
+    setTemplateForm({
+      label: template.label,
+      type: template.type || "Marketing",
+      content: template.content,
+    });
     setTemplateError("");
     setIsTemplateDialogOpen(true);
   }
@@ -339,21 +357,27 @@ export function RoutinesPage() {
     setTemplateError("");
 
     try {
+      const isEditingTemplate = Boolean(editingTemplateId);
       const response = await fetch("/api/airtable/message-templates", {
-        method: "POST",
+        method: isEditingTemplate ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(templateForm),
+        body: JSON.stringify(isEditingTemplate ? { ...templateForm, id: editingTemplateId } : templateForm),
       });
 
-      if (!response.ok) throw new Error(await readApiMessage(response, "Não foi possível criar o template de mensagem."));
+      if (!response.ok) throw new Error(await readApiMessage(response, isEditingTemplate ? "Não foi possível atualizar o template de mensagem." : "Não foi possível criar o template de mensagem."));
 
       const data = (await response.json()) as { template?: RoutineMessageTemplate };
       if (data.template) {
-        setMessageTemplates((current) => [data.template!, ...current].sort((a, b) => a.label.localeCompare(b.label, "pt-BR")));
+        setMessageTemplates((current) => {
+          const exists = current.some((template) => template.id === data.template!.id);
+          const nextTemplates = exists ? current.map((template) => (template.id === data.template!.id ? data.template! : template)) : [data.template!, ...current];
+          return limitMessageTemplates(nextTemplates.sort((a, b) => a.label.localeCompare(b.label, "pt-BR")));
+        });
       }
       setIsTemplateDialogOpen(false);
+      setEditingTemplateId(null);
     } catch (err) {
-      setTemplateError(err instanceof Error ? err.message : "Não foi possível criar o template de mensagem.");
+      setTemplateError(err instanceof Error ? err.message : editingTemplateId ? "Não foi possível atualizar o template de mensagem." : "Não foi possível criar o template de mensagem.");
     } finally {
       setIsSavingTemplate(false);
     }
@@ -465,6 +489,7 @@ export function RoutinesPage() {
               error={templateError}
               onRefresh={() => void loadMessageTemplates()}
               onCreate={openNewTemplate}
+              onEdit={openTemplate}
             />
           </TabsContent>
 
@@ -580,11 +605,17 @@ export function RoutinesPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isTemplateDialogOpen} onOpenChange={setIsTemplateDialogOpen}>
+      <Dialog
+        open={isTemplateDialogOpen}
+        onOpenChange={(open) => {
+          setIsTemplateDialogOpen(open);
+          if (!open) setEditingTemplateId(null);
+        }}
+      >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Novo template de mensagem</DialogTitle>
-            <DialogDescription>Crie um template no Airtable para usar nas ações de envio das rotinas.</DialogDescription>
+            <DialogTitle>{editingTemplateId ? "Editar template de mensagem" : "Novo template de mensagem"}</DialogTitle>
+            <DialogDescription>{editingTemplateId ? "Atualize o template usado nas ações de envio das rotinas." : "Crie um template para usar nas ações de envio das rotinas."}</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-3">
@@ -644,17 +675,19 @@ function MessageTemplatesPanel({
   error,
   onRefresh,
   onCreate,
+  onEdit,
 }: {
   templates: RoutineMessageTemplate[];
   isLoading: boolean;
   error: string;
   onRefresh: () => void;
   onCreate: () => void;
+  onEdit: (template: RoutineMessageTemplate) => void;
 }) {
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
-        <div className="text-sm text-muted-foreground">{templates.length} templates disponíveis no Airtable</div>
+        <div className="text-sm text-muted-foreground">{templates.length} templates disponíveis</div>
         <Button type="button" variant="outline" onClick={onRefresh} disabled={isLoading} className="gap-2">
           {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           Recarregar
@@ -687,7 +720,7 @@ function MessageTemplatesPanel({
         ) : (
           <div className="divide-y divide-border">
             {templates.map((template) => (
-              <TemplateRow key={template.id} template={template} />
+              <TemplateRow key={template.id} template={template} onEdit={() => onEdit(template)} />
             ))}
           </div>
         )}
@@ -701,7 +734,7 @@ function MessageTemplatesPanel({
   );
 }
 
-function TemplateRow({ template }: { template: RoutineMessageTemplate }) {
+function TemplateRow({ template, onEdit }: { template: RoutineMessageTemplate; onEdit: () => void }) {
   const type = template.type?.trim() || "Mensagem";
   const color = template.color || templateTypeColors[type.toLowerCase()] || "#4b5563";
   const description = template.description || template.content || "Sem descrição cadastrada.";
@@ -718,7 +751,7 @@ function TemplateRow({ template }: { template: RoutineMessageTemplate }) {
       </div>
 
       <div className="flex justify-end">
-        <Button type="button" variant="ghost" size="icon" title="Editar template" disabled>
+        <Button type="button" variant="ghost" size="icon" title="Editar template" onClick={onEdit}>
           <Edit3 className="h-4 w-4" />
         </Button>
       </div>
