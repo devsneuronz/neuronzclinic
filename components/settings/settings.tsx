@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bolt, Bot, CalendarClock, CopyPlus, Tags, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BackgroundOptions } from "./background-options";
+import { ClinicInfoManager } from "./clinic-info-manager";
 import ColorScheme from "./color-scheme";
 import { SavedAttachmentsManager } from "./saved-attachments-manager";
 import { ScheduledMessagesManager } from "./scheduled-messages-manager";
@@ -150,18 +151,9 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="informacoes" className="outline-none">
-          <SettingsEmptySection icon={Bot} title="Nenhuma informação cadastrada." />
+          <ClinicInfoManager />
         </TabsContent>
       </Tabs>
     </div>
-  );
-}
-
-function SettingsEmptySection({ icon: Icon, title }: { icon: typeof Bot; title: string }) {
-  return (
-    <section className="flex h-64 flex-col items-center justify-center gap-3 rounded-md border border-border bg-card text-sm text-muted-foreground shadow-sm">
-      <Icon className="h-8 w-8" />
-      {title}
-    </section>
   );
 }
