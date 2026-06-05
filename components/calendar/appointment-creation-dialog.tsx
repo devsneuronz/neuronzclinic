@@ -26,9 +26,10 @@ export interface AppointmentDialogProps {
   onCreate: (data: FormData) => Promise<void>;
   onUpdate?: (id: string, data: FormData) => Promise<void>;
   isSaving?: boolean;
+  initialPatient?: { id: string; label: string } | null;
 }
 
-export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ open, onOpenChange, appointment, startDate, endDate, options, onCreate, onUpdate, isSaving = false }) => {
+export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ open, onOpenChange, appointment, startDate, endDate, options, onCreate, onUpdate, isSaving = false, initialPatient = null }) => {
   const isEdit = Boolean(appointment);
 
   const [appointmentStatus, setAppointmentStatus] = useState("");
@@ -74,11 +75,11 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
       setAppointmentEndDateTime(formatDateTimeLocal(endDate));
       setAppointmentAttendanceMode("");
       setAppointmentProfessionalId("");
-      setAppointmentPatientId("");
-      setAppointmentPatientSearch("");
+      setAppointmentPatientId(initialPatient?.id ?? "");
+      setAppointmentPatientSearch(initialPatient?.label ?? "");
       setAppointmentObservations("");
     }
-  }, [isEdit, appointment, open, startDate, endDate]);
+  }, [isEdit, appointment, open, startDate, endDate, initialPatient?.id, initialPatient?.label]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
