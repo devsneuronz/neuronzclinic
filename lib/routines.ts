@@ -1,3 +1,5 @@
+import { Cake, Calendar, Circle, Hand, LucideIcon, Tag } from "lucide-react";
+
 export type RoutineTrigger = "manual" | "specific_date" | "tag" | "status" | "birthday";
 
 export type RoutineActionType = "create_notice" | "create_task" | "send_message" | "add_tag" | "wait" | "webhook";
@@ -47,13 +49,39 @@ export interface Routine {
   updatedAt?: string;
 }
 
-export const triggerLabels: Record<RoutineTrigger, string> = {
-  manual: "Manual",
-  specific_date: "Data específica",
-  tag: "Tag",
-  status: "Status",
-  birthday: "Aniversário",
-};
+export interface TriggerOption {
+  value: RoutineTrigger;
+  label: string;
+  icon: LucideIcon;
+}
+
+export const triggerOptions: TriggerOption[] = [
+  {
+    value: "manual",
+    label: "Manual",
+    icon: Hand,
+  },
+  {
+    value: "specific_date",
+    label: "Data específica",
+    icon: Calendar,
+  },
+  {
+    value: "tag",
+    label: "Tag",
+    icon: Tag,
+  },
+  {
+    value: "status",
+    label: "Status",
+    icon: Circle,
+  },
+  {
+    value: "birthday",
+    label: "Aniversário",
+    icon: Cake,
+  },
+];
 
 export const actionLabels: Record<RoutineActionType, string> = {
   create_notice: "Criar aviso",

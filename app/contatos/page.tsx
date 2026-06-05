@@ -378,194 +378,220 @@ export default function ContatosPage() {
   }
 
   return (
-    <div className="min-h-dvh bg-background flex flex-col">
-      <header className="flex h-15.25 items-center justify-between border-b border-border bg-card px-6 ">
-        <h1 className="text-xl font-semibold text-foreground">Contatos</h1>
-      </header>
-      <div className="p-6">
-        <div className="mx-auto flex max-w-7xl w-full flex-col gap-5 bg-card rounded-xl p-6 border border-border shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <Users className="h-4 w-4" />
-                Contatos
-              </div>
-              <h1 className="mt-1 text-2xl font-semibold tracking-normal text-foreground">Contatos | Lista</h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {filteredContacts.length} de {contacts.length} contatos carregados
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-row w-full justify-between">
-            <div className="flex flex-row gap-4 justify-between">
-              <div className="relative w-100">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome, telefone, cidade, email ou status" className="h-10 pl-9" />
-              </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="h-10!">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_FILTERS}>Status</SelectItem>
-                  {contactStatusOptions.map((status) => (
-                    <SelectItem key={status.label} value={status.label}>
-                      {status.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={cityFilter} onValueChange={setCityFilter}>
-                <SelectTrigger className="h-10!">
-                  <SelectValue placeholder="Cidade" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_FILTERS}>Cidade</SelectItem>
-                  {cityOptions.map((city) => (
-                    <SelectItem key={city} value={city}>
-                      {city}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button className="h-10" type="button" variant="outline" onClick={() => void loadContacts({ refresh: true, searchTerm: debouncedSearch })} disabled={isLoading}>
-              <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
-              Atualizar
-            </Button>
-          </div>
-          {error && <p className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
-          <div className="rounded-lg border border-border bg-card shadow-sm">
-            <div className="overflow-x-auto flex flex-col">
-              <div className="grid w-full grid-cols-[minmax(260px,1.4fr)_170px_180px_170px_120px] border-b border-border bg-muted/60 px-5 py-3 gap-3 text-xs font-semibold uppercase text-muted-foreground shrink-0">
-                <span>Nome</span>
-                <span>Status</span>
-                <span>Cidade</span>
-                <span>Ultimo contato</span>
-                <span className="text-right">Acoes</span>
-              </div>
-              <div className="w-full h-[calc(100vh-362px)] overflow-y-auto split-scroll flex flex-col justify-center items-center">
-                {isLoading ? (
-                  <div className="w-fit inline-flex items-center justify-center gap-2 rounded-xl bg-muted/80 px-5 text-xs font-semibold text-foreground border border-border/80 shadow-xs hover:bg-theme-accent hover:text-foreground hover:border-border active:scale-98 transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none py-2">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--sidebar-custom-primary)]" />
-                    <span>Carregando contatos...</span>
+    <div className="flex h-full bg-background">
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <header className="flex min-h-15.25 items-center justify-between border-b border-border bg-card px-6 ">
+          <h1 className="text-xl font-semibold text-foreground">Contatos</h1>
+        </header>
+        <main className="flex-1 overflow-y-auto p-6">
+          <div className="h-full mx-auto max-w-7xl flex flex-col gap-6">
+            <div className="flex w-full flex-col bg-card rounded-xl p-4 sm:p-6 border border-border shadow-sm">
+              {/* Cabeçalho */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <Users className="h-4 w-4" />
+                    Contatos
                   </div>
-                ) : filteredContacts.length > 0 ? (
-                  <div className="h-full w-full flex flex-col justify-between">
-                    <div>
-                      {filteredContacts.map((contact) => {
-                        const name = getDisplayName(contact);
-                        const tags = getChatTags(contact).slice(0, 2);
-                        return (
-                          <button
-                            key={contact.id}
-                            type="button"
-                            className="grid w-full grid-cols-[minmax(260px,1.4fr)_170px_180px_170px_120px] items-center gap-3 border-b border-border/70 px-5 py-4 transition-colors hover:bg-muted/45 text-left"
-                            onClick={() => setSelectedContactId(contact.id)}
-                          >
-                            <span className="flex min-w-0 items-center gap-3">
-                              <Avatar className="h-10 w-10 shrink-0">
-                                <AvatarImage src={contact.url_foto_perfil ?? undefined} alt={name} />
-                                <AvatarFallback className="text-sm">{getAvatarInitials(name)}</AvatarFallback>
-                              </Avatar>
-                              <span className="min-w-0">
-                                <span className="block truncate text-sm font-semibold text-foreground">{name}</span>
-                                <span className="block truncate text-xs text-muted-foreground">{getContactPhone(contact)}</span>
-                                {tags.length > 0 && (
-                                  <span className="mt-1 flex gap-1">
-                                    {tags.map((tag) => (
-                                      <Badge key={tag.id || tag.label} className="h-4 border-0 px-1.5 text-[9px] leading-none" style={tag.color ? { backgroundColor: tag.color, color: getReadableTextColor(tag.color) } : undefined}>
-                                        {tag.label}
-                                      </Badge>
-                                    ))}
-                                  </span>
-                                )}
-                              </span>
-                            </span>
-                            <Badge className="max-w-full border-0 px-2 py-1 text-[10px] text-white" style={{ backgroundColor: getChatStatusColor(contact) }}>
-                              <span className="truncate">{getChatStatusLabel(contact)}</span>
-                            </Badge>
-                            <span className="truncate text-sm text-muted-foreground">{getContactCity(contact) || "Sem cidade"}</span>
-                            <span className="truncate text-sm text-muted-foreground">{getLastContactLabel(contact)}</span>
-                            <span className="flex justify-end gap-2">
-                              <span className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground">
-                                <Maximize2 className="h-4 w-4" />
-                              </span>
-                            </span>
-                          </button>
-                        );
-                      })}
+                  <h1 className="mt-1 text-2xl font-semibold tracking-normal text-foreground">Contatos | Lista</h1>
+                  <p className="text-sm text-muted-foreground">
+                    {filteredContacts.length} de {contacts.length} contatos carregados
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-row flex-wrap items-center justify-between gap-3 flex-1 w-full md:max-w-4xl">
+                  <div className="relative flex-1 min-w-[200px] sm:min-w-[300px]">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Busque por nome ou telefone" className="h-9 pl-9 w-full" />
+                  </div>
+                  <div className="flex flex-1 sm:flex-initial gap-3 min-w-[200px] sm:w-auto">
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                      <SelectTrigger className="h-10 flex-1 sm:w-36">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ALL_FILTERS}>Status</SelectItem>
+                        {contactStatusOptions.map((status) => (
+                          <SelectItem key={status.label} value={status.label}>
+                            {status.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={cityFilter} onValueChange={setCityFilter}>
+                      <SelectTrigger className="h-10 flex-1 sm:w-40">
+                        <SelectValue placeholder="Cidade" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ALL_FILTERS}>Cidade</SelectItem>
+                        {cityOptions.map((city) => (
+                          <SelectItem key={city} value={city}>
+                            {city}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    className="h-9 w-9 sm:w-fit shrink-0 gap-2 px-3 sm:px-4"
+                    type="button"
+                    variant="outline"
+                    onClick={() => void loadContacts({ refresh: true, searchTerm: debouncedSearch })}
+                    disabled={isLoading}
+                    title="Atualizar contatos"
+                  >
+                    <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+                    <span className="hidden sm:inline">Atualizar</span>
+                  </Button>
+                </div>
+              </div>
+              {error && <p className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+            </div>
+            {/* ------------------------------------- */}
+            <div className="mx-auto flex w-full flex-col bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+              <div className="flex flex-col min-h-0">
+                <div className="hidden md:grid w-full grid-cols-[1.4fr_140px_160px_160px_80px] border-b border-border bg-muted/60 pl-5 pr-8 py-3 gap-4 text-xs font-semibold uppercase text-muted-foreground shrink-0">
+                  <span>Nome</span>
+                  <span>Status</span>
+                  <span>Cidade</span>
+                  <span>Último contato</span>
+                  <span className="text-right">Ações</span>
+                </div>
+                <div className="min-h-18.25 w-full overflow-y-auto split-scroll flex flex-col items-center justify-center">
+                  {isLoading ? (
+                    <div className="my-auto w-fit inline-flex items-center justify-center gap-2 rounded-xl bg-muted/80 px-5 text-xs font-semibold text-foreground border border-border/80 shadow-xs py-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--sidebar-custom-primary)]" />
+                      <span>Carregando contatos...</span>
                     </div>
-
-                    {hasMore && !hasSearch && (
-                      <div className="flex w-full justify-center py-6 border-border/40 bg-linear-to-t from-background/40 to-transparent ">
-                        <Button
-                          type="button"
-                          disabled={isLoadingMore}
-                          onClick={loadMore}
-                          className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-muted/80 px-5 text-xs font-semibold text-foreground border border-border/80 shadow-xs hover:bg-theme-accent hover:text-foreground hover:border-border active:scale-98 transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none"
-                        >
-                          {isLoadingMore ? (
-                            <>
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--sidebar-custom-primary)]" />
-                              <span>Carregando contatos...</span>
-                            </>
-                          ) : (
-                            <>
-                              <ArrowDown className="h-3.5 w-3.5 opacity-70 transition-transform group-hover:translate-y-0.5" />
-                              <span>Carregar mais contatos</span>
-                            </>
-                          )}
-                        </Button>
+                  ) : filteredContacts.length > 0 ? (
+                    <div className="h-full w-full flex flex-col justify-between">
+                      <div className="flex flex-col w-full">
+                        {filteredContacts.map((contact) => {
+                          const name = getDisplayName(contact);
+                          const tags = getChatTags(contact).slice(0, 2);
+                          return (
+                            <button
+                              key={contact.id}
+                              type="button"
+                              className="flex flex-col gap-3 md:grid md:grid-cols-[1.4fr_140px_160px_160px_80px] items-start md:items-center gap-2 md:gap-4 border-b border-border/70 px-5 py-4 transition-colors hover:bg-muted/45 text-left w-full relative group"
+                              onClick={() => setSelectedContactId(contact.id)}
+                            >
+                              <div className="flex min-w-0 items-center gap-3 w-full md:w-auto">
+                                <Avatar className="h-10 w-10 shrink-0">
+                                  <AvatarImage src={contact.url_foto_perfil ?? undefined} alt={name} />
+                                  <AvatarFallback className="text-sm">{getAvatarInitials(name)}</AvatarFallback>
+                                </Avatar>
+                                <div className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-semibold text-foreground">{name}</span>
+                                  <span className="block truncate text-xs text-muted-foreground">{getContactPhone(contact)}</span>
+                                  {tags.length > 0 && (
+                                    <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
+                                      <span>Tags:</span>
+                                      {tags.map((tag) => (
+                                        <Badge key={tag.id || tag.label} className="h-4 border-0 text-[9px] px-1.5 leading-none" style={tag.color ? { backgroundColor: tag.color, color: getReadableTextColor(tag.color) } : undefined}>
+                                          {tag.label}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:contents">
+                                <div className="inline-flex max-w-full md:w-auto">
+                                  <Badge className="border-0 px-2 py-0.5 text-[10px] text-white rounded-md" style={{ backgroundColor: getChatStatusColor(contact) }}>
+                                    <span className="truncate">{getChatStatusLabel(contact)}</span>
+                                  </Badge>
+                                </div>
+                                <span className="text-muted-foreground/30 text-xs md:hidden">•</span>
+                                <span className="truncate text-xs md:text-sm text-muted-foreground">
+                                  <span className="md:hidden font-medium text-foreground/70">Cidade: </span>
+                                  {getContactCity(contact) || "Sem cidade"}
+                                </span>
+                                <span className="text-muted-foreground/30 text-xs md:hidden">•</span>
+                                <span className="truncate text-xs md:text-sm text-muted-foreground">
+                                  <span className="md:hidden font-medium text-foreground/70">Último contato: </span>
+                                  {getLastContactLabel(contact)}
+                                </span>
+                              </div>
+                              <div className="absolute right-4 top-4 md:static md:flex md:w-full md:justify-end shrink-0">
+                                <span className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted group-hover:text-foreground md:hover:bg-background">
+                                  <Maximize2 className="h-4 w-4" />
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
-                    )}
-                  </div>
-                ) : (
-                  <p className="px-5 py-10 text-center text-sm text-muted-foreground">Nenhum contato encontrado.</p>
-                )}
+                      {hasMore && !hasSearch && (
+                        <div className="flex w-full justify-center py-6 border-t border-border/20 bg-linear-to-t from-background/40 to-transparent shrink-0">
+                          <Button
+                            type="button"
+                            disabled={isLoadingMore}
+                            onClick={loadMore}
+                            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-muted/80 px-5 text-xs font-semibold text-foreground border border-border/80 shadow-xs hover:bg-theme-accent hover:text-foreground hover:border-border active:scale-98 transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none"
+                          >
+                            {isLoadingMore ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--sidebar-custom-primary)]" />
+                                <span>Carregando contatos...</span>
+                              </>
+                            ) : (
+                              <>
+                                <ArrowDown className="h-3.5 w-3.5 opacity-70 transition-transform" />
+                                <span>Carregar mais contatos</span>
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className=" text-sm text-muted-foreground">Nenhum contato encontrado.</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </div>
-
-      <Dialog open={Boolean(selectedContact)} onOpenChange={(open) => !open && setSelectedContactId(null)}>
-        <DialogContent className="max-h-[92vh] max-w-2xl overflow-hidden p-0" showCloseButton={false}>
-          {selectedContact && (
-            <div className="flex h-[86vh] flex-col">
-              <DialogTitle className="sr-only">Detalhes do contato {getDisplayName(selectedContact)}</DialogTitle>
-              <div className="min-h-0 flex-1">
-                <ContactDetails
-                  chat={selectedContact}
-                  onClose={() => setSelectedContactId(null)}
-                  onToggleStatus={() => void handleToggleStatus(selectedContact)}
-                  onToggleIA={() => void handleToggleIA(selectedContact)}
-                  statusOptions={contactStatusOptions}
-                  tagOptions={contactTagOptions}
-                  onChangeStatus={(status) => void handleChangeContactStatus(selectedContact, status)}
-                  onToggleTag={(tag) => void handleToggleContactTag(selectedContact, tag)}
-                  onToggleInterest={(interest) => void handleToggleContactInterest(selectedContact, interest)}
-                  onChangeName={(name) => handleChangeName(selectedContact, name)}
-                  onChangeContactInfo={(info) => handleChangeContactInfo(selectedContact, info)}
-                  onMarkAsRead={() => void handleMarkAsRead(selectedContact)}
-                  onMarkAsUnread={() => void handleMarkAsUnread(selectedContact)}
-                  onReorderTags={(tags) => handleReorderTags(selectedContact, tags)}
-                  onCommitTagOrder={(tags) => void handleCommitTagOrder(selectedContact, tags)}
-                />
+        </main>
+        <Dialog open={Boolean(selectedContact)} onOpenChange={(open) => !open && setSelectedContactId(null)}>
+          <DialogContent className="max-h-[92vh] max-w-2xl overflow-hidden p-0" showCloseButton={false}>
+            {selectedContact && (
+              <div className="flex h-[86vh] flex-col">
+                <DialogTitle className="sr-only">Detalhes do contato {getDisplayName(selectedContact)}</DialogTitle>
+                <div className="min-h-0 flex-1">
+                  <ContactDetails
+                    chat={selectedContact}
+                    onClose={() => setSelectedContactId(null)}
+                    onToggleStatus={() => void handleToggleStatus(selectedContact)}
+                    onToggleIA={() => void handleToggleIA(selectedContact)}
+                    statusOptions={contactStatusOptions}
+                    tagOptions={contactTagOptions}
+                    onChangeStatus={(status) => void handleChangeContactStatus(selectedContact, status)}
+                    onToggleTag={(tag) => void handleToggleContactTag(selectedContact, tag)}
+                    onToggleInterest={(interest) => void handleToggleContactInterest(selectedContact, interest)}
+                    onChangeName={(name) => handleChangeName(selectedContact, name)}
+                    onChangeContactInfo={(info) => handleChangeContactInfo(selectedContact, info)}
+                    onMarkAsRead={() => void handleMarkAsRead(selectedContact)}
+                    onMarkAsUnread={() => void handleMarkAsUnread(selectedContact)}
+                    onReorderTags={(tags) => handleReorderTags(selectedContact, tags)}
+                    onCommitTagOrder={(tags) => void handleCommitTagOrder(selectedContact, tags)}
+                  />
+                </div>
+                <DialogFooter className="border-t border-border bg-card p-3">
+                  <Button type="button" variant="ghost" onClick={() => setSelectedContactId(null)}>
+                    Fechar
+                  </Button>
+                  <Button type="button" onClick={() => goToChat(selectedContact)}>
+                    Ir para o chat
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </DialogFooter>
               </div>
-              <DialogFooter className="border-t border-border bg-card p-3">
-                <Button type="button" variant="ghost" onClick={() => setSelectedContactId(null)}>
-                  Fechar
-                </Button>
-                <Button type="button" onClick={() => goToChat(selectedContact)}>
-                  Ir para o chat
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </DialogFooter>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+            )}
+          </DialogContent>
+        </Dialog>
+      </div>
     </div>
   );
 }

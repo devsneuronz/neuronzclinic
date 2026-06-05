@@ -4,12 +4,11 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { cancelScheduledMessage, fetchChats, fetchScheduledMessages, updateScheduledMessage, type ChatRecord, type ScheduledMessageRecord } from "@/lib/supabase-rest";
 import { CalendarClock, PenLine, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { EditingScheduledDialog } from "../chat/edit-scheduled-dialog";
 
 function getContactName(message: ScheduledMessageRecord) {
   return message.contact_name?.trim() || message.chat_id;
@@ -36,13 +35,6 @@ function formatScheduledAt(value: string) {
   }).format(date);
 }
 
-function toLocalDateTimeValue(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000);
-  return localDate.toISOString().slice(0, 16);
-}
-
 function getInitials(name: string) {
   return (
     name
@@ -61,11 +53,8 @@ export function ScheduledMessagesManager() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cancelingId, setCancelingId] = useState<string | null>(null);
+
   const [editingMessage, setEditingMessage] = useState<ScheduledMessageRecord | null>(null);
-  const [editText, setEditText] = useState("");
-  const [editDateTime, setEditDateTime] = useState("");
-  const [editError, setEditError] = useState<string | null>(null);
-  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -77,7 +66,7 @@ export function ScheduledMessagesManager() {
         setChatsById(Object.fromEntries(chats.map((chat) => [chat.chat_id, chat])));
       })
       .catch((err) => {
-        if (isMounted) setError(err instanceof Error ? err.message : "Nao foi possivel carregar os agendamentos.");
+        if (isMounted) setError(err instanceof Error ? err.message : "Não foi possível carregar os agendamentos.");
       })
       .finally(() => {
         if (isMounted) setIsLoading(false);
@@ -125,52 +114,14 @@ export function ScheduledMessagesManager() {
       await cancelScheduledMessage(messageId);
     } catch (err) {
       setMessages(previousMessages);
-      setError(err instanceof Error ? err.message : "Nao foi possivel cancelar o agendamento.");
+      setError(err instanceof Error ? err.message : "Não foi possível cancelar o agendamento.");
     } finally {
       setCancelingId(null);
     }
   }
 
-  function beginEdit(message: ScheduledMessageRecord) {
-    setEditingMessage(message);
-    setEditText(message.text || message.content || message.caption || "");
-    setEditDateTime(toLocalDateTimeValue(message.scheduled_at));
-    setEditError(null);
-  }
-
-  async function handleSaveEdit() {
-    if (!editingMessage) return;
-
-    const text = editText.trim();
-    const date = new Date(editDateTime);
-
-    if (!text) {
-      setEditError("Informe o texto da mensagem.");
-      return;
-    }
-
-    if (Number.isNaN(date.getTime())) {
-      setEditError("Escolha uma data valida.");
-      return;
-    }
-
-    if (date.getTime() < Date.now() + 30000) {
-      setEditError("Escolha um horario futuro.");
-      return;
-    }
-
-    setIsSavingEdit(true);
-    setEditError(null);
-
-    try {
-      const updated = await updateScheduledMessage({ id: editingMessage.id, text, scheduledAt: date.toISOString() });
-      setMessages((current) => [...current.filter((message) => message.id !== updated.id), updated].sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at)));
-      setEditingMessage(null);
-    } catch (err) {
-      setEditError(err instanceof Error ? err.message : "Nao foi possivel editar o agendamento.");
-    } finally {
-      setIsSavingEdit(false);
-    }
+  async function handleUpdateSuccess(updated: ScheduledMessageRecord) {
+    setMessages((current) => [...current.filter((message) => message.id !== updated.id), updated].sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at)));
   }
 
   return (
@@ -210,16 +161,26 @@ export function ScheduledMessagesManager() {
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-teal-500/10 text-teal-600">
                         <CalendarClock className="h-5 w-5" />
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-foreground">{getPreview(message)}</p>
-                        <p className="text-xs text-muted-foreground">{formatScheduledAt(message.scheduled_at)}</p>
+                      <div className="min-w-0 flex-1 flex flex-col gap-1">
+                        <span className="truncate text-sm font-medium text-foreground">{getPreview(message)}</span>
+                        <span className="text-xs text-muted-foreground">Agendado para: {formatScheduledAt(message.scheduled_at)}</span>
                         {message.last_error && <p className="mt-1 line-clamp-2 text-xs text-red-500">{message.last_error}</p>}
                       </div>
                       <Badge variant={message.status === "failed" ? "destructive" : "secondary"}>{message.status}</Badge>
-                      <Button type="button" size="icon-sm" variant="ghost" className="text-muted-foreground hover:text-teal-500" onClick={() => beginEdit(message)} aria-label="Editar agendamento">
+
+                      <Button type="button" size="icon-sm" variant="ghost" className="text-muted-foreground hover:text-teal-500" onClick={() => setEditingMessage(message)} aria-label="Editar agendamento">
                         <PenLine className="h-4 w-4" />
                       </Button>
-                      <Button type="button" size="icon-sm" variant="ghost" className="text-muted-foreground hover:text-red-500" onClick={() => handleCancel(message.id)} disabled={cancelingId === message.id} aria-label="Cancelar agendamento">
+
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-red-500"
+                        onClick={() => handleCancel(message.id)}
+                        disabled={cancelingId === message.id}
+                        aria-label="Cancelar agendamento"
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -231,26 +192,14 @@ export function ScheduledMessagesManager() {
         )}
       </div>
 
-      <Dialog open={!!editingMessage} onOpenChange={(open) => !open && setEditingMessage(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Editar mensagem agendada</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Textarea value={editText} onChange={(event) => setEditText(event.target.value)} className="min-h-28 resize-y" placeholder="Mensagem" />
-            <Input type="datetime-local" value={editDateTime} onChange={(event) => setEditDateTime(event.target.value)} />
-            {editError && <p className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-500">{editError}</p>}
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setEditingMessage(null)}>
-              Cancelar
-            </Button>
-            <Button type="button" className="bg-teal-500 text-white hover:bg-teal-600" onClick={handleSaveEdit} disabled={isSavingEdit}>
-              Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EditingScheduledDialog
+        message={editingMessage}
+        onClose={() => setEditingMessage(null)}
+        onUpdate={async (input) => {
+          const updated = await updateScheduledMessage(input);
+          handleUpdateSuccess(updated);
+        }}
+      />
     </>
   );
 }

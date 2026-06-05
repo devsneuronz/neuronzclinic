@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn, normalizeText } from "@/lib/utils";
 import { addDays, addMonths, addWeeks, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek, subMonths, subWeeks } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { AlertTriangle, Calendar1, CalendarDays, CalendarIcon, ChevronLeft, ChevronRight, Circle, Clock, Columns3, List, Loader2, Pencil, Phone, Pin, Plus, Search, Stethoscope, Trash2, User, UserPlus } from "lucide-react";
+import { AlertTriangle, Calendar1, CalendarDays, CalendarIcon, ChevronLeft, ChevronRight, Circle, Clock, Columns3, List, Loader2, Phone, Pin, Plus, Search, SquarePen, Stethoscope, Trash2, User, UserPlus } from "lucide-react";
 
 import type { MouseEvent } from "react";
 import React, { useEffect, useMemo, useState } from "react";
@@ -574,7 +574,7 @@ export function WeeklyCalendar() {
 
   return (
     <div className="flex h-full flex-1 flex-col bg-card overflow-hidden">
-      <header className="flex flex-col-reverse md:flex-row md:items-center justify-between gap-4 border-b border-border p-4 md:px-6 min-h-15.25">
+      <header className="flex flex-col-reverse md:flex-row md:items-center justify-between gap-4 border-b border-border p-4 md:px-6 h-15.25">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-center min-w-0">
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={goToPrevious} aria-label="Periodo anterior">
@@ -747,7 +747,7 @@ export function WeeklyCalendar() {
                                 disabled={isSavingAppointment}
                                 aria-label="Editar"
                               >
-                                <Pencil className="h-4 w-4" />
+                                <SquarePen className="h-4 w-4" />
                               </Button>
                               <Button
                                 variant="ghost"
@@ -953,7 +953,7 @@ export function WeeklyCalendar() {
                     disabled={isSavingAppointment}
                     aria-label="Editar"
                   >
-                    <Pencil className="h-4 w-4" />
+                    <SquarePen className="h-4 w-4" />
                   </Button>
                   <Button
                     variant="ghost"
