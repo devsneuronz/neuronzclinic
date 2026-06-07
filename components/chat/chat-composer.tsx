@@ -205,7 +205,7 @@ export function ChatComposer({
               <textarea
                 value={noteDraft}
                 onChange={(event) => onNoteDraftChange(event.target.value)}
-                className="h-full w-full resize-none bg-transparent px-3.5 py-3 pr-6 text-sm text-foreground outline-none placeholder:text-muted-foreground/50"
+                className="custom-scrollbar h-full w-full resize-none bg-transparent px-3.5 py-3 pr-6 text-sm text-foreground outline-none placeholder:text-muted-foreground/50"
                 placeholder="Digite a anotação interna... Use @ para mencionar alguém."
               />
             </div>
@@ -422,7 +422,7 @@ export function ChatComposer({
                   onChange={(event) => onDraftChange(event.target.value)}
                   disabled={isSending}
                   placeholder={attachment ? "Legenda opcional" : "Digite uma mensagem..."}
-                  className={cn("flex-1 border-0 bg-input/50 resize-none transition-[color,box-shadow] h-full w-0 min-h-0", isMobile ? "rounded-[20px] pr-7" : "rounded-md")}
+                  className={cn("custom-scrollbar flex-1 border-0 bg-input/50 resize-none transition-[color,box-shadow] h-full w-0 min-h-0", isMobile ? "rounded-[20px] pr-7" : "rounded-md")}
                 />
                 {isMobile && (
                   <DropdownMenu>
