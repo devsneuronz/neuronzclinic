@@ -51,109 +51,115 @@ export default function SettingsPage() {
   const sortedUsers = useMemo(() => users.slice().sort((a, b) => a.name.localeCompare(b.name, "pt-BR")), [users]);
 
   return (
-    <div className="flex h-full w-full flex-col bg-background">
-      <header className="flex min-h-15.25 items-center justify-between border-b border-border bg-card px-6">
+    <div className="flex h-screen w-full flex-col bg-background overflow-hidden">
+      <header className="flex min-h-15.25 items-center justify-between border-b border-border bg-card px-6 shrink-0">
         <h1 className="text-xl font-semibold text-foreground">Configurações</h1>
       </header>
 
-      <Tabs defaultValue="geral" className="mx-auto w-full max-w-7xl gap-6 p-6">
-        <TabsList className="h-auto! min-h-10 w-full flex-wrap gap-2 rounded-full px-1 py-1">
-          <TabsTrigger value="geral" className="group relative data-[state=active]:bg-card">
-            <Bolt className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
-            <span className="truncate">Geral</span>
-          </TabsTrigger>
+      <main className="flex-1 flex flex-col overflow-hidden">
+        <div className="w-full flex flex-col flex-1 overflow-hidden">
+          <Tabs defaultValue="geral" className="flex flex-col flex-1 overflow-hidden gap-0">
+            <div className="bg-card py-3 px-4 border-b border-border shrink-0 flex justify-start md:justify-center w-full overflow-x-auto no-scrollbar">
+              <TabsList className="flex w-max md:w-fit gap-1.5 rounded-full h-11! bg-secondary/50 border border-border/40 px-1.5 py-1.5">
+                <TabsTrigger value="geral" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
+                  <Bolt className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
+                  <span>Geral</span>
+                </TabsTrigger>
+                <TabsTrigger value="usuarios" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
+                  <Users className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
+                  <span>Usuários</span>
+                </TabsTrigger>
+                <TabsTrigger value="tags" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
+                  <Tags className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
+                  <span>Tags</span>
+                </TabsTrigger>
+                <TabsTrigger value="agendadas" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
+                  <CalendarClock className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
+                  <span>Agendadas</span>
+                </TabsTrigger>
+                <TabsTrigger value="anexos" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
+                  <CopyPlus className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
+                  <span>Anexos</span>
+                </TabsTrigger>
+                <TabsTrigger value="informacoes" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
+                  <Bot className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
+                  <span>IA</span>
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
-          <TabsTrigger value="usuarios" className=" group relative data-[state=active]:bg-card">
-            <Users className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
-            <span className="truncate">Usuários</span>
-          </TabsTrigger>
-
-          <TabsTrigger value="tags" className=" group relative data-[state=active]:bg-card">
-            <Tags className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
-            <span className="truncate">Tags</span>
-          </TabsTrigger>
-
-          <TabsTrigger value="agendadas" className=" group relative data-[state=active]:bg-card">
-            <CalendarClock className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
-            <span className="truncate">Agendadas</span>
-          </TabsTrigger>
-
-          <TabsTrigger value="anexos" className=" group relative data-[state=active]:bg-card">
-            <CopyPlus className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
-            <span className="truncate">Anexos</span>
-          </TabsTrigger>
-
-          <TabsTrigger value="informacoes" className=" group relative data-[state=active]:bg-card">
-            <Bot className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100" />
-            <span className="truncate">Informações</span>
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="geral" className="space-y-6 outline-none">
-          <Card className="border border-border bg-card shadow-sm">
-            <CardHeader className="space-y-1">
-              <CardTitle className="text-xl font-semibold text-foreground">Aparência</CardTitle>
-              <CardDescription className="text-sm text-muted-foreground">Personalize o esquema de cores do sistema para o seu conforto visual.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 lg:grid-cols-[6fr_4fr] gap-4">
-              <ColorScheme />
-              <BackgroundOptions />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="usuarios" className="outline-none">
-          <Card className="border border-border bg-card shadow-sm">
-            <CardHeader className="space-y-1">
-              <CardTitle className="text-xl font-semibold text-foreground">Equipe e Permissões</CardTitle>
-              <CardDescription className="text-sm text-muted-foreground">Visualize os profissionais cadastrados na plataforma, seus e-mails e setores de atuação.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <UsersGrid sortedUsers={sortedUsers} isLoadingUsers={isLoadingUsers} usersError={usersError} />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="tags" className="outline-none">
-          <Card className="border border-border bg-card shadow-sm">
-            <CardHeader className="space-y-1">
-              <CardTitle className="text-xl font-semibold text-foreground">Gerenciamento de Tags</CardTitle>
-              <CardDescription className="text-sm text-muted-foreground">Crie, edite cores e mantenha as tags usadas nos contatos e chats.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <TagsManager />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="agendadas" className="outline-none">
-          <Card className="border border-border bg-card shadow-sm">
-            <CardHeader className="space-y-1">
-              <CardTitle className="text-xl font-semibold text-foreground">Mensagens Agendadas</CardTitle>
-              <CardDescription className="text-sm text-muted-foreground">Acompanhe e cancele mensagens pendentes agrupadas por contato.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ScheduledMessagesManager />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="anexos" className="outline-none">
-          <Card className="border border-border bg-card shadow-sm">
-            <CardHeader className="space-y-1">
-              <CardTitle className="text-xl font-semibold text-foreground">Anexos Rápidos</CardTitle>
-              <CardDescription className="text-sm text-muted-foreground">Gerencie mensagens, imagens, vídeos e áudios reutilizáveis no menu de clipe dos chats.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <SavedAttachmentsManager />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="informacoes" className="outline-none">
-          <ClinicInfoManager />
-        </TabsContent>
-      </Tabs>
+            <TabsContent value="geral" className="w-full flex-1 flex justify-center overflow-hidden p-6 data-[state=inactive]:hidden! data-[state=active]:flex">
+              <Card className="w-full max-w-7xl border border-border bg-card shadow-sm flex flex-col min-h-0 overflow-hidden">
+                <CardHeader className="space-y-1 shrink-0">
+                  <CardTitle className="text-xl font-semibold text-foreground">Aparência</CardTitle>
+                  <CardDescription className="text-sm text-muted-foreground">Personalize o esquema de cores do sistema para o seu conforto visual.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-1 overflow-y-auto grid grid-cols-1 lg:grid-cols-[6fr_4fr] gap-4">
+                  <ColorScheme />
+                  <BackgroundOptions />
+                </CardContent>
+              </Card>
+            </TabsContent>
+            <TabsContent value="usuarios" className="w-full flex-1 flex justify-center overflow-hidden p-6 data-[state=inactive]:hidden! data-[state=active]:flex">
+              <Card className="w-full max-w-7xl border border-border bg-card shadow-sm flex flex-col min-h-0 overflow-hidden">
+                <CardHeader className="space-y-1 shrink-0">
+                  <CardTitle className="text-xl font-semibold text-foreground">Equipe e Permissões</CardTitle>
+                  <CardDescription className="text-sm text-muted-foreground">Visualize os profissionais cadastrados na plataforma, seus e-mails e setores de atuação.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-1 overflow-y-auto">
+                  <UsersGrid sortedUsers={sortedUsers} isLoadingUsers={isLoadingUsers} usersError={usersError} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+            <TabsContent value="tags" className="w-full flex-1 flex justify-center overflow-hidden p-6 data-[state=inactive]:hidden! data-[state=active]:flex">
+              <Card className="w-full max-w-7xl border border-border bg-card shadow-sm flex flex-col min-h-0 overflow-hidden">
+                <CardHeader className="space-y-1 shrink-0">
+                  <CardTitle className="text-xl font-semibold text-foreground">Gerenciamento de Tags</CardTitle>
+                  <CardDescription className="text-sm text-muted-foreground">Crie, edite cores e mantenha as tags usadas nos contatos e chats.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-1 overflow-y-auto">
+                  <TagsManager />
+                </CardContent>
+              </Card>
+            </TabsContent>
+            <TabsContent value="agendadas" className="w-full flex-1 flex justify-center overflow-hidden p-6 data-[state=inactive]:hidden! data-[state=active]:flex">
+              <Card className="w-full max-w-7xl border border-border bg-card shadow-sm flex flex-col min-h-0 overflow-hidden">
+                <CardHeader className="space-y-1 shrink-0">
+                  <CardTitle className="text-xl font-semibold text-foreground">Mensagens Agendadas</CardTitle>
+                  <CardDescription className="text-sm text-muted-foreground">Acompanhe e cancele mensagens pendentes agrupadas por contato.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-1 overflow-y-auto">
+                  <ScheduledMessagesManager />
+                </CardContent>
+              </Card>
+            </TabsContent>
+            <TabsContent value="anexos" className="w-full flex-1 flex justify-center overflow-hidden p-6 data-[state=inactive]:hidden! data-[state=active]:flex">
+              <Card className="w-full max-w-7xl border border-border bg-card shadow-sm flex flex-col min-h-0 overflow-hidden">
+                <CardHeader className="space-y-1 shrink-0">
+                  <CardTitle className="text-xl font-semibold text-foreground">Anexos Rápidos</CardTitle>
+                  <CardDescription className="text-sm text-muted-foreground">Gerencie mensagens, imagens, vídeos e áudios reutilizáveis no menu de clipe dos chats.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-1 overflow-y-auto">
+                  <SavedAttachmentsManager />
+                </CardContent>
+              </Card>
+            </TabsContent>
+            <div className="overflow-y-auto ">
+              <TabsContent value="informacoes" className="w-full flex-1 flex justify-center overflow-hidden p-6 data-[state=inactive]:hidden! data-[state=active]:flex">
+                <Card className="w-full max-w-7xl border border-border bg-card shadow-sm flex flex-col min-h-0">
+                  <CardHeader className="space-y-1 shrink-0">
+                    <CardTitle className="text-xl font-semibold text-foreground">Configurações da IA</CardTitle>
+                    <CardDescription className="text-sm text-muted-foreground">Gerencie as diretrizes de comportamento da assistente virtual e a tabela de procedimentos.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex-1 overflow-y-auto no-scrollbar">
+                    <ClinicInfoManager />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </div>
+          </Tabs>
+        </div>
+      </main>
     </div>
   );
 }
