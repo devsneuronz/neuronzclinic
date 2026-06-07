@@ -720,25 +720,25 @@ export function WeeklyCalendar() {
         </div>
       </header>
 
-      <div className={cn(" px-4 py-3 overflow-x-auto", activeView !== "Semana" && activeView !== "Dia" && "border-border border-b")}>
-        <Tabs value={activeView} onValueChange={(value) => setActiveView(value as typeof activeView)} className="flex min-h-0 flex-1 gap-0">
-          <TabsList className="gap-1.5 rounded-full h-11! bg-secondary/50 border border-border/40">
-            {views.map((view) => {
-              const Icon = viewIcons[view];
-
-              return (
-                <TabsTrigger
-                  key={view}
-                  value={view}
-                  className="data-[state=active]:border-theme-border group relative data-[state=active]:bg-theme-bg px-3.5 rounded-full text-xs font-medium transition-all gap-2 cursor-pointer data-[state=active]:shadow-xs data-[state=active]:text-theme-fg!"
-                >
-                  {Icon && <Icon className="group-data-[state=active]:text-theme-primary h-2 w-2 transition-all duration-300" />}
-
-                  <span className="truncate">{view}</span>
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
+      <div className="w-full flex flex-col overflow-hidden lg:pr-64">
+        <Tabs value={activeView} onValueChange={(value) => setActiveView(value as typeof activeView)} className="flex flex-col flex-1 overflow-hidden gap-0">
+          <div className="bg-card py-3 px-4 shrink-0 flex justify-center">
+            <TabsList className=" gap-1.5 rounded-full h-11! bg-secondary/50 border border-border/40">
+              {views.map((view) => {
+                const Icon = viewIcons[view];
+                return (
+                  <TabsTrigger
+                    key={view}
+                    value={view}
+                    className="data-[state=active]:border-theme-border group relative data-[state=active]:bg-theme-bg px-3.5 rounded-full text-xs font-medium transition-all gap-2 cursor-pointer data-[state=active]:shadow-xs data-[state=active]:text-theme-fg!"
+                  >
+                    {Icon && <Icon className="group-data-[state=active]:text-theme-primary h-2 w-2 transition-all duration-300" />}
+                    <span className="truncate">{view}</span>
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          </div>
         </Tabs>
       </div>
 
@@ -778,7 +778,7 @@ export function WeeklyCalendar() {
                 })}
               </div>
             ) : activeView === "Lista" ? (
-              <div className="p-4 md:p-6">
+              <div className="p-4 md:p-6 border-t">
                 <div className="overflow-hidden rounded-md border border-border bg-card">
                   {filteredAppointments.length === 0 ? (
                     <div className="flex h-56 flex-col items-center justify-center gap-2 text-muted-foreground">
@@ -853,7 +853,7 @@ export function WeeklyCalendar() {
                 <div className={cn("sticky top-0 z-50 flex border-b border-t border-theme-border bg-theme-bg/85 backdrop-blur-xs", activeView == "Semana" && "min-w-341.5")}>
                   <div className="w-16 flex-shrink-0 border-r border-theme-border" />
                   {visibleDays.map((day) => (
-                    <div key={day.toISOString()} className={cn("flex-1 border-r border-theme-border px-2 py-3 text-center last:border-r-0", isSameDay(day, new Date()) && "bg-theme-primary/10")}>
+                    <div key={day.toISOString()} className={cn("flex-1 border-r border-theme-border px-2 py-3 text-center last:border-r-0", isSameDay(day, new Date()) && "bg-theme-primary/30")}>
                       <p className={cn("text-xs uppercase", isSameDay(day, new Date()) ? "text-theme-fg font-semibold" : "text-theme-fg/60")}>{format(day, "EEE", { locale: ptBR })}</p>
                       <p className={cn("mt-0.5 text-sm", isSameDay(day, new Date()) ? "font-bold text-theme-fg/90" : "font-medium text-theme-fg/80")}>{format(day, "dd/MM")}</p>
                     </div>
@@ -913,7 +913,7 @@ export function WeeklyCalendar() {
           </div>
         </div>
 
-        <aside className={cn("flex flex-row w-full lg:w-64 lg:flex-col shrink-0 border-border bg-card p-4 transition-all duration-300", "border-t lg:border-t-0 lg:border-l", activeView !== "Mês" && activeView !== "Lista" && "lg:border-t")}>
+        <aside className="flex flex-row w-full lg:w-64 lg:flex-col shrink-0 border-border bg-card p-4 transition-all duration-300 border-t lg:border-l lg:border-t">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-foreground hidden lg:inline">Filtros</h3>
             {isLoadingOptions && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mr-4" />}
