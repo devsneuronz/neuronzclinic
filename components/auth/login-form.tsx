@@ -3,7 +3,7 @@
 import { ArrowRight, CheckCircle2, Eye, EyeOff, Loader2, LockKeyhole, Mail, Sparkles } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +75,15 @@ export function LoginForm() {
       "Content-Type": "application/json",
     };
   }, [publishableKey]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedBgVal = localStorage.getItem("selected-login-bg-val");
+      if (savedBgVal) {
+        document.documentElement.style.setProperty("--login-custom-bg", savedBgVal);
+      }
+    }
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
