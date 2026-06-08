@@ -1,9 +1,9 @@
 "use client";
 
 import { Sidebar } from "@/components/sidebar";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { AUTH_SESSION_EVENT, hasValidSession } from "@/lib/auth-session";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { AUTH_SESSION_EVENT, clearSavedSession, hasValidSession } from "@/lib/auth-session";
 import { getUserHomePath, isDraTatianaUser } from "@/lib/user-access";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -21,12 +21,18 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoading: isCurrentUserLoading } = useCurrentUser();
+
   const isHydrated = useSyncExternalStore(
     subscribeToHydration,
     () => true,
     () => false,
   );
   const isAuthenticated = useSyncExternalStore(subscribeToAuthSession, hasValidSession, () => false);
+
+  function handleLogout() {
+    clearSavedSession();
+    router.refresh();
+  }
 
   useEffect(() => {
     if (!isHydrated) {
@@ -73,7 +79,7 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="flex flex-col md:flex-row min-h-full w-full bg-background">
-      {isMobile ? <MobileHeader /> : <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />}
+      {isMobile ? <MobileHeader onLogout={handleLogout} /> : <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} onLogout={handleLogout} />}
 
       <main className="flex-1 overflow-y-auto bg-background">{children}</main>
     </div>

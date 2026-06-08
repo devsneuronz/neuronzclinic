@@ -12,8 +12,8 @@ import { ThemeCircle } from "./colors";
 const colorThemes = [
   { id: "default", name: "Padrão", primary: "#e5ddd5", secondary: "#5e5c47", muted: "#6c6a55" },
   { id: "theme-sand", name: "Areia Premium", primary: "#795548", secondary: "#ffe0b2", muted: "#bcaaa4" },
-  { id: "theme-blue", name: "Azul Clássico", primary: "#0b57d0", secondary: "#a8c7fa", muted: "#747775" },
   { id: "theme-gray", name: "Cinza Neutro", primary: "#1f1f1f", secondary: "#e3e3e3", muted: "#757575" },
+  { id: "theme-blue", name: "Azul Clássico", primary: "#0b57d0", secondary: "#a8c7fa", muted: "#747775" },
   // { id: "theme-indigo", name: "Índigo", primary: "#3f51b5", secondary: "#c5cae9", muted: "#7986cb" },
   // { id: "theme-slate", name: "Ardósia", primary: "#455a64", secondary: "#cfd8dc", muted: "#90a4ae" },
   { id: "theme-teal", name: "Teal", primary: "#00695c", secondary: "#b2dfdb", muted: "#4db6ac" },
@@ -32,38 +32,38 @@ export default function ColorScheme() {
   const { colorTheme, setColorTheme } = useColorTheme();
 
   return (
-    <Card className="border border-border bg-card shadow-sm w-full mb-0">
-      <CardContent className="space-y-6">
-        {/* SELETOR DE MODO (Claro / Escuro / Dispositivo) */}
+    <Card className="border border-border bg-card shadow-sm w-full p-0 mb-0 h-fit overflow-hidden">
+      <CardContent className="p-4 sm:p-6 space-y-6">
         <div className="space-y-2">
           <Label className="text-sm font-medium text-foreground">Tema</Label>
           <Tabs value={theme} onValueChange={(value) => setTheme(value)} className="w-full">
-            <TabsList className="w-full grid-cols-3 gap-1 rounded-full h-11!">
-              <TabsTrigger value="light" className="rounded-full gap-2 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-foreground  data-[state=active]:border data-[state=active]:border-border">
-                <Sun className="h-4 w-4 text-yellow-500 data-[state=active]:animate-pulse" />
-                Claro
+            <TabsList className="w-full grid grid-cols-3 gap-1 rounded-full h-11! bg-secondary/40 p-1">
+              <TabsTrigger value="light" className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs">
+                <Sun className="h-3.5 w-3.5 text-yellow-500" />
+                <span className="truncate">Claro</span>
               </TabsTrigger>
 
-              <TabsTrigger value="dark" className="rounded-full gap-2 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:border data-[state=active]:border-border">
-                <Moon className="h-4 w-4 text-blue-400" />
-                Escuro
+              <TabsTrigger value="dark" className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs">
+                <Moon className="h-3.5 w-3.5 text-blue-400" />
+                <span className="truncate">Escuro</span>
               </TabsTrigger>
 
-              <TabsTrigger value="system" className="rounded-full gap-2 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:border data-[state=active]:border-border">
-                <Monitor className="h-4 w-4 text-muted-foreground" />
-                Dispositivo
+              <TabsTrigger value="system" className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs">
+                <Monitor className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="truncate">Dispositivo</span>
               </TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
 
-        {/* SELETOR DE PALETAS DE CORES */}
         <div className="space-y-3 pt-2">
           <Label className="text-sm font-medium text-foreground">Esquema de cores</Label>
 
-          <div className="grid grid-cols-7 gap-4 bg-muted/20 p-4 rounded-xl border border-border/60 justify-items-center overflow-y-auto custom-scrollbar">
+          <div className="flex flex-wrap gap-5 justify-center bg-muted/25 p-4 rounded-xl border border-border/60">
             {colorThemes.map((color) => (
-              <ThemeCircle key={color.id} {...color} isActive={colorTheme === color.id} onClick={() => setColorTheme(color.id as any)} />
+              <div key={color.id} className="transition-transform active:scale-95">
+                <ThemeCircle {...color} isActive={colorTheme === color.id} onClick={() => setColorTheme(color.id as any)} />
+              </div>
             ))}
           </div>
         </div>

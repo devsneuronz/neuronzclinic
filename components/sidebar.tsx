@@ -1,7 +1,7 @@
 "use client";
 
 import { Avatar } from "@radix-ui/react-avatar";
-import { Calendar, CheckSquare, ChevronLeft, ChevronRight, LayoutDashboard, MessageSquare, Settings, Users, Workflow } from "lucide-react";
+import { Calendar, CheckSquare, ChevronLeft, ChevronRight, LayoutDashboard, LogOut, MessageSquare, Settings, Users, Workflow } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType } from "react";
@@ -11,6 +11,7 @@ import { getRoleLabel, UserRole } from "@/lib/user-roles";
 import { cn } from "@/lib/utils";
 import { NoteMentionNotifications } from "./chat/note-mention-notifications";
 import { Button } from "./ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { Logo } from "./ui/logo";
 
 export const navItems = [
@@ -31,9 +32,10 @@ export const navItems = [
 interface SidebarProps {
   isCollapsed: boolean;
   setIsCollapsed: (value: boolean) => void;
+  onLogout: () => void;
 }
 
-export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
+export function Sidebar({ isCollapsed, setIsCollapsed, onLogout }: SidebarProps) {
   const pathname = usePathname();
   const { user, isLoading } = useCurrentUser();
   const role = user?.role ?? "user";
@@ -78,14 +80,53 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         <NoteMentionNotifications user={user} isCollapsed={isCollapsed} />
       </div>
 
-      <div className="border-t border-[var(--sidebar-custom-border)] p-4">
-        <div className="flex items-center gap-3">
-          <Avatar className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-[var(--sidebar-custom-primary)] text-sm font-semibold text-[var(--sidebar-custom-primary-fg)]">{isLoading ? "" : userInitial}</Avatar>
+      <div className="border-t border-[var(--sidebar-custom-border)] p-4 transition-all duration-300">
+        <div className={cn("flex items-center gap-3")}>
+          {isCollapsed ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className="group relative focus:outline-hidden select-none outline-hidden">
+                  <Avatar className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--sidebar-custom-primary)] text-sm font-semibold text-[var(--sidebar-custom-primary-fg)] transition-transform group-hover:scale-105 group-hover:brightness-110 shadow-xs cursor-pointer">
+                    {isLoading ? "" : userInitial}
+                  </Avatar>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="right" align="end" className="w-48 ml-2 bg-popover border border-border rounded-lg shadow-md">
+                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground py-1.5 px-2">
+                  <p className="font-medium text-foreground truncate">{userName}</p>
+                  <p className="text-[10px] truncate">{getRoleLabel(role)}</p>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-border/60" />
+                <DropdownMenuItem onClick={onLogout} className="flex items-center gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer text-sm font-medium py-2 rounded-md">
+                  <LogOut className="h-4 w-4" />
+                  Sair da conta
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <Avatar className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--sidebar-custom-primary)] text-sm font-semibold text-[var(--sidebar-custom-primary-fg)]">{isLoading ? "" : userInitial}</Avatar>
 
-          <div className="flex-1 overflow-hidden">
-            <p className={cn("transition-all whitespace-nowraptext-sm font-medium text-[var(--sidebar-custom-fg)]", isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100")}>{isLoading ? "Carregando usuário..." : userName}</p>
-            <p className={cn("transition-all whitespace-nowrap text-xs text-[var(--sidebar-custom-fg)]/70", isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100")}>{isLoading ? "" : getRoleLabel(role)}</p>
-          </div>
+                <div className="flex-1 overflow-hidden pr-1">
+                  <p className="text-sm font-semibold text-[var(--sidebar-custom-fg)] truncate">{isLoading ? "Carregando..." : userName}</p>
+                  <p className="text-xs text-[var(--sidebar-custom-fg)]/60 truncate">{isLoading ? "" : getRoleLabel(role)}</p>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={onLogout}
+                disabled={isLoading}
+                className="h-8 w-8 text-[var(--sidebar-custom-fg)]/60 hover:text-destructive hover:bg-destructive/10 shrink-0 rounded-md transition-colors"
+                title="Sair da conta"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </aside>

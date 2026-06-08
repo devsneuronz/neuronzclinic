@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bolt, Bot, CalendarClock, CopyPlus, Tags, Users } from "lucide-react";
+import { Bolt, CalendarClock, CopyPlus, Sparkles, Tags, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BackgroundOptions } from "./background-options";
 import { ClinicInfoManager } from "./clinic-info-manager";
@@ -82,21 +82,23 @@ export default function SettingsPage() {
                   <span>Anexos</span>
                 </TabsTrigger>
                 <TabsTrigger value="informacoes" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
-                  <Bot className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
+                  <Sparkles className="text-blue-500 w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
                   <span>IA</span>
                 </TabsTrigger>
               </TabsList>
             </div>
 
             <TabsContent value="geral" className="w-full flex-1 flex justify-center overflow-hidden p-6 data-[state=inactive]:hidden! data-[state=active]:flex">
-              <Card className="w-full max-w-7xl border border-border bg-card shadow-sm flex flex-col min-h-0 overflow-hidden">
-                <CardHeader className="space-y-1 shrink-0">
+              <Card className="w-full max-w-7xl border border-border bg-card shadow-sm flex flex-col">
+                <CardHeader className="space-y-1 shrink-0 px-4 sm:px-6">
                   <CardTitle className="text-xl font-semibold text-foreground">Aparência</CardTitle>
                   <CardDescription className="text-sm text-muted-foreground">Personalize o esquema de cores do sistema para o seu conforto visual.</CardDescription>
                 </CardHeader>
-                <CardContent className="flex-1 overflow-y-auto grid grid-cols-1 lg:grid-cols-[6fr_4fr] gap-4">
-                  <ColorScheme />
-                  <BackgroundOptions />
+                <CardContent className="flex-1 overflow-y-auto">
+                  <div className="flex flex-col md:flex-row gap-6">
+                    <ColorScheme />
+                    <BackgroundOptions />
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
