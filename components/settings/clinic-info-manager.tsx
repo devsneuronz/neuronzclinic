@@ -307,7 +307,7 @@ export function ClinicInfoManager() {
               id="new-procedure-name"
               value={newProcedure.name}
               onChange={(event) => setNewProcedure((current) => ({ ...current, name: event.target.value }))}
-              placeholder="Ex.: Clareamento"
+              placeholder="Ex.: Ativo"
               disabled={isCreating}
               className="h-9 bg-background"
             />
@@ -321,7 +321,7 @@ export function ClinicInfoManager() {
               id="new-procedure-interest"
               value={newProcedure.interest}
               onChange={(event) => setNewProcedure((current) => ({ ...current, interest: event.target.value }))}
-              placeholder="Ex.: ODONTO_CLAR"
+              placeholder="Ex.: TXHM"
               disabled={isCreating}
               className="h-9 bg-background font-mono text-xs uppercase"
             />
@@ -335,7 +335,7 @@ export function ClinicInfoManager() {
               id="new-procedure-description"
               value={newProcedure.description}
               onChange={(event) => setNewProcedure((current) => ({ ...current, description: event.target.value }))}
-              placeholder="Instruções sobre como explicar este procedimento..."
+              placeholder="Instruções sobre este procedimento..."
               disabled={isCreating}
               className="h-9 bg-background"
             />
