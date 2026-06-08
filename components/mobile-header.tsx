@@ -1,17 +1,22 @@
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getRoleLabel } from "@/lib/user-roles";
 import { cn } from "@/lib/utils";
-import { Menu } from "lucide-react";
+import { LogOut, Menu } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { NoteMentionNotifications } from "./chat/note-mention-notifications";
 import { navItems } from "./sidebar";
 import { Avatar } from "./ui/avatar";
+import { Button } from "./ui/button";
 import { Logo } from "./ui/logo";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "./ui/sheet";
 
-export function MobileHeader() {
+interface MobileHeaderProps {
+  onLogout: () => void;
+}
+
+export function MobileHeader({ onLogout }: MobileHeaderProps) {
   const pathname = usePathname();
   const { user, isLoading } = useCurrentUser();
   const role = user?.role ?? "user";
@@ -63,12 +68,27 @@ export function MobileHeader() {
           </div>
 
           <div className="border-t border-[var(--sidebar-custom-border)] pt-4 pb-2">
-            <div className="flex items-center gap-3 px-2">
-              <Avatar className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--sidebar-custom-primary)] text-sm font-semibold text-[var(--sidebar-custom-primary-fg)]">{isLoading ? "" : userInitial}</Avatar>
-              <div className="flex-1 overflow-hidden">
-                <p className="truncate text-sm font-medium text-[var(--sidebar-custom-fg)]">{isLoading ? "Carregando..." : userName}</p>
-                <p className="truncate text-xs text-[var(--sidebar-custom-fg)]/60">{isLoading ? "" : getRoleLabel(role)}</p>
+            <div className="flex items-center justify-between gap-3 px-2">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <Avatar className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--sidebar-custom-primary)] text-sm font-semibold text-[var(--sidebar-custom-primary-fg)]">{isLoading ? "" : userInitial}</Avatar>
+
+                <div className="flex-1 overflow-hidden pr-1">
+                  <p className="truncate text-sm font-semibold text-[var(--sidebar-custom-fg)]">{isLoading ? "Carregando..." : userName}</p>
+                  <p className="truncate text-xs text-[var(--sidebar-custom-fg)]/60">{isLoading ? "" : getRoleLabel(role)}</p>
+                </div>
               </div>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={onLogout}
+                disabled={isLoading}
+                className="h-9 w-9 text-[var(--sidebar-custom-fg)]/60 hover:text-destructive hover:bg-destructive/10 active:bg-destructive/10 shrink-0 rounded-lg transition-colors"
+                aria-label="Sair da conta"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
             </div>
           </div>
         </SheetContent>
