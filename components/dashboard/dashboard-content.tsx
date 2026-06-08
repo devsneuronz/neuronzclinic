@@ -146,17 +146,18 @@ async function fetchAppointmentOptions() {
 
 function StatCard({ label, value, description, icon: Icon }: { label: string; value: string; description: string; icon: typeof Calendar }) {
   return (
-    <Card className="border-border bg-card shadow-sm">
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between">
-          <div className="rounded-lg bg-primary/10 p-2.5 text-primary">
-            <Icon className="h-5 w-5" />
-          </div>
+    <Card className="border border-border bg-card shadow-sm transition-all hover:shadow-md">
+      <CardContent className=" flex items-center justify-between gap-4">
+        <div className="space-y-1 min-w-0">
+          <p className="text-xs font-medium text-muted-foreground tracking-wide uppercase">{label}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">{value}</p>
+          <p className="text-xs text-muted-foreground truncate first-letter:uppercase" title={description}>
+            {description}
+          </p>
         </div>
-        <div className="mt-4">
-          <p className="text-3xl font-bold text-foreground">{value}</p>
-          <p className="mt-1 text-sm font-medium text-foreground">{label}</p>
-          <p className="text-xs text-muted-foreground">{description}</p>
+
+        <div className="rounded-xl bg-theme-primary/30 p-2.5 text-theme-primary-fg shrink-0">
+          <Icon className="h-5 w-5" />
         </div>
       </CardContent>
     </Card>
@@ -165,53 +166,66 @@ function StatCard({ label, value, description, icon: Icon }: { label: string; va
 
 function DashboardAppointments({ appointments }: { appointments: CalendarAppointment[] }) {
   return (
-    <Card className="border-border bg-card shadow-sm">
-      <CardHeader className="pb-3">
+    <Card className="border border-border bg-card shadow-sm h-full flex flex-col overflow-hidden gap-0">
+      <CardHeader className="shrink-0 border-b border-border/40 gap-0">
         <div className="flex items-center gap-2">
-          <Calendar className="h-5 w-5 text-primary" />
-          <CardTitle className="text-lg font-semibold text-foreground">Próximas consultas de hoje</CardTitle>
+          <Calendar className="h-4 w-4 text-primary" />
+          <CardTitle className="text-base font-semibold text-foreground">Próximas consultas de hoje</CardTitle>
         </div>
       </CardHeader>
-      <CardContent>
-        {appointments.length === 0 ? (
-          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">Nenhuma consulta encontrada para hoje.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border">
-                  {["Hora", "Paciente", "Procedimento", "Profissional", "Status"].map((item) => (
-                    <th key={item} className="pb-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      {item}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {appointments.slice(0, 8).map((appointment) => {
-                  const normalizedStatus = normalizeStatus(appointment.status);
 
-                  return (
-                    <tr key={appointment.id} className="transition-colors hover:bg-muted/50">
-                      <td className="py-3 text-sm font-medium text-foreground">{formatTime(appointment.startDateTime)}</td>
-                      <td className="py-3">
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-8 w-8">
-                            <AvatarFallback className="bg-secondary text-xs text-secondary-foreground">{getInitials(appointment.patient)}</AvatarFallback>
-                          </Avatar>
-                          <span className="text-sm font-medium text-foreground">{appointment.patient}</span>
-                        </div>
-                      </td>
-                      <td className="py-3 text-sm text-muted-foreground">{appointment.type || "Consulta"}</td>
-                      <td className="py-3 text-sm text-muted-foreground">{appointment.professional}</td>
-                      <td className="py-3">
-                        <Badge className={cn("capitalize", statusStyles[normalizedStatus] || "bg-secondary text-secondary-foreground")}>{appointment.status || "Sem status"}</Badge>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      <div className="grid grid-cols-[80px_2fr_1.2fr_1.2fr_110px] border-b border-border bg-muted/20 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground max-md:hidden shrink-0 gap-4">
+        <span>Hora</span>
+        <span>Paciente</span>
+        <span>Procedimento</span>
+        <span>Profissional</span>
+        <span className="text-right">Status</span>
+      </div>
+
+      <CardContent className="flex-1 overflow-y-auto p-0 min-h-0 custom-scrollbar">
+        {appointments.length === 0 ? (
+          <div className="flex h-44 flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground p-6">
+            <Calendar className="h-8 w-8 text-muted-foreground/60 stroke-[1.5]" />
+            <p className="font-medium">Nenhuma consulta encontrada para hoje.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col w-full divide-y divide-border/60">
+            {appointments.slice(0, 10).map((appointment) => {
+              const normalizedStatus = normalizeStatus(appointment.status);
+
+              return (
+                <div key={appointment.id} className="flex flex-col md:grid md:grid-cols-[80px_2fr_1.2fr_1.2fr_110px] items-start md:items-center gap-2 md:gap-4 px-4 py-3.5 md:py-3 transition-colors hover:bg-muted/40 group">
+                  <div className="flex items-center gap-2 md:block shrink-0">
+                    <span className="text-xs font-bold uppercase text-muted-foreground md:hidden bg-muted px-1.5 py-0.5 rounded">Hora:</span>
+                    <span className="text-sm font-semibold text-foreground tracking-tight tabular-nums">{formatTime(appointment.startDateTime)}</span>
+                  </div>
+
+                  <div className="w-full min-w-0 flex items-center gap-2.5">
+                    <Avatar className="h-7 w-7 border border-border shrink-0">
+                      <AvatarFallback className="bg-secondary text-[10px] font-bold text-secondary-foreground">{getInitials(appointment.patient)}</AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">{appointment.patient}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 md:block w-full min-w-0">
+                    <span className="text-xs font-medium text-muted-foreground md:hidden">Procedimento:</span>
+                    <p className="text-sm text-muted-foreground truncate">{appointment.type || "Consulta"}</p>
+                  </div>
+
+                  <div className="flex items-center gap-2 md:block w-full min-w-0">
+                    <span className="text-xs font-medium text-muted-foreground md:hidden">Profissional:</span>
+                    <p className="text-sm text-muted-foreground truncate">{appointment.professional}</p>
+                  </div>
+
+                  <div className="flex items-center justify-between md:justify-end w-full md:w-auto pt-1 md:pt-0 border-t border-dashed border-border/60 md:border-none shrink-0">
+                    <span className="text-xs font-medium text-muted-foreground md:hidden">Status atual</span>
+                    <Badge variant="outline" className={cn("capitalize font-medium text-xs px-2 py-0.5 rounded-md border shadow-none", statusStyles[normalizedStatus] || "bg-secondary/40 text-secondary-foreground border-secondary")}>
+                      {appointment.status || "Sem status"}
+                    </Badge>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </CardContent>
@@ -221,49 +235,69 @@ function DashboardAppointments({ appointments }: { appointments: CalendarAppoint
 
 function PendingTasks({ tasks }: { tasks: Task[] }) {
   const allOpenTasks = tasks.filter((task) => task.status !== "finalizado");
-  const openTasks = allOpenTasks.slice(0, 4);
+  const openTasks = allOpenTasks.slice(0, 5); // Aumentado ligeiramente para preencher melhor a tela
 
   return (
-    <Card className="border-border bg-card shadow-sm">
-      <CardHeader className="pb-3">
+    <Card className="border border-border bg-card shadow-sm h-full flex flex-col overflow-hidden gap-0">
+      <CardHeader className="pb-3 shrink-0 border-b border-border/40 gap-0">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <CheckCircle className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg font-semibold text-foreground">Tarefas e pendências</CardTitle>
+            <CheckCircle className="h-4 w-4 text-primary" />
+            <CardTitle className="text-base font-semibold text-foreground">Tarefas e pendências</CardTitle>
           </div>
-          <Badge variant="secondary">{allOpenTasks.length}</Badge>
+          <Badge variant="secondary" className="rounded-full px-2 py-0.5 font-bold text-xs">
+            {allOpenTasks.length}
+          </Badge>
         </div>
       </CardHeader>
-      <CardContent>
+
+      <CardContent className="flex-1 overflow-y-auto p-4 min-h-0 custom-scrollbar">
         {openTasks.length === 0 ? (
-          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">Nenhuma pendência aberta.</div>
+          <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground border-dashed border-2 rounded-xl">Nenhuma pendência aberta.</div>
         ) : (
-          <div className="divide-y divide-border">
+          <div className="space-y-1.5 h-full flex flex-col items-center">
             {openTasks.map((task) => {
-              const dueDate = task.dueDate ? parseDateOnly(task.dueDate) ?? new Date(task.dueDate) : null;
+              const dueDate = task.dueDate ? (parseDateOnly(task.dueDate) ?? new Date(task.dueDate)) : null;
               const isLate = dueDate && !Number.isNaN(dueDate.getTime()) && isBefore(dueDate, startOfToday());
 
               return (
-                <div key={task.id} className="grid grid-cols-[1fr_auto] gap-3 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-foreground">{task.subject || task.type || "Tarefa sem assunto"}</p>
-                    <p className="mt-1 truncate text-xs text-muted-foreground">
-                      {task.patient || "Sem paciente"} · {task.responsible || "Sem responsável"}
+                <div key={task.id} className="flex items-start justify-between gap-3 p-2.5 rounded-lg border border-transparent hover:border-border hover:bg-muted/30 transition-all">
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm font-semibold text-foreground leading-snug">{task.subject || task.type || "Tarefa sem assunto"}</p>
+                    <p className="text-xs text-muted-foreground font-medium">
+                      {task.patient || "Sem paciente"} · <span className="opacity-80">{task.responsible || "Sem responsável"}</span>
                     </p>
-                    <div className="mt-2 flex items-center gap-2">
-                      <Badge className={task.status === "resolvendo" ? "bg-primary/10 text-primary" : "bg-warning/10 text-warning-foreground"}>{task.statusLabel || task.status}</Badge>
-                      <span className="truncate text-xs text-muted-foreground">{task.type}</span>
+                    <div className="flex items-center gap-2 pt-0.5">
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          "shadow-none text-[10px] font-bold px-1.5 py-0 rounded",
+                          task.status === "resolvendo" ? "bg-primary/10 text-primary border border-primary/20" : "bg-warning/10 text-warning-foreground border border-warning/20",
+                        )}
+                      >
+                        {task.statusLabel || task.status}
+                      </Badge>
+                      <span className="text-[11px] text-muted-foreground/70 truncate">{task.type}</span>
                     </div>
                   </div>
-                  <div className="pt-0.5">
-                    <Badge variant="outline" className={cn("shrink-0", isLate ? "border-destructive/30 text-destructive" : "text-muted-foreground")}>
+
+                  <div className="shrink-0 pt-0.5">
+                    <Badge
+                      variant="outline"
+                      className={cn("text-[10px] font-semibold tracking-wide px-2 py-0.5 rounded-md", isLate ? "bg-destructive/5 border-destructive/30 text-destructive font-bold" : "bg-muted/40 text-muted-foreground border-border")}
+                    >
                       {formatDateLabel(task.dueDate)}
                     </Badge>
                   </div>
                 </div>
               );
             })}
-            {allOpenTasks.length > openTasks.length ? <div className="pt-3 text-xs font-medium text-muted-foreground">+{allOpenTasks.length - openTasks.length} pendências no quadro de tarefas</div> : null}
+
+            {allOpenTasks.length > openTasks.length && (
+              <div className="pt-2 px-1 text-center lg:text-left">
+                <span className="inline-block text-xs font-semibold text-primary bg-primary/5 px-2 py-1 rounded-md border border-primary/10">+{allOpenTasks.length - openTasks.length} pendências no quadro geral</span>
+              </div>
+            )}
           </div>
         )}
       </CardContent>
@@ -423,16 +457,36 @@ export function DashboardContent() {
     });
     const pendingTasks = tasks.filter((task) => task.status !== "finalizado");
     const overdueTasks = pendingTasks.filter((task) => {
-      const date = task.dueDate ? parseDateOnly(task.dueDate) ?? new Date(task.dueDate) : null;
+      const date = task.dueDate ? (parseDateOnly(task.dueDate) ?? new Date(task.dueDate)) : null;
       return date && !Number.isNaN(date.getTime()) && isBefore(date, startOfToday());
     });
     const patients = new Set(appointments.map((appointment) => appointment.patient).filter(Boolean));
 
     return [
-      { label: "Consultas Hoje", value: String(todayAppointments.length), description: "agendamentos carregados", icon: Calendar },
-      { label: "Pacientes Hoje", value: String(patients.size), description: "pacientes com consulta", icon: Users },
-      { label: "Pendências", value: String(pendingTasks.length), description: `${overdueTasks.length} atrasadas`, icon: AlertCircle },
-      { label: "Em Atendimento", value: String(tasks.filter((task) => task.status === "resolvendo").length), description: "tarefas em resolução", icon: Clock },
+      {
+        label: "Consultas Hoje",
+        value: String(todayAppointments.length),
+        description: todayAppointments.length === 1 ? "agendamento carregado" : "agendamentos carregados",
+        icon: Calendar,
+      },
+      {
+        label: "Pacientes Hoje",
+        value: String(patients.size),
+        description: patients.size === 1 ? "paciente com consulta" : "pacientes com consulta",
+        icon: Users,
+      },
+      {
+        label: "Pendências",
+        value: String(pendingTasks.length),
+        description: `${overdueTasks.length} ${overdueTasks.length === 1 ? "atrasada" : "atrasadas"}`,
+        icon: AlertCircle,
+      },
+      {
+        label: "Em Atendimento",
+        value: String(tasks.filter((t) => t.status === "resolvendo").length),
+        description: tasks.filter((t) => t.status === "resolvendo").length === 1 ? "tarefa em resolução" : "tarefas em resolução",
+        icon: Clock,
+      },
     ];
   }, [appointments, tasks]);
 
@@ -450,78 +504,91 @@ export function DashboardContent() {
 
   return (
     <div className="flex h-full bg-background">
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col h-full overflow-hidden">
         <Header onCreateAppointment={() => void openAppointmentDialog()} />
 
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="mx-auto max-w-7xl space-y-6">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
+        <main className="flex-1 h-auto overflow-y-auto lg:h-full lg:overflow-hidden p-4 sm:p-6 flex flex-col min-h-0">
+          <div className="mx-auto w-full max-w-7xl flex flex-col h-auto lg:h-full min-h-0 space-y-4 sm:space-y-6">
+            <div className="flex flex-wrap gap-3 justify-between items-end shrink-0">
+              <div className="min-w-0">
                 <p className="text-sm text-muted-foreground">Visão operacional de hoje</p>
-                <h2 className="text-2xl font-semibold tracking-normal text-foreground">{format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}</h2>
+                <h2 className="text-xl sm:text-2xl font-semibold tracking-normal text-foreground first-letter:uppercase">{format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}</h2>
               </div>
-              <Button variant="outline" className="bg-background" onClick={() => loadData({ refresh: true })} disabled={isLoading || isRefreshing}>
+              <Button variant="outline" className="h-10.5 shrink-0" onClick={() => loadData({ refresh: true })} disabled={isLoading || isRefreshing}>
                 {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                Atualizar
+                <span className="hidden md:inline ml-2">Atualizar</span>
               </Button>
             </div>
 
-            {errorMessage ? (
-              <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                <AlertCircle className="h-4 w-4" />
-                {errorMessage}
+            {(errorMessage || successMessage) && (
+              <div className="shrink-0 space-y-2">
+                {errorMessage ? (
+                  <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{errorMessage}</span>
+                  </div>
+                ) : null}
+                {successMessage ? (
+                  <div className="flex items-center gap-2 rounded-md border border-success/25 bg-success/5 px-3 py-2 text-sm text-success">
+                    <CheckCircle className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{successMessage}</span>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-            {successMessage ? (
-              <div className="flex items-center gap-2 rounded-md border border-success/25 bg-success/5 px-3 py-2 text-sm text-success">
-                <CheckCircle className="h-4 w-4" />
-                {successMessage}
-              </div>
-            ) : null}
+            )}
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4 shrink-0">
               {stats.map((stat) => (
                 <StatCard key={stat.label} {...stat} />
               ))}
             </div>
 
-            {isLoading ? (
-              <div className="flex min-h-80 items-center justify-center rounded-lg border border-dashed">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Carregando dashboard
+            <div className="flex-1 min-h-0 w-full h-auto lg:h-full">
+              {isLoading ? (
+                <div className="flex h-64 lg:h-full items-center justify-center rounded-lg border border-dashed">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Carregando dashboard
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="grid gap-6 lg:grid-cols-3">
-                <div className="lg:col-span-2">
-                  <DashboardAppointments appointments={appointments} />
-                </div>
+              ) : (
+                <div className="grid gap-4 sm:gap-6 lg:grid-cols-3 h-auto lg:h-full min-h-0 lg:overflow-hidden pb-6 lg:pb-0">
+                  <div className="lg:col-span-2 flex flex-col h-auto lg:h-full lg:min-h-0 overflow-visible lg:overflow-hidden">
+                    <div className="flex-1 lg:overflow-y-auto rounded-xl">
+                      <DashboardAppointments appointments={appointments} />
+                    </div>
+                  </div>
 
-                <div className="space-y-6 lg:col-span-1">
-                  <PendingTasks tasks={tasks} />
+                  <div className="lg:col-span-1 flex flex-col gap-4 sm:gap-6 h-auto lg:h-full lg:min-h-0">
+                    <div className="h-full overflow-visible lg:overflow-hidden flex flex-col">
+                      <PendingTasks tasks={tasks} />
+                    </div>
 
-                  <Card className="border-border bg-card shadow-sm">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center gap-2">
-                        <Bot className="h-5 w-5 text-primary" />
-                        <CardTitle className="text-lg font-semibold text-foreground">Resumo de atividades</CardTitle>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        {recentActivity.map((item, index) => (
-                          <div key={item} className="flex items-start gap-3">
-                            <div className="rounded-lg bg-primary/10 p-2 text-primary">{index === 0 ? <Calendar className="h-4 w-4" /> : index === 1 ? <Stethoscope className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}</div>
-                            <p className="pt-1 text-sm font-medium text-foreground">{item}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
+                    <Card className="h-fit flex flex-col border-border bg-card shadow-sm gap-0 overflow-visible">
+                      <CardHeader className="pb-3 shrink-0 gap-0">
+                        <div className="flex items-center gap-2">
+                          <Bot className="h-5 w-5 text-primary" />
+                          <CardTitle className="text-base sm:text-lg font-semibold text-foreground">Resumo de atividades</CardTitle>
+                        </div>
+                      </CardHeader>
+
+                      <CardContent className=" lg:overflow-y-auto">
+                        <div className="space-y-3">
+                          {recentActivity.map((item, index) => (
+                            <div key={item} className="flex items-start gap-3">
+                              <div className="rounded-lg bg-primary/10 p-2 text-primary shrink-0">
+                                {index === 0 ? <Calendar className="h-4 w-4" /> : index === 1 ? <Stethoscope className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                              </div>
+                              <p className="pt-1 text-sm font-medium text-foreground leading-tight">{item}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </main>
       </div>
