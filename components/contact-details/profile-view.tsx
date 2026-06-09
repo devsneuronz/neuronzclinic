@@ -1266,7 +1266,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
         </div>
       </div>
 
-      <Tabs value={bottomTab} onValueChange={(value) => setBottomTab(value)} className="flex flex-col flex-1 overflow-hidden gap-0 border-t border-border">
+      <Tabs value={bottomTab} onValueChange={(value) => setBottomTab(value as "consultas" | "avisos")} className="flex flex-col flex-1 overflow-hidden gap-0 border-t border-border">
         <div className="bg-card py-3 px-4 border-b border-border shrink-0 flex justify-center">
           <TabsList className="w-full gap-1.5 rounded-full h-11! bg-secondary/50 border border-border/40">
             <TabsTrigger
