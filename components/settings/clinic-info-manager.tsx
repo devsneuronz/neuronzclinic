@@ -8,8 +8,9 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { getReadableTextColor } from "@/lib/chat-tags";
 import type { ClinicAssistantInfo, ClinicInfoPayload, ClinicProcedure } from "@/lib/clinic-info";
-import { Check, Loader2, Pencil, Plus, RefreshCw, Save, Trash2, X } from "lucide-react";
+import { Check, Loader2, Pencil, Plus, RefreshCw, Save, Stethoscope, Trash2, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
 type EditableProcedure = ClinicProcedure & {
   draftName: string;
@@ -235,8 +236,8 @@ export function ClinicInfoManager() {
   }
 
   return (
-    <div className="space-y-6 pb-4">
-      <section className="rounded-xl border border-border bg-muted/20 p-4 sm:p-5 shadow-sm transition-all">
+    <div className="space-y-6">
+      <section className="rounded-xl border border-border bg-card p-4 sm:p-5 transition-all">
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">{assistantDraft.name || "Lia"}</h2>
@@ -289,13 +290,15 @@ export function ClinicInfoManager() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-border bg-card p-4 sm:p-5 shadow-sm">
+      <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
         <div className="mb-5 flex items-center justify-between border-b border-border/60 pb-3">
           <div>
             <h2 className="text-lg font-semibold text-foreground">Informações de Procedimentos</h2>
             <p className="text-sm text-muted-foreground">Explicações que a IA usará para detalhar tratamentos e interesses.</p>
           </div>
-          <span className="text-xs font-semibold text-muted-foreground bg-muted px-2.5 py-1 rounded-full shrink-0">{sortedProcedures.length} cadastrados</span>
+          <span className="text-xs font-semibold text-muted-foreground bg-muted px-2.5 py-1 rounded-full shrink-0">
+            {sortedProcedures.length} <span className="hidden md:inline">cadastrados</span>
+          </span>
         </div>
 
         <form onSubmit={createProcedure} className="mb-6 grid gap-3 rounded-xl border border-border bg-muted/40 p-4 lg:grid-cols-[1fr_1fr_2fr_auto] lg:items-end">
@@ -347,107 +350,160 @@ export function ClinicInfoManager() {
           </Button>
         </form>
 
-        <div className="hidden border-b border-border pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground md:grid md:grid-cols-[12rem_12rem_minmax(0,1fr)_6rem] px-4 mb-2">
-          <span>Procedimento</span>
-          <span>Código de Interesse</span>
-          <span>Descrição contextualizada</span>
-          <span className="text-right">Ações</span>
-        </div>
-
-        {sortedProcedures.length > 0 ? (
-          <div className="space-y-2.5">
-            {sortedProcedures.map((procedure) => {
-              const isSaving = savingId === procedure.id;
-              const interestStyle = procedure.interestColor ? { backgroundColor: procedure.interestColor, color: getReadableTextColor(procedure.interestColor) } : undefined;
-
-              return (
-                <article key={procedure.id} className="rounded-lg border border-border bg-background shadow-sm overflow-hidden transition-colors hover:border-border/80">
-                  {procedure.isEditing ? (
-                    <div className="grid gap-3 p-4 lg:grid-cols-[12rem_12rem_minmax(0,1fr)_auto] lg:items-start">
-                      <div className="space-y-2">
-                        <Label className="text-xs text-muted-foreground md:hidden">Nome</Label>
-                        <Input value={procedure.draftName} onChange={(event) => updateDraft(procedure.id, { draftName: event.target.value })} disabled={isSaving} className="h-9" />
-                        <div className="flex items-center gap-2 pt-1">
-                          <Switch checked={procedure.draftActive} onCheckedChange={(checked) => updateDraft(procedure.id, { draftActive: checked })} disabled={isSaving} />
-                          <span className="text-xs text-muted-foreground font-medium">{procedure.draftActive ? "Visível / Ativo" : "Inativo"}</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label className="text-xs text-muted-foreground md:hidden">Interesse</Label>
-                        <Input value={procedure.draftInterest} onChange={(event) => updateDraft(procedure.id, { draftInterest: event.target.value })} disabled={isSaving} className="h-9 font-mono text-xs uppercase" />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label className="text-xs text-muted-foreground md:hidden">Descrição</Label>
-                        <Textarea
-                          value={procedure.draftDescription}
-                          onChange={(event) => updateDraft(procedure.id, { draftDescription: event.target.value })}
-                          className="min-h-[80px] lg:min-h-[36px] resize-y leading-relaxed text-sm"
-                          disabled={isSaving}
-                        />
-                      </div>
-
-                      <div className="flex justify-end gap-1.5 pt-2 lg:pt-1">
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          onClick={() => void saveProcedure(procedure)}
-                          disabled={isSaving || (!procedure.draftName.trim() && !procedure.draftInterest.trim()) || !procedure.draftDescription.trim()}
-                          aria-label="Salvar"
-                        >
-                          {isSaving ? <Loader2 className="animate-spin w-4 h-4" /> : <Check className="w-4 h-4" />}
-                        </Button>
-                        <Button type="button" variant="outline" size="icon-sm" onClick={() => cancelEdit(procedure)} disabled={isSaving} aria-label="Cancelar">
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col p-4 gap-3 md:grid md:grid-cols-[12rem_12rem_minmax(0,1fr)_6rem] md:items-center md:min-h-12 md:p-0">
-                      <div className="flex items-center justify-between md:contents">
-                        <div className="flex items-center text-sm font-semibold text-foreground md:px-4 md:py-2 md:border-r md:border-border/40">
-                          <span className={`inline-block w-2 h-2 rounded-full mr-2.5 shrink-0 ${procedure.active ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
-                          <span className="truncate max-w-[200px] md:max-w-full">{procedure.name || "Sem Nome"}</span>
-                        </div>
-
-                        <div className="flex items-center gap-1 shrink-0 md:order-last md:px-3 md:justify-end">
-                          <Button type="button" variant="ghost" size="icon-sm" onClick={() => updateDraft(procedure.id, { isEditing: true })} disabled={isSaving} className="h-8 w-8 hover:bg-muted" aria-label="Editar">
-                            <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => setDeleteTarget(procedure)}
-                            disabled={isSaving}
-                            className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            aria-label="Excluir"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center md:px-4 md:border-r md:border-border/40">
-                        <span
-                          className="inline-flex items-center rounded px-2.5 py-0.5 text-xs font-mono font-medium uppercase border border-border/30 max-w-fit shadow-xs"
-                          style={interestStyle || { backgroundColor: "var(--secondary)", color: "var(--secondary-foreground)" }}
-                        >
-                          {procedure.interest || "Nenhum"}
-                        </span>
-                      </div>
-
-                      <div className="text-sm leading-relaxed text-muted-foreground md:text-foreground md:px-4 md:py-3 whitespace-pre-wrap">{procedure.description}</div>
-                    </div>
-                  )}
-                </article>
-              );
-            })}
+        <div className="flex flex-col bg-card rounded-xl border border-border shadow-sm overflow-hidden min-h-0">
+          <div className="grid grid-cols-[14rem_12rem_minmax(0,1fr)_6.5rem] border-b border-border bg-muted/20 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground max-md:hidden shrink-0 gap-3">
+            <span>Nome</span>
+            <span>Código de Interesse</span>
+            <span>Descrição contextualizada</span>
+            <span className="text-right">Ações</span>
           </div>
-        ) : (
-          <div className="flex h-36 items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground bg-muted/20">Nenhum procedimento cadastrado no momento.</div>
-        )}
+
+          {isLoading ? (
+            <div className="flex h-44 items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin text-theme-primary" />
+              <span>Carregando procedimentos...</span>
+            </div>
+          ) : sortedProcedures.length === 0 ? (
+            <div className="flex h-44 flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground p-6">
+              <Stethoscope className="h-8 w-8 text-muted-foreground/60 stroke-[1.5]" />
+              <p className="font-medium">Nenhum procedimento cadastrado no momento.</p>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto min-h-0 w-full custom-scrollbar">
+              <div className="flex flex-col w-full divide-y divide-border">
+                {sortedProcedures.map((procedure) => {
+                  const isSaving = savingId === procedure.id;
+                  const interestStyle = procedure.interestColor ? { backgroundColor: procedure.interestColor, color: getReadableTextColor(procedure.interestColor) } : undefined;
+
+                  return (
+                    <article key={procedure.id} className="w-full transition-colors bg-background/50">
+                      {procedure.isEditing ? (
+                        <div className="grid gap-4 items-start md:items-center p-4 md:grid-cols-[14rem_12rem_minmax(0,1fr)_6.5rem] md:gap-3">
+                          <div className="space-y-2 w-full min-w-0 mt-7.75">
+                            <Label className="text-xs text-muted-foreground md:hidden">Nome</Label>
+                            <Input value={procedure.draftName} onChange={(event) => updateDraft(procedure.id, { draftName: event.target.value })} disabled={isSaving} className="h-9" placeholder="Ex.: Ativo" />
+                            <div className="flex items-center gap-2 pt-1">
+                              <Switch checked={procedure.draftActive} onCheckedChange={(checked) => updateDraft(procedure.id, { draftActive: checked })} disabled={isSaving} />
+                              <span className="text-xs text-muted-foreground font-medium">{procedure.draftActive ? "Visível / Ativo" : "Inativo"}</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2 w-full min-w-0">
+                            <Label className="text-xs text-muted-foreground md:hidden">Interesse</Label>
+                            <Input
+                              value={procedure.draftInterest}
+                              onChange={(event) => updateDraft(procedure.id, { draftInterest: event.target.value })}
+                              disabled={isSaving}
+                              className="h-9 font-mono text-xs uppercase"
+                              placeholder="Ex.: TXHM"
+                            />
+                          </div>
+
+                          <div className="space-y-2 w-full min-w-0">
+                            <Label className="text-xs text-muted-foreground md:hidden">Descrição</Label>
+                            <Textarea
+                              value={procedure.draftDescription}
+                              onChange={(event) => updateDraft(procedure.id, { draftDescription: event.target.value })}
+                              className="min-h-[58px] max-h-150 resize-y leading-relaxed text-sm custom-scrollbar"
+                              disabled={isSaving}
+                              placeholder="Instruções sobre este procedimento..."
+                            />
+                          </div>
+
+                          <div className="flex justify-end gap-1.5 pt-2 md:pt-0 shrink-0">
+                            <Button
+                              type="button"
+                              size="icon-sm"
+                              onClick={() => void saveProcedure(procedure)}
+                              disabled={isSaving || (!procedure.draftName.trim() && !procedure.draftInterest.trim()) || !procedure.draftDescription.trim()}
+                              aria-label="Salvar"
+                            >
+                              {isSaving ? <Loader2 className="animate-spin w-4 h-4" /> : <Check className="w-4 h-4" />}
+                            </Button>
+                            <Button type="button" variant="outline" size="icon-sm" onClick={() => cancelEdit(procedure)} disabled={isSaving} aria-label="Cancelar">
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col p-4 gap-2 md:grid md:grid-cols-[14rem_12rem_minmax(0,1fr)_6.5rem] md:items-center md:py-3.5 md:px-4 md:gap-3">
+                          <div className="flex items-center justify-between md:justify-start gap-2 min-w-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <TooltipProvider delayDuration={200}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center justify-center p-0.5 shrink-0">
+                                      <span className="relative flex h-2 w-2 rounded-full">
+                                        {procedure.active ? (
+                                          <>
+                                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                                            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+                                          </>
+                                        ) : (
+                                          <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500/40"></span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="text-xs font-medium px-2 py-1">
+                                    {procedure.active ? "Procedimento ativo" : "Procedimento inativo"}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+
+                              <span className="text-sm font-semibold text-foreground truncate">{procedure.name || "Sem Nome"}</span>
+                            </div>
+
+                            <div className="flex items-center gap-1 md:hidden shrink-0">
+                              <Button type="button" variant="ghost" size="icon-sm" onClick={() => updateDraft(procedure.id, { isEditing: true })} disabled={isSaving} className="h-8 w-8" aria-label="Editar">
+                                <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                              </Button>
+                              <Button type="button" variant="ghost" size="icon-sm" onClick={() => setDeleteTarget(procedure)} disabled={isSaving} className="h-8 w-8 text-destructive" aria-label="Excluir">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center md:block shrink-0">
+                            <span className="text-xs font-medium text-muted-foreground md:hidden mr-2">Interesse:</span>
+                            <span
+                              className="inline-flex items-center rounded px-2.5 py-0.5 text-xs font-mono font-bold uppercase border border-border/30 max-w-fit shadow-2xs"
+                              style={interestStyle || { backgroundColor: "var(--secondary)", color: "var(--secondary-foreground)" }}
+                            >
+                              {procedure.interest || "Nenhum"}
+                            </span>
+                          </div>
+
+                          <div className="w-full min-w-0">
+                            <span className="text-xs font-medium text-muted-foreground md:hidden block mb-0.5">Descrição:</span>
+                            <div className="text-sm leading-relaxed text-muted-foreground md:text-foreground whitespace-pre-wrap truncate md:max-w-prose lg:max-w-none">{procedure.description}</div>
+                          </div>
+
+                          <div className="hidden md:flex items-center justify-end gap-1 shrink-0">
+                            <Button type="button" variant="ghost" size="icon-sm" onClick={() => updateDraft(procedure.id, { isEditing: true })} disabled={isSaving} className="h-8 w-8 hover:bg-muted" aria-label="Editar">
+                              <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => setDeleteTarget(procedure)}
+                              disabled={isSaving}
+                              className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              aria-label="Excluir"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
       </section>
 
       <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>

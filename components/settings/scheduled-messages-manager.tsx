@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cancelScheduledMessage, fetchChats, fetchScheduledMessages, updateScheduledMessage, type ChatRecord, type ScheduledMessageRecord } from "@/lib/supabase-rest";
-import { CalendarClock, PenLine, Search, Trash2 } from "lucide-react";
+import { CalendarClock, Pen, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { EditingScheduledDialog } from "../chat/edit-scheduled-dialog";
 
@@ -169,7 +169,7 @@ export function ScheduledMessagesManager() {
                       <Badge variant={message.status === "failed" ? "destructive" : "secondary"}>{message.status}</Badge>
 
                       <Button type="button" size="icon-sm" variant="ghost" className="text-muted-foreground hover:text-teal-500" onClick={() => setEditingMessage(message)} aria-label="Editar agendamento">
-                        <PenLine className="h-4 w-4" />
+                        <Pen className="h-4 w-4" />
                       </Button>
 
                       <Button

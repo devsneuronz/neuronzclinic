@@ -235,7 +235,7 @@ function DashboardAppointments({ appointments }: { appointments: CalendarAppoint
 
 function PendingTasks({ tasks }: { tasks: Task[] }) {
   const allOpenTasks = tasks.filter((task) => task.status !== "finalizado");
-  const openTasks = allOpenTasks.slice(0, 5); // Aumentado ligeiramente para preencher melhor a tela
+  const openTasks = allOpenTasks.slice(0, 5);
 
   return (
     <Card className="border border-border bg-card shadow-sm h-full flex flex-col overflow-hidden gap-0">
@@ -261,7 +261,7 @@ function PendingTasks({ tasks }: { tasks: Task[] }) {
               const isLate = dueDate && !Number.isNaN(dueDate.getTime()) && isBefore(dueDate, startOfToday());
 
               return (
-                <div key={task.id} className="flex items-start justify-between gap-3 p-2.5 rounded-lg border border-transparent hover:border-border hover:bg-muted/30 transition-all">
+                <div key={task.id} className="w-full flex items-start justify-between gap-3 p-2.5 m-0 rounded-lg border border-transparent hover:border-border hover:bg-muted/30 transition-all">
                   <div className="min-w-0 space-y-1">
                     <p className="text-sm font-semibold text-foreground leading-snug">{task.subject || task.type || "Tarefa sem assunto"}</p>
                     <p className="text-xs text-muted-foreground font-medium">
