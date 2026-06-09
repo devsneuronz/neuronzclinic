@@ -204,14 +204,13 @@ export function MessageList({
           )}
         </div>
         {!isInternalNoteOpen && <ScheduledMessagesStrip messages={messages} onCancel={onCancel} onUpdate={onUpdate} />}
+        {showScrollButton && (
+          <Button size="icon" variant="outline" onClick={onScrollToLastMessage} className="sticky bottom-2 left-1/2 -translate-x-2/3 rounded-full backdrop-blur-sm transition-all active:scale-95 animate-in fade-in zoom-in-95">
+            <ArrowDown className="h-4 w-4 stroke-[2.5]" />
+          </Button>
+        )}
         <div ref={bottomRef} />
       </div>
-
-      {showScrollButton && (
-        <Button size="icon" variant="outline" onClick={onScrollToLastMessage} className="absolute bottom-18 left-1/2 -translate-x-2/3 rounded-full backdrop-blur-sm transition-all active:scale-95 animate-in fade-in zoom-in-95">
-          <ArrowDown className="h-4 w-4 stroke-[2.5]" />
-        </Button>
-      )}
     </>
   );
 }
