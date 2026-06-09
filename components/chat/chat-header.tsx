@@ -99,7 +99,8 @@ export function ChatHeader({
 
           <div className="flex items-center gap-2">
             {
-              <Button type="button" variant="outline" size="icon" className="border-2 shadow-sm transition-all text-xs text-foreground cursor-pointer gap-1.5" onClick={onOpenIATraining}>
+              <Button type="button" variant="outline" className="w-9 h-9 md:w-fit md:px-4 md:py-2 border-2 shadow-sm transition-all text-xs text-foreground cursor-pointer gap-1.5" onClick={onOpenIATraining}>
+                <span className="hidden md:inline">Treinar IA</span>
                 <Bot className="h-4 w-4" />
               </Button>
             }

@@ -626,6 +626,8 @@ export function ChatWindow({
     }
   }
 
+  const focusInputRef = useRef<() => void>(() => {});
+
   async function handleSubmit(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
 
@@ -655,6 +657,8 @@ export function ChatWindow({
     } finally {
       setIsSending(false);
     }
+
+    focusInputRef.current();
   }
 
   async function handleScheduleMessage(scheduledAt: string) {
@@ -1267,6 +1271,9 @@ export function ChatWindow({
               onSaveInternalNote={saveInternalNote}
               onScheduleMessage={handleScheduleMessage}
               isSignatureMode={isSignatureMode}
+              onRegisterFocus={(focusFn) => {
+                focusInputRef.current = focusFn;
+              }}
             />
           </Panel>
         </Group>

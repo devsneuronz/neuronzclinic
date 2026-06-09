@@ -10,7 +10,7 @@ import type { MentionableUser } from "@/lib/user-roles";
 import { cn } from "@/lib/utils";
 import { Camera, Check, FileAudio, FileImage, FileText, Loader2, MapPin, MessageSquareText, Mic, Paperclip, Pause, Pin, Reply, Send, StickyNote, Trash2, UserRound, Video, X } from "lucide-react";
 import type { FormEvent, RefObject } from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Textarea } from "../ui/textarea";
 import { getAttachmentLabel } from "./chat-attachment-utils";
 import { formatTime, getDisplayName, getMediaKind, getMessagePreviewText } from "./message-utils";
@@ -44,6 +44,7 @@ type ChatComposerProps = {
   isSignatureMode: boolean;
 
   onSubmit: (event?: FormEvent<HTMLFormElement>) => void;
+  onRegisterFocus?: (focusFn: () => void) => void;
   onDraftChange: (value: string) => void;
   onOpenAttachmentPreview: () => void;
   onRemoveAttachment: () => void;
@@ -83,6 +84,7 @@ export function ChatComposer({
   savedAttachments,
   isLoadingSavedAttachments,
   onSubmit,
+  onRegisterFocus,
   onDraftChange,
   onOpenAttachmentPreview,
   onRemoveAttachment,
@@ -169,6 +171,20 @@ export function ChatComposer({
       event.currentTarget.form?.requestSubmit();
     }
   };
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (onRegisterFocus) {
+      onRegisterFocus(() => {
+        setTimeout(() => {
+          textareaRef.current?.focus();
+        }, 10);
+      });
+    }
+  }, [onRegisterFocus]);
+
+  const [isInputActive, setIsInputActive] = useState(false);
 
   return (
     <form onSubmit={onSubmit} className="flex h-full flex-col border-t border-border bg-card px-4 py-3">
@@ -417,12 +433,15 @@ export function ChatComposer({
                 {isSignatureMode && !attachment && <span className="shrink-0 select-none rounded-md text-xs py-1.5 px-2 ml-2 bg-theme-primary text-theme-primary-fg font-bold">{userName}</span>}
 
                 <Textarea
+                  ref={textareaRef}
                   onKeyDown={handleKeyDown}
                   value={draft}
                   onChange={(event) => onDraftChange(event.target.value)}
                   disabled={isSending}
                   placeholder={attachment ? "Legenda opcional" : "Digite uma mensagem..."}
-                  className={cn("custom-scrollbar flex-1 border-0 bg-input/50 resize-none transition-[color,box-shadow] h-full w-0 min-h-0", isMobile ? "rounded-[20px] pr-7" : "rounded-md")}
+                  className={cn("custom-scrollbar flex-1 border-0 bg-input/50 resize-none transition-[color,box-shadow] h-full w-0 min-h-0", isInputActive && "ring-3 ring-ring/50", isMobile ? "rounded-[20px] pr-7" : "rounded-md")}
+                  onFocus={() => setIsInputActive(true)}
+                  onBlur={() => setIsInputActive(false)}
                 />
                 {isMobile && (
                   <DropdownMenu>
