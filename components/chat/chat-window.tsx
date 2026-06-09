@@ -12,13 +12,13 @@ import {
   deleteChatNote,
   fetchChatNotes,
   fetchChats,
-  fetchScheduledMessages,
   fetchSavedAttachments,
+  fetchScheduledMessages,
   scheduleMessage,
   updateScheduledMessage,
   type ChatNoteRecord,
-  type ScheduledMessageRecord,
   type SavedAttachmentRecord,
+  type ScheduledMessageRecord,
 } from "@/lib/supabase-rest";
 import { fetchMentionableUsers } from "@/lib/user-mentions";
 import type { MentionableUser } from "@/lib/user-roles";
@@ -1225,7 +1225,7 @@ export function ChatWindow({
             />
           </Panel>
           <Separator className="h-1.25 bg-(--chat-muted)/50 transition-colors hover:bg-theme-primary/50 border-t " />
-          <Panel id="message-panel" defaultSize={composerMinSize} minSize={composerMinSize} maxSize={composerMaxSize} className="bg-(--chat-card) border-l border-(--chat-muted) overflow-visible!">
+          <Panel id="message-panel" defaultSize={composerMinSize} minSize={composerMinSize} maxSize={composerMaxSize} className="bg-(--chat-card) overflow-visible!">
             <ChatComposer
               chat={chat}
               draft={draft}

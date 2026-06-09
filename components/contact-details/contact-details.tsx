@@ -6,13 +6,14 @@ import { getChatStatusColor, type ChatStatusOption } from "@/lib/chat-status";
 import type { ChatTag } from "@/lib/chat-tags";
 import { ChatRecord } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
-import { Bot, Check, CheckCheck, ChevronDown, ChevronLeft, MessageSquareDashed, Pencil, Phone, X } from "lucide-react";
+import { Bot, Check, CheckCheck, ChevronDown, ChevronLeft, Copy, MessageSquareDashed, Pencil, Phone, X } from "lucide-react";
 import { useState } from "react";
+import { ExpandedImageModal } from "../chat/expanded-image-modal";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
-import { ExpandedImageModal } from "../chat/expanded-image-modal";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { IATrainingView } from "./ia-training-view";
 import { ProfileView, type ContactInfoValues } from "./profile-view";
 
@@ -77,6 +78,8 @@ export function ContactDetails({
   const [expandedContactPhoto, setExpandedContactPhoto] = useState<{ url: string; alt: string } | null>(null);
   const hasContactPhoto = !!chat?.url_foto_perfil;
 
+  const [copied, setCopied] = useState(false);
+
   async function handleEditNameToggle() {
     if (!isEditingName) {
       setEditNameValue(getDisplayName(chat));
@@ -102,6 +105,18 @@ export function ContactDetails({
     }
   }
 
+  const handleCopyPhone = async () => {
+    if (!contactPhone) return;
+
+    try {
+      await navigator.clipboard.writeText(contactPhone);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000); // Reseta o ícone após 2 segundos
+    } catch (err) {
+      console.error("Falha ao copiar o telefone: ", err);
+    }
+  };
+
   return (
     <div className="flex h-full w-full flex-col border-l border-border bg-card">
       <div className="flex items-center gap-4 border-b border-border px-4 py-3 h-15.25">
@@ -116,7 +131,7 @@ export function ContactDetails({
       <div className="flex-1 overflow-y-auto">
         <div className="w-full h-18 rounded-b-3xl bg-radial-[80%_480%_at_17%_100%] from-transparent to-background/60" style={{ backgroundColor: getChatStatusColor(chat) }}></div>
         <div className="flex flex-col p-4">
-          <div className="flex flex-col w-full -mt-12">
+          <div className="flex flex-row justify-between w-full -mt-12">
             {/* Avatar e Status */}
             <div className="flex flex-row gap-3 items-center ">
               {/* AVatar */}
@@ -153,9 +168,48 @@ export function ContactDetails({
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="secondary"
+                      type="button"
+                      onClick={onMarkAsRead}
+                      aria-label="Marcar conversa como lida"
+                      className=" border border-border/50  p-3 text-xs font-medium text-muted-foreground transition-all hover:bg-background hover:text-foreground active:scale-[0.97]"
+                    >
+                      <CheckCheck className="h-4 w-4 text-blue-500" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" align="center">
+                    <p className="text-xs font-medium">Marcar como lido</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="secondary"
+                      type="button"
+                      onClick={onMarkAsUnread}
+                      aria-label="Marcar conversa como não lida"
+                      className=" border border-border/50  p-3 text-xs font-medium text-muted-foreground transition-all hover:bg-background hover:text-foreground active:scale-[0.97]"
+                    >
+                      <MessageSquareDashed className="h-4 w-4 text-muted-foreground/60" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" align="end">
+                    <p className="text-xs font-medium">Marcar como não lido</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
           </div>
           {/* (Nome, telefone) e IA */}
-          <div className="flex flex-row justify-between gap-4 pb-4 w-full min-w-0">
+          <div className="flex flex-row justify-between gap-4w-full min-w-0">
             {/* Nome e telefone */}
             <div className="flex flex-col justify-between gap-4 flex-1 min-w-0">
               {/* Nome */}
@@ -184,9 +238,20 @@ export function ContactDetails({
               </div>
 
               {/* Telefone */}
-              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-[-12px]">
-                <Phone className="h-3.5 w-3.5" />
-                <span className="text-xs"> {contactPhone}</span>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-[-12px] select-none">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Phone className="h-3.5 w-3.5 shrink-0" />
+                  <span className="text-xs truncate">{contactPhone}</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleCopyPhone}
+                  className="flex h-5 w-5 items-center justify-center rounded bg-muted/40 text-muted-foreground/60 border border-border/20 transition-all hover:bg-muted hover:text-foreground active:scale-95 shrink-0 "
+                  aria-label="Copiar número de telefone"
+                >
+                  {copied ? <Check className="h-3 w-3 text-green-500 animate-in fade-in zoom-in-75 duration-150" /> : <Copy className="h-3 w-3" />}
+                </button>
               </div>
             </div>
             {/* IA */}
@@ -206,26 +271,6 @@ export function ContactDetails({
                 <Switch checked={!!chat?.ia_responde} onCheckedChange={onToggleIA} />
               </div>
             </div>
-          </div>
-          {/* Funcoes */}
-          <div className="grid grid-cols-2 gap-2.5 w-full">
-            <button
-              type="button"
-              className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border/50 bg-secondary/30 p-3 text-xs font-medium text-muted-foreground transition-all hover:bg-secondary hover:text-foreground active:scale-[0.97]"
-              onClick={onMarkAsRead}
-            >
-              <CheckCheck className="h-4 w-4 text-blue-500" />
-              <span>Marcar como lido</span>
-            </button>
-
-            <button
-              type="button"
-              className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border/50 bg-secondary/30 p-3 text-xs font-medium text-muted-foreground transition-all hover:bg-secondary hover:text-foreground active:scale-[0.97]"
-              onClick={onMarkAsUnread}
-            >
-              <MessageSquareDashed className="h-4 w-4 text-muted-foreground/40" />
-              <span>Marcar como não lido</span>
-            </button>
           </div>
         </div>
 

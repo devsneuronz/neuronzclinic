@@ -1408,6 +1408,9 @@ export default function ChatsPage() {
     if (!selectedChat) return;
 
     const previousChat = selectedChat;
+
+    ghostUnreadCountByChatIdRef.current[selectedChat.id] = 0;
+
     updateSelectedChatUnreadCount(0);
     setError(undefined);
 
@@ -1415,6 +1418,8 @@ export default function ChatsPage() {
       await persistSelectedChatUnreadCount(0);
     } catch (err) {
       restoreSelectedChat(previousChat);
+      ghostUnreadCountByChatIdRef.current[previousChat.id] = previousChat.unread_count ?? 0;
+
       setError(err instanceof Error ? err.message : "Não foi possível marcar a conversa como lida.");
     }
   }, [persistSelectedChatUnreadCount, restoreSelectedChat, selectedChat, updateSelectedChatUnreadCount]);
@@ -1456,7 +1461,13 @@ export default function ChatsPage() {
 
     const previousChat = selectedChat;
     const unreadCount = Math.max(selectedChat.unread_count || 0, 1);
-    ghostUnreadCountByChatIdRef.current[selectedChat.id] = unreadCount;
+
+    if (effectiveGhostMode) {
+      ghostUnreadCountByChatIdRef.current[selectedChat.id] = unreadCount;
+    } else {
+      ghostUnreadCountByChatIdRef.current[selectedChat.id] = 0;
+    }
+
     updateSelectedChatUnreadCount(unreadCount);
     setError(undefined);
 
@@ -1464,9 +1475,14 @@ export default function ChatsPage() {
       await persistSelectedChatUnreadCount(unreadCount);
     } catch (err) {
       restoreSelectedChat(previousChat);
+
+      if (effectiveGhostMode) {
+        ghostUnreadCountByChatIdRef.current[previousChat.id] = previousChat.unread_count ?? 0;
+      }
+
       setError(err instanceof Error ? err.message : "Não foi possível marcar a conversa como não lida.");
     }
-  }, [persistSelectedChatUnreadCount, restoreSelectedChat, selectedChat, updateSelectedChatUnreadCount]);
+  }, [persistSelectedChatUnreadCount, restoreSelectedChat, selectedChat, updateSelectedChatUnreadCount, effectiveGhostMode]);
 
   useEffect(() => {
     if (!selectedChat || !effectiveGhostMode) return;
@@ -1479,6 +1495,8 @@ export default function ChatsPage() {
       return;
     }
 
+    if (rememberedUnreadCount === 0 && currentUnreadCount === 0) return;
+
     if (rememberedUnreadCount <= 0 || currentUnreadCount >= rememberedUnreadCount) return;
 
     updateSelectedChatUnreadCount(rememberedUnreadCount);
@@ -1489,6 +1507,12 @@ export default function ChatsPage() {
       setError(err instanceof Error ? err.message : "Não foi possível manter a conversa como não lida no modo espião.");
     });
   }, [effectiveGhostMode, selectedChat, updateSelectedChatUnreadCount]);
+
+  useEffect(() => {
+    if (!effectiveGhostMode) {
+      ghostUnreadCountByChatIdRef.current = {};
+    }
+  }, [effectiveGhostMode]);
 
   const updateSelectedChatTags = useCallback(
     (tags: ChatTag[]) => {
