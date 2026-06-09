@@ -418,6 +418,8 @@ export default function ChatsPage() {
   const chatIdFromUrl = searchParams.get("chatId");
   const targetChatId = chatIdFromUrl || storedTargetChatId;
 
+  const [trainingTrigger, setTrainingTrigger] = useState<number>(0);
+
   const [isSignatureMode, setIsAssinaturaMode] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("neuronzclinic.chat.use-signature");
@@ -1719,6 +1721,21 @@ export default function ChatsPage() {
     [restoreSelectedChat, selectedChat],
   );
 
+  const handleOpenIATraining = useCallback(() => {
+    setShowDetails(true);
+
+    if (!selectedChat?.ia_responde) {
+      handleToggleIA();
+
+      setTimeout(() => {
+        setTrainingTrigger(Date.now());
+      }, 180);
+      return;
+    }
+
+    setTrainingTrigger(Date.now());
+  }, [selectedChat, handleToggleIA]);
+
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 1024);
@@ -1774,6 +1791,7 @@ export default function ChatsPage() {
           onReorderTags={handleReorderTags}
           onCommitTagOrder={handleCommitTagOrder}
           isMobile={true}
+          trainingTrigger={trainingTrigger}
         />
       );
     }
@@ -1801,6 +1819,7 @@ export default function ChatsPage() {
         onToggleStatus={handleToggleStatus}
         isMobile={true}
         isSignatureMode={effectiveSignatureMode}
+        onOpenIATraining={handleOpenIATraining}
       />
     );
   }
@@ -1846,10 +1865,11 @@ export default function ChatsPage() {
             onDeleteMessages={handleDeleteMessages}
             forwardTargets={chats}
             error={error}
-            onToggleDetails={() => setShowDetails(!showDetails)}
+            onToggleDetails={() => [setShowDetails(!showDetails), handleOpenIATraining]}
             isDetailsOpen={showDetails}
             onToggleStatus={handleToggleStatus}
             isSignatureMode={effectiveSignatureMode}
+            onOpenIATraining={handleOpenIATraining}
           />
         </Panel>
 
@@ -1873,6 +1893,7 @@ export default function ChatsPage() {
                 onMarkAsUnread={handleMarkAsUnread}
                 onReorderTags={handleReorderTags}
                 onCommitTagOrder={handleCommitTagOrder}
+                trainingTrigger={trainingTrigger}
               />
             </Panel>
           </>

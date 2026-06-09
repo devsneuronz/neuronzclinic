@@ -7,7 +7,7 @@ import type { ChatTag } from "@/lib/chat-tags";
 import { ChatRecord } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 import { Bot, Check, CheckCheck, ChevronDown, ChevronLeft, Copy, MessageSquareDashed, Pencil, Phone, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ExpandedImageModal } from "../chat/expanded-image-modal";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
@@ -35,6 +35,7 @@ interface ContactDetailsProps {
   onReorderTags?: (tags: ChatTag[]) => void;
   onCommitTagOrder?: (tags: ChatTag[]) => void;
   isMobile?: boolean;
+  trainingTrigger?: number;
 }
 
 function getDisplayName(chat?: ChatRecord) {
@@ -66,6 +67,7 @@ export function ContactDetails({
   onChangeName,
   onChangeContactInfo,
   isMobile,
+  trainingTrigger,
 }: ContactDetailsProps) {
   const [view, setView] = useState<"profile" | "training">("profile");
   const contactPhone = getContactPhone(chat);
@@ -79,6 +81,12 @@ export function ContactDetails({
   const hasContactPhoto = !!chat?.url_foto_perfil;
 
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (trainingTrigger! > 0) {
+      setView("training");
+    }
+  }, [trainingTrigger]);
 
   async function handleEditNameToggle() {
     if (!isEditingName) {
@@ -258,9 +266,20 @@ export function ContactDetails({
             <div className="flex flex-col items-center gap-1 shrink-0">
               <Button
                 variant="outline"
-                disabled={!chat?.ia_responde}
-                className={cn("border-2 shadow-sm transition-all text-xs text-foreground", activeView !== "profile" && "text-(--chat-primary)", !chat?.ia_responde && "opacity-50")}
-                onClick={() => setView((prev) => (prev === "profile" ? "training" : "profile"))}
+                className={cn("border-2 shadow-sm transition-all text-xs text-foreground cursor-pointer", activeView !== "profile" && "text-(--chat-primary)")}
+                onClick={() => {
+                  if (!chat?.ia_responde) {
+                    onToggleIA();
+
+                    setTimeout(() => {
+                      setView((prev) => (prev === "profile" ? "training" : "profile"));
+                    }, 180);
+
+                    return;
+                  }
+
+                  setView((prev) => (prev === "profile" ? "training" : "profile"));
+                }}
               >
                 Treine sua IA
                 <Bot />

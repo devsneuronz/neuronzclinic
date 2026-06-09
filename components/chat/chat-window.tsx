@@ -57,6 +57,7 @@ interface ChatWindowProps {
   onToggleStatus: () => void;
   isDetailsOpen: boolean;
   isMobile?: boolean;
+  onOpenIATraining: () => void;
 
   isSignatureMode: boolean;
 }
@@ -155,6 +156,7 @@ export function ChatWindow({
   isDetailsOpen,
   isMobile,
   isSignatureMode,
+  onOpenIATraining,
 }: ChatWindowProps) {
   const [draft, setDraft] = useState("");
   const [draftChatId, setDraftChatId] = useState<string | null>(null);
@@ -1185,6 +1187,7 @@ export function ChatWindow({
           }}
           isMobile={isMobile}
           onCloseChat={onCloseChat}
+          onOpenIATraining={onOpenIATraining}
         />
         <Group orientation="vertical">
           <Panel>

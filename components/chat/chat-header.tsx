@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import type { ChatRecord } from "@/lib/supabase-rest";
-import { ChevronLeft, Forward, Info, Trash2, X } from "lucide-react";
+import { Bot, CheckCircle2, ChevronLeft, Forward, Info, RotateCcw, Trash2, X } from "lucide-react";
 import { getDisplayName } from "./message-utils";
 
 type ChatHeaderProps = {
@@ -20,9 +20,24 @@ type ChatHeaderProps = {
   onOpenContactPhoto?: () => void;
   isMobile?: boolean;
   onCloseChat?: () => void;
+  onOpenIATraining: () => void;
 };
 
-export function ChatHeader({ chat, isSelectionMode, selectedMessagesCount, canDeleteSelectedMessages, onClearSelection, onForwardSelected, onDeleteSelected, onToggleDetails, onToggleStatus, onOpenContactPhoto, isMobile, onCloseChat }: ChatHeaderProps) {
+export function ChatHeader({
+  chat,
+  isSelectionMode,
+  selectedMessagesCount,
+  canDeleteSelectedMessages,
+  onClearSelection,
+  onForwardSelected,
+  onDeleteSelected,
+  onToggleDetails,
+  onToggleStatus,
+  onOpenContactPhoto,
+  isMobile,
+  onCloseChat,
+  onOpenIATraining,
+}: ChatHeaderProps) {
   const hasContactPhoto = !!chat.url_foto_perfil;
 
   return (
@@ -83,8 +98,15 @@ export function ChatHeader({ chat, isSelectionMode, selectedMessagesCount, canDe
           </div>
 
           <div className="flex items-center gap-2">
-            <Button onClick={onToggleStatus} className="cursor-pointer bg-theme-primary font-medium text-white hover:bg-theme-primary/80">
-              {chat.finalizada ? "Reabrir" : "Finalizar"}
+            {
+              <Button type="button" variant="outline" size="icon" className="border-2 shadow-sm transition-all text-xs text-foreground cursor-pointer gap-1.5" onClick={onOpenIATraining}>
+                <Bot className="h-4 w-4" />
+              </Button>
+            }
+            <Button onClick={onToggleStatus} className="cursor-pointer bg-theme-primary font-medium text-white hover:bg-theme-primary/80 h-9 w-9 px-0 md:h-9 md:w-auto md:px-4">
+              <div className="md:hidden">{chat.finalizada ? <RotateCcw className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}</div>
+
+              <span className="hidden md:inline">{chat.finalizada ? "Reabrir" : "Finalizar"}</span>
             </Button>
             <Button onClick={onToggleDetails} variant="ghost" size="icon" className="cursor-pointer text-muted-foreground hover:text-foreground">
               <Info className="h-5 w-5" />
