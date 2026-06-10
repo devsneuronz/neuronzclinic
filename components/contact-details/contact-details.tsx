@@ -71,7 +71,6 @@ export function ContactDetails({
 }: ContactDetailsProps) {
   const [view, setView] = useState<"profile" | "training">("profile");
   const contactPhone = getContactPhone(chat);
-  const activeView = chat?.ia_responde === false ? "profile" : view;
 
   const [isSavingName, setIsSavingName] = useState(false);
 
@@ -81,6 +80,12 @@ export function ContactDetails({
   const hasContactPhoto = !!chat?.url_foto_perfil;
 
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!chat?.ia_responde) {
+      setView("profile");
+    }
+  }, [chat?.ia_responde]);
 
   useEffect(() => {
     if (trainingTrigger! > 0) {
@@ -266,7 +271,7 @@ export function ContactDetails({
             <div className="flex flex-col items-center gap-1 shrink-0">
               <Button
                 variant="outline"
-                className={cn("border-2 shadow-sm transition-all text-xs text-foreground cursor-pointer", activeView !== "profile" && "text-(--chat-primary)")}
+                className={cn("border-2 shadow-sm transition-all text-xs text-foreground cursor-pointer", view !== "profile" && "text-(--chat-primary)")}
                 onClick={() => {
                   if (!chat?.ia_responde) {
                     onToggleIA();
@@ -298,7 +303,7 @@ export function ContactDetails({
         {/* ================================================= */}
 
         <div className="flex-1 overflow-y-auto">
-          {activeView === "profile" ? (
+          {view === "profile" ? (
             <ProfileView
               key={chat?.id || "empty-contact"}
               chat={chat}
