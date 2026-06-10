@@ -16,7 +16,6 @@ import { AlertCircle, CheckCircle2, Circle, CircleDashed, IdCardLanyard, Loader2
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-// Componentes da UI e do Kanban estruturados
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { FilterMenu } from "./filter-menu";
 import { KanbanColumn } from "./kanban-column";

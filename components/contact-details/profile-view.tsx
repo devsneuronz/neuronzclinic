@@ -5,7 +5,7 @@ import { getChatInterestTags, getChatTags, getReadableTextColor } from "@/lib/ch
 import { formatDateTime } from "@/lib/date";
 import { createContactNote, deleteContactNote, fetchContactNotes, importAirtableContactNotes, type ChatRecord, type ContactNoteRecord } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
-import { Calendar, CalendarDays, ChevronDown, ClipboardList, FileText, GripVertical, Loader2, Trash2 } from "lucide-react";
+import { Calendar, CalendarDays, ChevronDown, ClipboardList, ClipboardListIcon, GripVertical, Loader2, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { Button } from "../ui/button";
@@ -275,7 +275,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
   const availableStatuses = getMergedStatusOptions(
     [
       {
-        label: getChatStatusLabel(chat),
+        label: getChatStatusLabel(chat)!,
         color: getChatStatusColor(chat),
       },
     ],
@@ -791,7 +791,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
       <div className="flex-1 overflow-y-auto p-4">
         <div className="mb-4 grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1.5 block text-xs text-muted-foreground">Status contato</label>
+            <label className="mb-1.5 block text-xs text-muted-foreground">Status do contato</label>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -800,8 +800,9 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                     backgroundColor: getChatStatusColor(chat),
                     color: getReadableTextColor(getChatStatusColor(chat)),
                   }}
+                  title={getChatStatusLabel(chat)!}
                 >
-                  {getChatStatusLabel(chat)}
+                  <span className="truncate">{getChatStatusLabel(chat)}</span>
                   <ChevronDown className="h-4 w-4" />
                 </button>
               </DropdownMenuTrigger>
@@ -825,11 +826,128 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
         </div>
 
         <div className="mb-4 grid grid-cols-2 gap-3">
+          <Dialog open={isTaskDialogOpen} onOpenChange={handleTaskDialogOpenChange}>
+            <DialogTrigger asChild>
+              <button className="flex items-center justify-between rounded border border-border bg-card px-3 py-2 text-sm text-foreground hover:bg-muted">
+                <span>+ Aviso / Tarefa</span>
+                <ClipboardListIcon className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </DialogTrigger>
+            <DialogContent className="max-w-[700px] gap-0 rounded-md p-0">
+              <DialogHeader className="border-b border-border px-4 py-3">
+                <DialogTitle className="text-base font-medium">Novo Aviso / Tarefa</DialogTitle>
+              </DialogHeader>
+
+              <form className="space-y-6 px-6 py-6" onSubmit={handleCreateTask}>
+                <div className="grid gap-4 md:grid-cols-2 md:gap-x-16">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">Tipo</label>
+                    <Select value={taskType} onValueChange={setTaskType} required>
+                      <SelectTrigger className="h-10 w-full bg-muted text-muted-foreground">
+                        <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
+                      </SelectTrigger>
+                      <SelectContent className="z-[120]">
+                        {taskOptions.types.length > 0 ? (
+                          taskOptions.types.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {type}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-task-types" disabled>
+                            Nenhum tipo encontrado
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">Status</label>
+                    <Select value={taskStatus} onValueChange={setTaskStatus} required>
+                      <SelectTrigger className="h-10 w-full bg-orange-400 text-white [&_svg]:text-white">
+                        <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
+                      </SelectTrigger>
+                      <SelectContent className="z-[120]">
+                        {taskOptions.statuses.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">Data da criação</label>
+                    <Input className="h-10" value={getReadableDateTime(taskCreatedAt)} readOnly />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">Prazo da tarefa</label>
+                    <div className="relative">
+                      <Input type="date" className="h-10 pr-10" value={taskDueDate} onChange={(event) => setTaskDueDate(event.target.value)} required />
+                      <Calendar className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">Contato / Paciente</label>
+                    <Input className="h-10" value={taskPatientName} onChange={(event) => setTaskPatientName(event.target.value)} />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">Usuário responsável</label>
+                    <Select value={taskResponsibleUserId} onValueChange={setTaskResponsibleUserId} required>
+                      <SelectTrigger className="h-10 w-full">
+                        <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
+                      </SelectTrigger>
+                      <SelectContent className="z-[120]">
+                        {taskOptions.users.length > 0 ? (
+                          taskOptions.users.map((user) => (
+                            <SelectItem key={user.id} value={user.id}>
+                              {user.label}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-task-users" disabled>
+                            Nenhum usuário encontrado
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-4">
+                  <label className="text-xs font-semibold text-foreground">Assunto / Finalidade</label>
+                  <Input className="mt-1.5 h-10" value={taskSubject} onChange={(event) => setTaskSubject(event.target.value)} required />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground">Descrição / Observações</label>
+                  <Textarea className="min-h-20 resize-y rounded-md" value={taskObservations} onChange={(event) => setTaskObservations(event.target.value)} />
+                </div>
+
+                {taskFeedback && <p className={cn("rounded-md px-3 py-2 text-sm", taskFeedback.type === "success" ? "bg-emerald-500/10 text-emerald-700" : "bg-destructive/10 text-destructive")}>{taskFeedback.message}</p>}
+
+                <DialogFooter className="border-t border-border pt-3">
+                  <Button
+                    type="submit"
+                    className="bg-black text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-zinc-800 hover:shadow-md dark:bg-white dark:text-black dark:hover:bg-zinc-200"
+                    disabled={isCreatingTask || isLoadingTaskOptions || isCurrentUserLoading || !user}
+                  >
+                    {isCreatingTask ? "Criando..." : "Criar Aviso/Tarefa"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
           <Dialog open={isAppointmentDialogOpen} onOpenChange={handleAppointmentDialogOpenChange}>
             <DialogTrigger asChild>
               <button className="flex items-center justify-between rounded border border-border bg-card px-3 py-2 text-sm text-foreground hover:bg-muted">
                 <span>+ Agendamento</span>
-                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <CalendarDays className="h-4 w-4 text-muted-foreground" />
               </button>
             </DialogTrigger>
             <DialogContent className="max-w-[700px] gap-0 rounded-md p-0">
@@ -939,123 +1057,6 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                     disabled={isCreatingAppointment || isLoadingAppointmentOptions}
                   >
                     {isCreatingAppointment ? "Criando..." : "Criar agendamento"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-          <Dialog open={isTaskDialogOpen} onOpenChange={handleTaskDialogOpenChange}>
-            <DialogTrigger asChild>
-              <button className="flex items-center justify-between rounded border border-border bg-card px-3 py-2 text-sm text-foreground hover:bg-muted">
-                <span>+ Aviso / Tarefa</span>
-                <FileText className="h-4 w-4 text-muted-foreground" />
-              </button>
-            </DialogTrigger>
-            <DialogContent className="max-w-[700px] gap-0 rounded-md p-0">
-              <DialogHeader className="border-b border-border px-4 py-3">
-                <DialogTitle className="text-base font-medium">Novo Aviso / Tarefa</DialogTitle>
-              </DialogHeader>
-
-              <form className="space-y-6 px-6 py-6" onSubmit={handleCreateTask}>
-                <div className="grid gap-4 md:grid-cols-2 md:gap-x-16">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground">Tipo</label>
-                    <Select value={taskType} onValueChange={setTaskType} required>
-                      <SelectTrigger className="h-10 w-full bg-muted text-muted-foreground">
-                        <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
-                      </SelectTrigger>
-                      <SelectContent className="z-[120]">
-                        {taskOptions.types.length > 0 ? (
-                          taskOptions.types.map((type) => (
-                            <SelectItem key={type} value={type}>
-                              {type}
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="no-task-types" disabled>
-                            Nenhum tipo encontrado
-                          </SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground">Status</label>
-                    <Select value={taskStatus} onValueChange={setTaskStatus} required>
-                      <SelectTrigger className="h-10 w-full bg-orange-400 text-white [&_svg]:text-white">
-                        <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
-                      </SelectTrigger>
-                      <SelectContent className="z-[120]">
-                        {taskOptions.statuses.map((status) => (
-                          <SelectItem key={status} value={status}>
-                            {status}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground">Data da criação</label>
-                    <Input className="h-10" value={getReadableDateTime(taskCreatedAt)} readOnly />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground">Prazo da tarefa</label>
-                    <div className="relative">
-                      <Input type="date" className="h-10 pr-10" value={taskDueDate} onChange={(event) => setTaskDueDate(event.target.value)} required />
-                      <Calendar className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground">Contato / Paciente</label>
-                    <Input className="h-10" value={taskPatientName} onChange={(event) => setTaskPatientName(event.target.value)} />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground">Usuário responsável</label>
-                    <Select value={taskResponsibleUserId} onValueChange={setTaskResponsibleUserId} required>
-                      <SelectTrigger className="h-10 w-full">
-                        <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
-                      </SelectTrigger>
-                      <SelectContent className="z-[120]">
-                        {taskOptions.users.length > 0 ? (
-                          taskOptions.users.map((user) => (
-                            <SelectItem key={user.id} value={user.id}>
-                              {user.label}
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="no-task-users" disabled>
-                            Nenhum usuário encontrado
-                          </SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="border-t border-border pt-4">
-                  <label className="text-xs font-semibold text-foreground">Assunto / Finalidade</label>
-                  <Input className="mt-1.5 h-10" value={taskSubject} onChange={(event) => setTaskSubject(event.target.value)} required />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground">Descrição / Observações</label>
-                  <Textarea className="min-h-20 resize-y rounded-md" value={taskObservations} onChange={(event) => setTaskObservations(event.target.value)} />
-                </div>
-
-                {taskFeedback && <p className={cn("rounded-md px-3 py-2 text-sm", taskFeedback.type === "success" ? "bg-emerald-500/10 text-emerald-700" : "bg-destructive/10 text-destructive")}>{taskFeedback.message}</p>}
-
-                <DialogFooter className="border-t border-border pt-3">
-                  <Button
-                    type="submit"
-                    className="bg-black text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-zinc-800 hover:shadow-md dark:bg-white dark:text-black dark:hover:bg-zinc-200"
-                    disabled={isCreatingTask || isLoadingTaskOptions || isCurrentUserLoading || !user}
-                  >
-                    {isCreatingTask ? "Criando..." : "Criar Aviso/Tarefa"}
                   </Button>
                 </DialogFooter>
               </form>
@@ -1270,24 +1271,23 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
         <div className="bg-card py-3 px-4 border-b border-border shrink-0 flex justify-center">
           <TabsList className="w-full gap-1.5 rounded-full h-11! bg-secondary/50 border border-border/40">
             <TabsTrigger
-              value="consultas"
-              className="flex-1 data-[state=active]:border-theme-border group relative data-[state=active]:bg-theme-bg px-3.5 rounded-full text-xs font-medium transition-all gap-2 cursor-pointer data-[state=active]:shadow-xs data-[state=active]:text-theme-fg!"
-            >
-              <CalendarDays className="group-data-[state=active]:text-theme-primary h-3.5 w-3.5 transition-all duration-300" />
-              <span className="truncate">Consultas</span>
-            </TabsTrigger>
-
-            <TabsTrigger
               value="tarefas"
               className="flex-1 data-[state=active]:border-theme-border group relative data-[state=active]:bg-theme-bg px-3.5 rounded-full text-xs font-medium transition-all gap-2 cursor-pointer data-[state=active]:shadow-xs data-[state=active]:text-theme-fg!"
             >
               <ClipboardList className="group-data-[state=active]:text-theme-primary h-3.5 w-3.5 transition-all duration-300" />
               <span className="truncate">Avisos e Tarefas</span>
             </TabsTrigger>
+            <TabsTrigger
+              value="agendamentos"
+              className="flex-1 data-[state=active]:border-theme-border group relative data-[state=active]:bg-theme-bg px-3.5 rounded-full text-xs font-medium transition-all gap-2 cursor-pointer data-[state=active]:shadow-xs data-[state=active]:text-theme-fg!"
+            >
+              <CalendarDays className="group-data-[state=active]:text-theme-primary h-3.5 w-3.5 transition-all duration-300" />
+              <span className="truncate">Agendamentos</span>
+            </TabsTrigger>
           </TabsList>
         </div>
 
-        <TabsContent value="consultas" className="w-full flex-1 overflow-y-auto max-h-64 p-4 m-0 data-[state=inactive]:hidden! [data-state=active]:block custom-scrollbar">
+        <TabsContent value="agendamentos" className="w-full flex-1 overflow-y-auto max-h-64 p-4 m-0 data-[state=inactive]:hidden! [data-state=active]:block custom-scrollbar">
           {isLoadingLatestAppointment ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
               <Loader2 className="h-4 w-4 animate-spin text-theme-primary" />

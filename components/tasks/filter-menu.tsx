@@ -34,4 +34,3 @@ export function FilterMenu({ value, options, filterAll, onChange, icon: Icon }: 
     </Select>
   );
 }
-

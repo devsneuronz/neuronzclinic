@@ -6,10 +6,6 @@ export interface ChatStatusOption {
 }
 
 export function getChatStatusColor(chat?: Partial<ChatRecord>) {
-  if (chat?.finalizada === true) {
-    return "#6b7280";
-  }
-
   if (chat?.hex_status && /^#[0-9a-f]{6}$/i.test(chat.hex_status)) {
     return chat.hex_status;
   }
@@ -18,5 +14,5 @@ export function getChatStatusColor(chat?: Partial<ChatRecord>) {
 }
 
 export function getChatStatusLabel(chat?: Partial<ChatRecord>) {
-  return chat?.finalizada ? "Finalizada" : chat?.Status_chat || "Aberta";
+  return chat?.Status_chat;
 }

@@ -331,7 +331,6 @@ function getStatusFields(chat: ChatRecord, status: ChatStatusOption) {
     finalizada: normalizedStatus === "finalizada" ? true : normalizedStatus === "aberta" ? false : chat.finalizada,
   };
 }
-
 function getFallbackStatusOptions(chats: ChatRecord[]) {
   const options = new Map<string, ChatStatusOption>();
 
