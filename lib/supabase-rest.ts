@@ -4,6 +4,24 @@ const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
 
 const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 const CHAT_ID_BATCH_SIZE = 40
+const MESSAGE_SELECT = [
+  "id",
+  "message_id",
+  "from_me",
+  "chat_id",
+  "participant",
+  "message_type",
+  "content",
+  "media_url",
+  "media_path",
+  "media_mime_type",
+  "public_media_url",
+  "timestamp_msg",
+  "status",
+  "quoted_message_id",
+  "metadata",
+  "is_deleted",
+].join(",")
 
 if (!SUPABASE_REST_URL || !SUPABASE_PUBLISHABLE_KEY) {
   throw new Error("Missing NEXT_PUBLIC_SUPABASE_REST_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
@@ -386,10 +404,8 @@ export function fetchChats({ limit = 50, offset = 0, search }: ChatQueryOptions 
 }
 
 export function fetchMessages(chatId: string, { limit = 50, offset = 0 }: PaginationOptions = {}) {
-  const select = "*"
-
   return supabaseGet<MessageRecord[]>(
-    `messages?select=${select}&chat_id=eq.${encodeURIComponent(chatId)}&order=timestamp_msg.desc.nullslast&limit=${limit}&offset=${offset}`,
+    `messages?select=${MESSAGE_SELECT}&chat_id=eq.${encodeURIComponent(chatId)}&order=timestamp_msg.desc.nullslast&limit=${limit}&offset=${offset}`,
   )
 }
 
