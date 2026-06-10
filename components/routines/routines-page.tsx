@@ -401,17 +401,10 @@ export function RoutinesPage() {
           <div className="flex min-w-0 items-center gap-3">
             <h1 className="truncate text-xl font-semibold text-foreground">Automação</h1>
           </div>
-          {activeTab === "templates" ? (
-            <Button onClick={openNewTemplate} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Novo template
-            </Button>
-          ) : (
-            <Button onClick={openNewRoutine} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Nova rotina
-            </Button>
-          )}
+          <Button onClick={activeTab === "templates" ? openNewTemplate : openNewRoutine} className="gap-2 bg-theme-primary text-theme-fgprimary-foreground hover:bg-theme-primary/90">
+            <Plus className="h-4 w-4" />
+            {activeTab === "templates" ? "Novo template" : "Nova rotina"}
+          </Button>
         </header>
         <main className="flex-1 flex flex-col overflow-hidden">
           <div className="w-full flex flex-col flex-1 overflow-hidden">
@@ -510,6 +503,10 @@ export function RoutinesPage() {
                       </div>
                     )}
                   </div>
+                  <Button type="button" variant="outline" onClick={openNewRoutine} className="h-10 shrink-0 justify-center gap-2 text-xs font-medium bg-card hover:bg-muted/50 border-dashed border-border/80 rounded-xl transition-all">
+                    <Plus className="h-4 w-4" />
+                    Adicionar nova rotina
+                  </Button>
                 </div>
               </TabsContent>
 

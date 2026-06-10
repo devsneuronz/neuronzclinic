@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { getAvatarInitials } from "@/lib/avatar-initials";
-import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
+import { getChatStatusColor, getChatStatusLabel, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
 import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, getReadableTextColor, type ChatTag } from "@/lib/chat-tags";
 import { ChatRecord, fetchChats, updateChatDetails } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
@@ -69,7 +69,7 @@ function getFallbackStatusOptions(chats: ChatRecord[]) {
     });
   }
 
-  return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }));
+  return sortStatusOptions(Array.from(options.values()));
 }
 
 function getFallbackTagOptions(chats: ChatRecord[]) {
@@ -512,7 +512,7 @@ export default function ContatosPage() {
                             <button
                               key={contact.id}
                               type="button"
-                              className="flex flex-col gap-3 md:grid md:grid-cols-[1.4fr_140px_160px_160px_80px] items-start md:items-center gap-2 md:gap-4 border-b border-border/70 px-5 py-4 transition-colors hover:bg-muted/45 text-left w-full relative group"
+                              className="flex flex-col gap-3 md:grid md:grid-cols-[1.4fr_140px_160px_160px_80px] items-start md:items-center gap-2 md:gap-4 border-b border-border/70 last:border-b-0 px-5 py-4 transition-colors hover:bg-muted/45 text-left w-full relative group"
                               onClick={() => setSelectedContactId(contact.id)}
                             >
                               <div className="flex min-w-0 items-center gap-3 w-full md:w-auto">
@@ -624,8 +624,6 @@ export default function ContatosPage() {
                     onToggleInterest={(interest) => void handleToggleContactInterest(selectedContact, interest)}
                     onChangeName={(name) => handleChangeName(selectedContact, name)}
                     onChangeContactInfo={(info) => handleChangeContactInfo(selectedContact, info)}
-                    onMarkAsRead={() => void handleMarkAsRead(selectedContact)}
-                    onMarkAsUnread={() => void handleMarkAsUnread(selectedContact)}
                     onReorderTags={(tags) => handleReorderTags(selectedContact, tags)}
                     onCommitTagOrder={(tags) => void handleCommitTagOrder(selectedContact, tags)}
                   />

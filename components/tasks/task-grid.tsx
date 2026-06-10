@@ -33,7 +33,7 @@ export function TaskStatusGrid({ status, tasks, isFiltering, onSelectTask, onOpe
       </div>
 
       {tasks.length > 0 ? (
-        <div className="p-1 grid flex-1 auto-rows-max grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 overflow-y-auto pr-1">
+        <div className="p-1 grid flex-1 auto-rows-max grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 overflow-y-auto pr-1 custom-scrollbar">
           {tasks.map((task) => (
             <div key={task.id} className={cn("group cursor-pointer rounded-md border bg-card p-4 text-left shadow-xs transition hover:ring-2 hover:shadow-sm focus-visible:outline-hidden focus-visible:ring-2", config.ringClassName)}>
               <TaskCard task={task} onSelect={onSelectTask} onOpenPatientMessages={onOpenPatientMessages} />

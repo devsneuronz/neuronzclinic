@@ -1,16 +1,17 @@
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
+import { getChatStatusColor, getChatStatusLabel, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getChatInterestTags, getChatTags, getReadableTextColor } from "@/lib/chat-tags";
 import { formatDateTime } from "@/lib/date";
 import { createContactNote, deleteContactNote, fetchContactNotes, importAirtableContactNotes, type ChatRecord, type ContactNoteRecord } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
-import { Calendar, CalendarDays, ChevronDown, ClipboardList, ClipboardListIcon, GripVertical, Loader2, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Calendar, CalendarDays, ChevronDown, ClipboardList, ClipboardListIcon, CornerRightDown, GripVertical, Loader2, Trash2 } from "lucide-react";
+import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Field, FieldDescription, FieldLabel } from "../ui/fields";
 import { Input } from "../ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
@@ -128,12 +129,18 @@ function getMergedStatusOptions(...groups: ChatStatusOption[][]) {
 
   for (const group of groups) {
     for (const status of group) {
-      if (!status.label || statuses.has(status.label)) continue;
-      statuses.set(status.label, status);
+      if (!status.label) continue;
+
+      const current = statuses.get(status.label);
+
+      statuses.set(status.label, {
+        ...status,
+        color: current?.color || status.color,
+      });
     }
   }
 
-  return Array.from(statuses.values());
+  return sortStatusOptions(Array.from(statuses.values()));
 }
 
 const fallbackAppointmentOptions: AppointmentOptions = {
@@ -223,7 +230,7 @@ function getDisplayNoteContent(content: string) {
 
 export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions = [], interestOptions, onChangeStatus, onToggleTag, onToggleInterest, onReorderTags, onCommitTagOrder, onChangeContactInfo }: ProfileViewProps) {
   const { user, isLoading: isCurrentUserLoading } = useCurrentUser();
-  const [bottomTab, setBottomTab] = useState<"consultas" | "avisos">("consultas");
+  const [bottomTab, setBottomTab] = useState<"agendamentos" | "tarefas">();
   const [draggedTagId, setDraggedTagId] = useState<string | null>(null);
   const [isAppointmentDialogOpen, setIsAppointmentDialogOpen] = useState(false);
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
@@ -282,17 +289,25 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
     statusOptions,
   );
 
-  const bottomTabs = [
-    { id: "consultas", label: "Consultas" },
-    { id: "avisos", label: "Avisos / Tarefas" },
-  ] as const;
+  const appointmentsRef = useRef<HTMLDivElement>(null);
+  const [highlightAppointmentId, setHighlightAppointmentId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!contactNoteFeedback) return;
+
+    const timeout = setTimeout(() => {
+      setContactNoteFeedback(null);
+    }, 3000);
+
+    return () => clearTimeout(timeout);
+  }, [contactNoteFeedback]);
+
   const latestAppointmentKey = `${chat?.chat_id || ""}|${contactPhone || chat?.phone_contact || ""}`;
   const appointments = latestAppointmentResult?.key === latestAppointmentKey ? latestAppointmentResult.appointments : [];
   const latestAppointment = appointments[0] ?? null;
   const isLoadingLatestAppointment = Boolean(latestAppointmentKey && latestAppointmentResult?.key !== latestAppointmentKey);
   const contactTasks = contactTaskResult?.key === latestAppointmentKey ? contactTaskResult.tasks : [];
   const isLoadingContactTasks = Boolean(latestAppointmentKey && contactTaskResult?.key !== latestAppointmentKey);
-  const appointmentStatusLabel = isLoadingLatestAppointment ? "Carregando..." : latestAppointment?.status || "Nenhum";
   const hasUnsavedContactInfo = (Object.keys(contactInfo) as ContactInfoField[]).some((field) => normalizeContactInfoValues(contactInfo)[field] !== normalizeContactInfoValues(getContactInfoValues(chat))[field]);
 
   function handleChangeContactInfoField(field: ContactInfoField, value: string) {
@@ -806,22 +821,60 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                   <ChevronDown className="h-4 w-4" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="z-[100] max-h-72 w-56">
+              <DropdownMenuContent align="start" className="z-[100] max-h-72 min-w-fit w-(--radix-dropdown-menu-trigger-width) custom-scrollbar">
                 {availableStatuses.map((status) => (
-                  <DropdownMenuItem key={status.label} className="cursor-pointer" onClick={() => onChangeStatus?.(status)}>
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: status.color || "#22c55e" }} />
-                    <span className="truncate">{status.label}</span>
-                  </DropdownMenuItem>
+                  <Fragment key={status.label}>
+                    {status.label === "ADM" && <DropdownMenuSeparator />}
+
+                    <DropdownMenuItem key={status.label} className={cn("cursor-pointer transition-colors", status.label === getChatStatusLabel(chat) && "bg-primary/10 text-primary font-semibold")} onClick={() => onChangeStatus?.(status)}>
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: status.color || "#ff0000" }} />
+                      <span className="truncate">{status.label}</span>
+                    </DropdownMenuItem>
+                  </Fragment>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
           <div>
             <label className="mb-1.5 block text-xs text-muted-foreground">Status agendamento</label>
-            <button className="flex w-full items-center justify-between rounded bg-muted px-3 py-1.5 text-sm text-muted-foreground" title={latestAppointment?.type || undefined}>
-              <span className="truncate">{appointmentStatusLabel}</span>
-              <ChevronDown className="h-4 w-4" />
-            </button>
+
+            <Button
+              disabled={!latestAppointment?.status}
+              title={latestAppointment?.type || undefined}
+              variant="secondary"
+              className="w-full h-8! rounded"
+              onClick={() => {
+                setBottomTab("agendamentos");
+
+                const appointmentId = latestAppointment?.id;
+
+                if (appointmentId) {
+                  setHighlightAppointmentId(appointmentId);
+
+                  setTimeout(() => {
+                    setHighlightAppointmentId(null);
+                  }, 2000);
+                }
+
+                setTimeout(() => {
+                  appointmentsRef.current?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  });
+                }, 50);
+              }}
+            >
+              {isLoadingLatestAppointment ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : latestAppointment?.status ? (
+                <>
+                  <span>{latestAppointment?.status}</span>
+                  <CornerRightDown className="h-4 w-4" />
+                </>
+              ) : (
+                <span>Nenhum</span>
+              )}
+            </Button>
           </div>
         </div>
 
@@ -1136,7 +1189,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                 <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="z-[100] max-h-72 w-72">
+            <DropdownMenuContent align="start" className="z-[100] max-h-72 w-(--radix-dropdown-menu-trigger-width) custom-scrollbar">
               {availableInterest.length > 0 ? (
                 availableInterest.map((interest) => (
                   <DropdownMenuCheckboxItem
@@ -1199,7 +1252,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                 <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="z-[100] max-h-72 w-72">
+            <DropdownMenuContent align="start" className="z-[100] max-h-72 custom-scrollbar">
               {availableTags.length > 0 ? (
                 availableTags.map((tag) => (
                   <DropdownMenuCheckboxItem
@@ -1226,7 +1279,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
             <FieldDescription className="text-[11px] text-muted-foreground">Adicione anotações sobre o atendimento, preferências ou lembretes.</FieldDescription>
             <Textarea
               id="textarea-message"
-              className="max-h-48 min-h-24 resize-y"
+              className="max-h-48 min-h-24 resize-y custom-scrollbar"
               value={contactNoteDraft}
               onChange={(event) => setContactNoteDraft(event.target.value)}
               placeholder="Digite uma nova anotação"
@@ -1234,7 +1287,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
             />
           </Field>
 
-          <div className="mt-3 flex items-center justify-between gap-3">
+          <div className="mt-3 flex items-end justify-between gap-3">
             <p className="text-xs text-muted-foreground">{isLoadingContactNotes ? "Carregando anotações..." : contactNotes?.length ? `${contactNotes.length} anotaç${contactNotes.length === 1 ? "ão" : "ões"}` : "Nenhuma anotação"}</p>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <Button type="button" size="sm" disabled={!chat?.chat_id || !contactNoteDraft.trim() || isSavingContactNote} onClick={() => void handleCreateContactNote()}>
@@ -1243,31 +1296,61 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
             </div>
           </div>
 
-          {contactNoteFeedback && (
-            <p className={cn("mt-3 rounded-md px-3 py-2 text-sm", contactNoteFeedback.type === "success" ? "bg-emerald-500/10 text-emerald-700" : "bg-destructive/10 text-destructive")}>{contactNoteFeedback.message}</p>
-          )}
+          <AnimatePresence>
+            {contactNoteFeedback && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}>
+                <p className={cn("mt-3 rounded-md px-3 py-2 text-sm", contactNoteFeedback.type === "success" ? "bg-emerald-500/10 text-emerald-700" : "bg-destructive/10 text-destructive")}>{contactNoteFeedback.message}</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="mt-3 space-y-2">
             {!isLoadingContactNotes && !isImportingContactNotes && contactNotes.length === 0 ? (
               <p className="rounded-md border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">Nenhuma anotação registrada.</p>
             ) : (
-              contactNotes.map((note) => (
-                <div key={note.id} className="rounded-md border border-border bg-card px-3 py-2">
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <span className="truncate text-[11px] text-muted-foreground">{getReadableDateTime(note.updated_at || note.created_at)}</span>
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => void handleDeleteContactNote(note.id)} aria-label="Apagar anotação">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{getDisplayNoteContent(note.content)}</p>
-                </div>
-              ))
+              <AnimatePresence initial={false}>
+                {contactNotes.map((note) => (
+                  <motion.div
+                    key={note.id}
+                    layout
+                    initial={{
+                      opacity: 0,
+                      y: -10,
+                      scale: 0.98,
+                    }}
+                    animate={{
+                      opacity: 1,
+                      y: 0,
+                      scale: 1,
+                    }}
+                    exit={{
+                      opacity: 0,
+                      y: -10,
+                      scale: 0.98,
+                    }}
+                    transition={{
+                      duration: 0.2,
+                    }}
+                    className="rounded-md border border-border bg-card px-3 py-2"
+                  >
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <span className="truncate text-[11px] text-muted-foreground">{getReadableDateTime(note.updated_at || note.created_at)}</span>
+
+                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => void handleDeleteContactNote(note.id)} aria-label="Apagar anotação">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+
+                    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{getDisplayNoteContent(note.content)}</p>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             )}
           </div>
         </div>
       </div>
 
-      <Tabs value={bottomTab} onValueChange={(value) => setBottomTab(value as "consultas" | "avisos")} className="flex flex-col flex-1 overflow-hidden gap-0 border-t border-border">
+      <Tabs ref={appointmentsRef} value={bottomTab} onValueChange={(value) => setBottomTab(value as "agendamentos" | "tarefas")} className="flex flex-col flex-1 overflow-hidden gap-0 border-t border-border">
         <div className="bg-card py-3 px-4 border-b border-border shrink-0 flex justify-center">
           <TabsList className="w-full gap-1.5 rounded-full h-11! bg-secondary/50 border border-border/40">
             <TabsTrigger
@@ -1296,7 +1379,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
           ) : appointments.length > 0 ? (
             <div className="space-y-2">
               {appointments.map((appointment) => (
-                <div key={appointment.id} className="rounded-md border border-border bg-card px-3 py-2">
+                <div key={appointment.id} className={cn("rounded-md border border-border bg-card px-3 py-2 transition-all duration-500", highlightAppointmentId === appointment.id && "ring-3 ring-theme-primary/50")}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-foreground">{appointment.type || "Consulta"}</p>
@@ -1324,7 +1407,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
               <span>Carregando avisos e tarefas...</span>
             </div>
           ) : contactTasks.length > 0 ? (
-            <div className="space-y-2">
+            <div className="space-y-2 w-full overflow-hidden">
               {taskFeedback?.type === "error" && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{taskFeedback.message}</p>}
               {contactTasks.map((task) => (
                 <div
@@ -1340,9 +1423,9 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                     }
                   }}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">{task.subject || task.type || "Aviso / tarefa"}</p>
+                  <div className="flex items-start justify-between gap-3 overflow-hidden">
+                    <div className="min-w-0 flex-1 pt-0.75">
+                      <p className=" text-sm font-semibold text-foreground">{task.subject || task.type || "Aviso / tarefa"}</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">Prazo: {getTaskDateLabel(task.dueDate)}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">

@@ -1,4 +1,4 @@
-import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
+import { getChatStatusColor, getChatStatusLabel, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
 import { getChatTags, type ChatTag } from "@/lib/chat-tags";
 import { NextResponse } from "next/server";
 
@@ -85,7 +85,7 @@ function getStatusOptions(chats: CatalogChatRecord[]) {
     });
   }
 
-  return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }));
+  return sortStatusOptions(Array.from(options.values()));
 }
 
 function mergeStatusOptions(...groups: ChatStatusOption[][]) {
@@ -104,7 +104,7 @@ function mergeStatusOptions(...groups: ChatStatusOption[][]) {
     }
   }
 
-  return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }));
+  return sortStatusOptions(Array.from(options.values()));
 }
 
 function getTagOptions(chats: CatalogChatRecord[]) {

@@ -12,7 +12,7 @@ import { fetchChats, fetchMessages, type ChatRecord, type MessageRecord } from "
 import { fallbackTaskOptions, getTaskNoteAttachmentType, type StatusConfigMap, type Task, type TaskOptions, type TaskResolutionNote, type TaskStatus } from "@/lib/task";
 import { getDraTatianaResponsibleFilter, isDraTatianaUser } from "@/lib/user-access";
 import { cn } from "@/lib/utils";
-import { AlertCircle, CheckCircle2, Circle, CircleDashed, IdCardLanyard, Loader2, Plus, RefreshCw, Search, Tag, Timer, UserPlus } from "lucide-react";
+import { AlertCircle, CheckCircle2, Circle, CircleDashed, IdCardLanyard, Loader2, Plus, RefreshCw, Search, Shapes, Timer, User } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -642,7 +642,7 @@ export function KanbanBoard() {
   const filtersConfig = [
     {
       id: "tipo",
-      icon: Tag,
+      icon: Shapes,
       value: typeFilter,
       options: typeOptions,
       filterAll: "Tipo",
@@ -650,7 +650,7 @@ export function KanbanBoard() {
     },
     {
       id: "criador",
-      icon: UserPlus,
+      icon: User,
       value: creatorFilter,
       options: creatorOptions,
       filterAll: "Criador",
@@ -703,10 +703,6 @@ export function KanbanBoard() {
         <div className="flex flex-col gap-5">
           <div className="flex flex-row gap-4 sm:flex-row sm:items-center justify-between">
             <div>
-              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground whitespace-nowrap">
-                <span className="h-2 w-2 rounded-full bg-cyan-600" />
-                Airtable / Encaminhamentos
-              </div>
               <h1 className="text-xl font-semibold text-foreground">Tarefas</h1>
             </div>
 
@@ -739,14 +735,14 @@ export function KanbanBoard() {
             </div>
 
             <div className="flex items-center gap-2 flex-2 min-w-0">
-              <div className="flex flex-row items-center gap-2 w-full">
+              <div className="flex flex-row items-center justify-end gap-2 w-full">
                 {filtersConfig.map((filter) => (
                   <FilterMenu key={filter.id} icon={filter.icon} value={filter.value} options={filter.options} filterAll={filter.filterAll} onChange={filter.onChange} />
                 ))}
 
                 <Button type="button" variant="outline" className="sm:justify-start bg-background h-10 shrink-0 sm:w-auto justify-center" onClick={() => loadTasks({ refresh: true })} disabled={isLoading || isRefreshing}>
                   {isLoading || isRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  <span className="hidden sm:inline ml-2">{isRefreshing ? "Atualizando" : "Atualizar"}</span>
+                  <span className="hidden lg:inline ml-2">{isRefreshing ? "Atualizando" : "Atualizar"}</span>
                 </Button>
               </div>
             </div>
@@ -756,12 +752,6 @@ export function KanbanBoard() {
             <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
               <AlertCircle className="h-4 w-4" />
               {errorMessage}
-            </div>
-          ) : null}
-          {isRefreshing ? (
-            <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Atualizando tarefas em segundo plano...
             </div>
           ) : null}
         </div>
@@ -800,7 +790,7 @@ export function KanbanBoard() {
 
         {taskViewOptions.map((view) => (
           <TabsContent key={view.value} value={view.value} className="min-h-0 overflow-hidden">
-            <main className="flex h-full flex-1 gap-4 overflow-x-auto p-5">
+            <main className="flex h-full flex-1 gap-4 overflow-x-auto p-5 custom-scrollbar">
               {isLoading ? (
                 <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">

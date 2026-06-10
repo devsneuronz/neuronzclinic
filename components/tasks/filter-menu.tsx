@@ -12,7 +12,7 @@ interface FilterMenuProps {
 export function FilterMenu({ value, options, filterAll, onChange, icon: Icon }: FilterMenuProps) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="min-w-0 w-full bg-background justify-between h-10! shadow-xs">
+      <SelectTrigger className="min-w-0 bg-background justify-between h-10! shadow-xs w-full md:w-fit">
         <div className="flex flex-row items-center gap-2.5 overflow-hidden truncate">
           <Icon className="hidden sm:inline h-4 w-4 text-muted-foreground/80 shrink-0" />
 

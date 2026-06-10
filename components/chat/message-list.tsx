@@ -151,7 +151,7 @@ export function MessageList({
           backgroundSize: "600px",
         }}
       >
-        <div className="relative mx-auto flex min-h-full w-full flex-col px-6">
+        <div className="relative mx-auto flex min-h-full w-full flex-col px-6 pt-2">
           {isLoading ? (
             <div className="shadow-x m-auto rounded-full border border-input/30 bg-input/20 px-4 py-2 text-sm shadow-sm backdrop-blur-[1px]">Carregando mensagens...</div>
           ) : error ? (

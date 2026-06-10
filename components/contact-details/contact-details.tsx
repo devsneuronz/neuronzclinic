@@ -124,7 +124,7 @@ export function ContactDetails({
     try {
       await navigator.clipboard.writeText(contactPhone);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000); // Reseta o ícone após 2 segundos
+      setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error("Falha ao copiar o telefone: ", err);
     }
@@ -181,45 +181,47 @@ export function ContactDetails({
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="icon"
-                      variant="secondary"
-                      type="button"
-                      onClick={onMarkAsRead}
-                      aria-label="Marcar conversa como lida"
-                      className=" border border-border/50  p-3 text-xs font-medium text-muted-foreground transition-all hover:bg-background hover:text-foreground active:scale-[0.97]"
-                    >
-                      <CheckCheck className="h-4 w-4 text-blue-500" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" align="center">
-                    <p className="text-xs font-medium">Marcar como lido</p>
-                  </TooltipContent>
-                </Tooltip>
+            {onMarkAsRead && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="icon"
+                        variant="secondary"
+                        type="button"
+                        onClick={onMarkAsRead}
+                        aria-label="Marcar conversa como lida"
+                        className=" border border-border/50  p-3 text-xs font-medium text-muted-foreground transition-all hover:bg-background hover:text-foreground active:scale-[0.97]"
+                      >
+                        <CheckCheck className="h-4 w-4 text-blue-500" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" align="center">
+                      <p className="text-xs font-medium">Marcar como lido</p>
+                    </TooltipContent>
+                  </Tooltip>
 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="icon"
-                      variant="secondary"
-                      type="button"
-                      onClick={onMarkAsUnread}
-                      aria-label="Marcar conversa como não lida"
-                      className=" border border-border/50  p-3 text-xs font-medium text-muted-foreground transition-all hover:bg-background hover:text-foreground active:scale-[0.97]"
-                    >
-                      <MessageSquareDashed className="h-4 w-4 text-muted-foreground/60" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" align="end">
-                    <p className="text-xs font-medium">Marcar como não lido</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="icon"
+                        variant="secondary"
+                        type="button"
+                        onClick={onMarkAsUnread}
+                        aria-label="Marcar conversa como não lida"
+                        className=" border border-border/50  p-3 text-xs font-medium text-muted-foreground transition-all hover:bg-background hover:text-foreground active:scale-[0.97]"
+                      >
+                        <MessageSquareDashed className="h-4 w-4 text-muted-foreground/60" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" align="end">
+                      <p className="text-xs font-medium">Marcar como não lido</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            )}
           </div>
           {/* (Nome, telefone) e IA */}
           <div className="flex flex-row justify-between gap-4w-full min-w-0">

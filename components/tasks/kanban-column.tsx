@@ -32,7 +32,7 @@ export function KanbanColumn({ status, tasks, isFiltering, onSelectTask, onOpenP
         <span className={cn("flex h-6 min-w-6 items-center justify-center rounded-md border px-2 text-xs font-semibold shadow-xs", config.countClassName)}>{tasks.length}</span>
       </div>
 
-      <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-1">
+      <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-1 custom-scrollbar">
         {tasks.length > 0 ? (
           tasks.map((task) => (
             <div key={task.id} className={cn("group cursor-pointer rounded-md border bg-card p-4 text-left shadow-xs transition hover:ring-2 hover:shadow-sm focus-visible:outline-hidden focus-visible:ring-2", config.ringClassName)}>

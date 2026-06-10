@@ -514,6 +514,7 @@ export function ChatWindow({
           if (message.status === "canceled" || message.status === "sent") return withoutMessage;
           return [...withoutMessage, message].sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at));
         });
+        console.log("Realtime update:", message);
         return;
       }
 
