@@ -178,8 +178,10 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
 
     try {
       const formData = new FormData();
+      const messageWithSignature = `*Lia*\n${correctedResponse}`;
+
       formData.set("chat_id", chatId);
-      formData.set("text", correctedResponse);
+      formData.set("text", messageWithSignature);
 
       const sendResponse = await fetch("/api/send-message", {
         method: "POST",
