@@ -205,6 +205,7 @@ function mapProcessRecord(record: AirtableRecord): RoutineAction {
   const fields = record.fields ?? {};
   const type = normalizeActionType(getStringField(fields, ["Tipo"]));
   const label = getStringField(fields, ["Tipo"]) || actionLabels[type];
+  const description = getStringField(fields, ["Descrição", "Descricao"]);
 
   return {
     id: record.id,
@@ -215,7 +216,8 @@ function mapProcessRecord(record: AirtableRecord): RoutineAction {
     order: getNumber(fields.ordem),
     responsibleUserId: getRecordIds(fields, ["Responsavel", "Responsável"])[0] || "",
     subject: getStringField(fields, ["Assunto"]),
-    notes: getStringField(fields, ["Descrição", "Descricao"]),
+    message: type === "send_message" ? description : "",
+    notes: type === "send_message" ? "" : description,
     templateId: getRecordIds(fields, ["Template_mensagem"])[0] || "",
     templateLabel: getFirstArrayString(fields, ["Template"]),
     tagId: getRecordIds(fields, ["Tags"])[0] || "",
@@ -287,8 +289,8 @@ function normalizePayload(body: unknown): RoutinePayload {
 
   const missingActionTarget = actions.find((action) => action.type === "add_tag" && !getString(action.tagId));
   if (missingActionTarget) throw new Error("Escolha a tag da ação Vincular tag.");
-  const missingMessageTemplate = actions.find((action) => action.type === "send_message" && !getString(action.templateId));
-  if (missingMessageTemplate) throw new Error("A ação Enviar mensagem precisa de um template vinculado no Airtable.");
+  const missingMessageContent = actions.find((action) => action.type === "send_message" && !getString(action.templateId) && !getString(action.message));
+  if (missingMessageContent) throw new Error("Digite uma mensagem ou escolha um template para a ação Enviar mensagem.");
 
   return {
     name,
@@ -319,17 +321,18 @@ function getRoutineFields(payload: RoutinePayload) {
 }
 
 function getProcessFields(action: RoutineAction, routineId: string, index: number) {
+  const isMessageAction = action.type === "send_message";
   const fields: Record<string, unknown> = {
     Rotina: [routineId],
     Tipo: getAirtableActionType(action.type),
     ordem: index,
     Assunto: action.subject || "",
-    "Descrição": action.notes || "",
+    "Descrição": isMessageAction ? action.message || "" : action.notes || "",
     ...getIntervalFields(action.delayMinutes),
   };
 
   if (action.responsibleUserId && /^rec[a-zA-Z0-9]+$/.test(action.responsibleUserId)) fields.Responsavel = [action.responsibleUserId];
-  if (action.templateId && /^rec[a-zA-Z0-9]+$/.test(action.templateId)) fields.Template_mensagem = [action.templateId];
+  fields.Template_mensagem = isMessageAction && action.templateId && /^rec[a-zA-Z0-9]+$/.test(action.templateId) ? [action.templateId] : [];
   if (action.tagId && /^rec[a-zA-Z0-9]+$/.test(action.tagId)) fields.Tags = [action.tagId];
 
   return fields;

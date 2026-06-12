@@ -267,9 +267,11 @@ export function RoutinesPage() {
     [routines],
   );
 
-  const hasInvalidMessageAction = form.actions.some(
-    (action) => action.type === "send_message" && (!action.templateId || !messageTemplates.some((template) => template.id === action.templateId && (template.content || template.media))),
-  );
+  const hasInvalidMessageAction = form.actions.some((action) => {
+    if (action.type !== "send_message") return false;
+    if (action.message?.trim()) return false;
+    return !action.templateId || !messageTemplates.some((template) => template.id === action.templateId && (template.content || template.media));
+  });
 
   const targetOptions = form.trigger === "tag" ? tags.map((tag) => ({ id: tag.id, label: tag.label, color: tag.color })) : statuses.map((status) => ({ id: status.label, label: status.label, color: status.color }));
 
@@ -329,8 +331,8 @@ export function RoutinesPage() {
     setError("");
 
     try {
-      if (form.actions.some((action) => action.type === "send_message" && !action.templateId)) {
-        throw new Error("Escolha um template para cada ação Enviar mensagem.");
+      if (form.actions.some((action) => action.type === "send_message" && !action.templateId && !action.message?.trim())) {
+        throw new Error("Digite uma mensagem ou escolha um template para cada ação Enviar mensagem.");
       }
 
       const url = form.id?.startsWith("rec") ? `/api/airtable/routines?id=${encodeURIComponent(form.id)}` : "/api/airtable/routines";
@@ -984,6 +986,7 @@ function ActionEditor({
 }) {
   const selectedTemplate = messageTemplates.find((template) => template.id === action.templateId);
   const usableMessageTemplates = messageTemplates.filter((template) => template.content || template.media);
+  const messageMode = action.templateId ? "template" : "custom";
 
   return (
     <div className="overflow-hidden rounded-md border border-border bg-card">
@@ -1027,25 +1030,55 @@ function ActionEditor({
         </div>
 
         {action.type === "send_message" ? (
-          <Select
-            value={action.templateId || "none"}
-            onValueChange={(templateId) => {
-              const template = usableMessageTemplates.find((item) => item.id === templateId);
-              onChange({ templateId: templateId === "none" ? "" : templateId, templateLabel: template?.label ?? "" });
-            }}
-          >
-            <SelectTrigger className="w-full md:col-span-2">
-              <SelectValue placeholder="Template da mensagem" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Escolher template</SelectItem>
-              {usableMessageTemplates.map((template) => (
-                <SelectItem key={template.id} value={template.id}>
-                  {template.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="grid gap-3 md:col-span-2 md:grid-cols-[160px_minmax(0,1fr)]">
+            <Select
+              value={messageMode}
+              onValueChange={(mode) =>
+                onChange(
+                  mode === "custom"
+                    ? { templateId: "", templateLabel: "" }
+                    : { message: "", templateId: usableMessageTemplates[0]?.id || "", templateLabel: usableMessageTemplates[0]?.label || "" },
+                )
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="custom">Digitar mensagem</SelectItem>
+                <SelectItem value="template">Usar template</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {messageMode === "template" ? (
+              <Select
+                value={action.templateId || "none"}
+                onValueChange={(templateId) => {
+                  const template = usableMessageTemplates.find((item) => item.id === templateId);
+                  onChange({ message: "", templateId: templateId === "none" ? "" : templateId, templateLabel: template?.label ?? "" });
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Template da mensagem" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Escolher template</SelectItem>
+                  {usableMessageTemplates.map((template) => (
+                    <SelectItem key={template.id} value={template.id}>
+                      {template.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Textarea
+                value={action.message ?? ""}
+                onChange={(event) => onChange({ message: event.target.value, templateId: "", templateLabel: "" })}
+                placeholder="Digite a mensagem que será enviada"
+                className="min-h-24 resize-y"
+              />
+            )}
+          </div>
         ) : (
           <>
             <Input value={action.subject ?? ""} onChange={(event) => onChange({ subject: event.target.value })} placeholder="Título da ação" />
@@ -1074,7 +1107,16 @@ function ActionEditor({
 
         {action.type === "send_message" ? (
           <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground md:col-span-5">
-            {selectedTemplate ? (
+            {messageMode === "custom" ? (
+              action.message?.trim() ? (
+                <>
+                  <p className="mb-1 font-medium text-foreground">Mensagem personalizada</p>
+                  <p className="whitespace-pre-wrap">{action.message}</p>
+                </>
+              ) : (
+                "Digite a mensagem que será enviada."
+              )
+            ) : selectedTemplate ? (
               <>
                 <p className="mb-1 font-medium text-foreground">{selectedTemplate.label}</p>
                 {selectedTemplate.content ? <p className="line-clamp-3 whitespace-pre-wrap">{selectedTemplate.content}</p> : null}

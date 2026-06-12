@@ -191,6 +191,7 @@ async function fetchRoutines(): Promise<Routine[]> {
       .map((process, index) => {
         const processFields = process.fields ?? {};
         const type = getActionType(getStringField(processFields, "Tipo"));
+        const description = getStringField(processFields, "Descrição");
 
         return {
           id: process.id,
@@ -200,7 +201,8 @@ async function fetchRoutines(): Promise<Routine[]> {
           order: Number(processFields.ordem) || index,
           responsibleUserId: getRecordIds(processFields, "Responsavel")[0] || "",
           subject: getStringField(processFields, "Assunto"),
-          notes: getStringField(processFields, "Descrição"),
+          message: type === "send_message" ? description : "",
+          notes: type === "send_message" ? "" : description,
           templateId: getRecordIds(processFields, "Template_mensagem")[0] || "",
           tagId: getRecordIds(processFields, "Tags")[0] || "",
         };
