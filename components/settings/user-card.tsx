@@ -3,15 +3,22 @@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { cn } from "@/lib/utils";
-import { FolderKanban, HardHat, Mail, Shield, User } from "lucide-react";
+import { FolderKanban, HardHat, Loader2, Mail, Pencil, Shield, User } from "lucide-react";
+import { useState } from "react";
+import type { Sector } from "./sectors-manager";
 
 export type SettingsUser = {
+  id: string;
   email: string;
   name: string;
   role: "admin" | "manager" | "user";
   tags?: string[];
+  sectorIds: string[];
+  tagIds: string[];
 };
 
 const tagStyles = ["bg-emerald-600 text-white", "bg-violet-600 text-white", "bg-yellow-600 text-white", "bg-sky-600 text-white", "bg-indigo-500 text-white", "bg-rose-600 text-white"];
@@ -30,9 +37,35 @@ function getTagClass(tag: string) {
 }
 interface UserCardProps {
   user: SettingsUser;
+  sectors: Sector[];
+  onUpdated: (user: SettingsUser) => void;
 }
 
-export function UserCard({ user }: UserCardProps) {
+export function UserCard({ user, sectors, onUpdated }: UserCardProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(user.sectorIds);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    setIsSaving(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/airtable/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: user.id, sectorIds: selectedIds }),
+      });
+      const data = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) throw new Error(data?.error || "Não foi possível atualizar o usuário.");
+      onUpdated({ ...user, sectorIds: selectedIds, tags: sectors.filter((sector) => selectedIds.includes(sector.id)).map((sector) => sector.name) });
+      setIsOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível atualizar o usuário.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
   return (
     <Card className="flex flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-xs hover:shadow-md hover:border-border transition-all duration-200 group pt-6 pb-0 gap-2">
       <CardHeader className="flex flex-col">
@@ -79,11 +112,18 @@ export function UserCard({ user }: UserCardProps) {
         </div>
       </CardContent>
 
-      <div className="mt-auto border-t border-border/60 bg-muted/30 px-5 py-4 space-y-3 h-[86px]">
+      <div className="mt-auto border-t border-border/60 bg-muted/30 px-5 py-4 space-y-3 min-h-[96px]">
+        <div className="flex items-center justify-between gap-2">
         <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase flex items-center gap-1.5">
           <FolderKanban className="h-3.5 w-3.5 opacity-70" />
           Setores sob responsabilidade
         </span>
+        {/^rec[a-zA-Z0-9]+$/.test(user.id) && (
+          <Button variant="ghost" size="icon-sm" className="h-7 w-7" onClick={() => { setSelectedIds(user.sectorIds); setIsOpen(true); }} aria-label={`Editar setores de ${user.name}`}>
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        </div>
 
         {user.tags?.length ? (
           <div className="flex flex-wrap gap-1.5">
@@ -97,6 +137,30 @@ export function UserCard({ user }: UserCardProps) {
           <p className="text-xs text-muted-foreground/80 italic">Nenhum setor atribuído até o momento</p>
         )}
       </div>
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Setores de {user.name}</DialogTitle><DialogDescription>Escolha os setores sob responsabilidade deste usuário.</DialogDescription></DialogHeader>
+          <div className="grid max-h-80 gap-2 overflow-y-auto">
+            {sectors.map((sector) => (
+              <label key={sector.id} className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 hover:bg-muted/50">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(sector.id)}
+                  onChange={() => setSelectedIds((current) => current.includes(sector.id) ? current.filter((id) => id !== sector.id) : [...current, sector.id])}
+                  className="size-4 accent-primary"
+                />
+                <span className="size-3 rounded-full" style={{ backgroundColor: sector.color }} />
+                <span className="text-sm font-medium">{sector.name}</span>
+              </label>
+            ))}
+            {error && <p className="text-sm text-destructive">{error}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsOpen(false)}>Cancelar</Button>
+            <Button onClick={() => void save()} disabled={isSaving}>{isSaving && <Loader2 className="animate-spin" />} Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

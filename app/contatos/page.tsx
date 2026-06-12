@@ -10,11 +10,13 @@ import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { getChatStatusColor, getChatStatusLabel, normalizeStatusColor, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
 import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, getReadableTextColor, type ChatTag } from "@/lib/chat-tags";
 import { ChatRecord, fetchChats, updateChatDetails } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
+import { filterChatsForUser } from "@/lib/user-access";
 import { ArrowDown, ArrowRight, Loader2, Maximize2, RefreshCw, Search, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -119,6 +121,7 @@ function getStatusFields(chat: ChatRecord, status: ChatStatusOption) {
 
 export default function ContatosPage() {
   const router = useRouter();
+  const { user, isLoading: isCurrentUserLoading } = useCurrentUser();
   const [contacts, setContacts] = useState<ChatRecord[]>([]);
   const contactsRef = useRef<ChatRecord[]>([]);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
@@ -140,7 +143,11 @@ export default function ContatosPage() {
     setContacts(nextContacts);
   }, []);
 
-  const selectedContact = contacts.find((contact) => contact.id === selectedContactId);
+  const accessibleContacts = useMemo(
+    () => isCurrentUserLoading ? [] : filterChatsForUser(user, contacts),
+    [contacts, isCurrentUserLoading, user],
+  );
+  const selectedContact = accessibleContacts.find((contact) => contact.id === selectedContactId);
   const fallbackStatusOptions = useMemo(() => getFallbackStatusOptions(contacts), [contacts]);
   const fallbackTagOptions = useMemo(() => getFallbackTagOptions(contacts), [contacts]);
   const fallbackInterestOptions = useMemo(() => getFallbackInterestOptions(contacts), [contacts]);
@@ -152,13 +159,13 @@ export default function ContatosPage() {
   const hasSearch = debouncedSearch.length > 0;
 
   const filteredContacts = useMemo(() => {
-    return contacts.filter((contact) => {
+    return accessibleContacts.filter((contact) => {
       if (statusFilter !== ALL_FILTERS && getChatStatusLabel(contact) !== statusFilter) return false;
       if (cityFilter !== ALL_FILTERS && getContactCity(contact) !== cityFilter) return false;
       if (interestFilter !== ALL_FILTERS && !getChatInterestTags(contact).some((interest) => interest.label === interestFilter)) return false;
       return true;
     });
-  }, [cityFilter, contacts, interestFilter, statusFilter]);
+  }, [accessibleContacts, cityFilter, interestFilter, statusFilter]);
 
   const loadContacts = useCallback(
     async ({ refresh = false, offset = 0, searchTerm = "" }: { refresh?: boolean; offset?: number; searchTerm?: string } = {}) => {

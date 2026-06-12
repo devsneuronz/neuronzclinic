@@ -8,6 +8,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { getChatStatusLabel, normalizeStatusColor, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
 import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, type ChatTag } from "@/lib/chat-tags";
+import { canUserAccessChat, filterChatsForUser } from "@/lib/user-access";
 import { createSupabaseRealtimeSubscription, type SupabasePostgresChangePayload } from "@/lib/supabase-realtime";
 import {
   ChatRecord,
@@ -413,14 +414,17 @@ export default function ChatsPage() {
   const searchQuery = normalizedSearch ? debouncedSearch.trim() : "";
   const isSearching = !!searchQuery;
   const isSearchingChats = !!normalizedSearch && (normalizedSearch !== searchQuery || searchChatsTerm !== searchQuery);
-  const visibleChats = isSearching ? searchChats : chats;
+  const visibleChats = useMemo(
+    () => isCurrentUserLoading ? [] : filterChatsForUser(user, isSearching ? searchChats : chats),
+    [chats, isCurrentUserLoading, isSearching, searchChats, user],
+  );
   const visibleChatRemoteIds = useMemo(() => Array.from(new Set(visibleChats.map((chat) => chat.chat_id).filter(Boolean))), [visibleChats]);
   const visibleChatRemoteIdsKey = useMemo(() => visibleChatRemoteIds.join("\n"), [visibleChatRemoteIds]);
   const knownChats = useMemo(() => {
     const indexedChats = new Map<string, ChatRecord>();
     for (const chat of [...chats, ...searchChats]) indexedChats.set(chat.id, chat);
-    return Array.from(indexedChats.values());
-  }, [chats, searchChats]);
+    return isCurrentUserLoading ? [] : filterChatsForUser(user, Array.from(indexedChats.values()));
+  }, [chats, isCurrentUserLoading, searchChats, user]);
   const knownChatsRef = useRef<ChatRecord[]>([]);
   const selectedChat = useMemo(() => knownChats.find((chat) => chat.id === selectedChatId), [knownChats, selectedChatId]);
   const fallbackStatusOptions = useMemo(() => getFallbackStatusOptions(knownChats), [knownChats]);
@@ -770,7 +774,12 @@ export default function ChatsPage() {
       .then((data) => {
         if (!isMounted) return;
         const target = data.find((chat) => chat.chat_id === targetChatId || chat.id === targetChatId) || data[0];
-        if (!target) return;
+        if (!target || !canUserAccessChat(user, target)) {
+          window.localStorage.removeItem(LAST_OPEN_CHAT_STORAGE_KEY);
+          setStoredTargetChatId("");
+          clearChatIdFromUrl();
+          return;
+        }
 
         mergeFreshChats([target]);
         setSelectedChatId(target.id);
@@ -785,7 +794,7 @@ export default function ChatsPage() {
     return () => {
       isMounted = false;
     };
-  }, [knownChats, mergeFreshChats, targetChatId, chatIdFromUrl, storedTargetChatId, setSelectedChatId]);
+  }, [knownChats, mergeFreshChats, targetChatId, chatIdFromUrl, storedTargetChatId, setSelectedChatId, user]);
 
   const updateChatPreviewForMessages = useCallback((chatId: string, freshMessages: MessageRecord[]) => {
     if (freshMessages.length === 0) return;
@@ -854,9 +863,10 @@ export default function ChatsPage() {
 
   const handleRealtimeChat = useCallback(
     (chat: ChatRecord) => {
+      if (!canUserAccessChat(user, chat)) return;
       mergeFreshChats([chat]);
     },
-    [mergeFreshChats],
+    [mergeFreshChats, user],
   );
 
   const refreshMessagesAfterSend = useCallback(
@@ -1885,7 +1895,7 @@ export default function ChatsPage() {
             onForwardMessages={handleForwardMessages}
             onDeleteMessage={handleDeleteMessage}
             onDeleteMessages={handleDeleteMessages}
-            forwardTargets={chats}
+            forwardTargets={filterChatsForUser(user, chats)}
             error={error}
             onToggleDetails={() => [setShowDetails(!showDetails), handleOpenIATraining]}
             isDetailsOpen={showDetails}

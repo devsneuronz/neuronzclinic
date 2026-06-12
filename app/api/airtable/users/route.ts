@@ -30,11 +30,13 @@ type AirtableRecord = {
 }
 
 type ListedUser = {
-  id?: string
+  id: string
   email: string
   name: string
   role: ReturnType<typeof normalizeUserRole>
   tags: string[]
+  sectorIds: string[]
+  tagIds: string[]
 }
 
 function getStringField(fields: Record<string, unknown>, candidates: string[]) {
@@ -195,11 +197,15 @@ async function findUserByEmail(email: string) {
     })
 
     if (record?.fields) {
+      const sectorIds = getStringArrayField(record.fields, ["Setor", "Setores"])
+      const tagIds = getStringArrayField(record.fields, ["Tags", "tags"])
       return {
         email: normalizedEmail,
         name: getName(record.fields, normalizedEmail),
         role: getRole(record.fields),
         source: "airtable" as const,
+        sectorIds,
+        tagIds,
       }
     }
   }
@@ -227,6 +233,8 @@ async function listActiveUsers() {
         name: getName(fields, email),
         role: getRole(fields),
         tags: getUserTags(fields),
+        sectorIds: getStringArrayField(fields, ["Setor", "Setores"]),
+        tagIds: getStringArrayField(fields, ["Tags", "tags"]),
       })
     }
 
@@ -239,10 +247,13 @@ async function listActiveUsers() {
     if (!indexedUsers.has(email)) {
       const user = getDefaultUser(email)
       indexedUsers.set(email, {
+        id: `fallback-${email}`,
         email: user.email,
         name: user.name,
         role: user.role,
         tags: user.role === "admin" ? ["ADM"] : [],
+        sectorIds: [],
+        tagIds: [],
       })
     }
   }
@@ -281,4 +292,37 @@ export async function GET(request: Request) {
   const user = await findUserByEmail(email)
 
   return NextResponse.json(user ?? getDefaultUser(email))
+}
+
+export async function PATCH(request: Request) {
+  try {
+    if (!AIRTABLE_TOKEN) throw new Error("Missing AIRTABLE_TOKEN or AIRTABLE_API_KEY")
+    const body = (await request.json()) as { id?: unknown; sectorIds?: unknown }
+    const id = typeof body.id === "string" ? body.id : ""
+    const sectorIds = Array.isArray(body.sectorIds)
+      ? Array.from(new Set(body.sectorIds.filter((value): value is string => typeof value === "string" && /^rec[a-zA-Z0-9]+$/.test(value))))
+      : []
+
+    if (!/^rec[a-zA-Z0-9]+$/.test(id)) throw new Error("Usuário não encontrado.")
+
+    for (const table of TABLE_CANDIDATES) {
+      const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(table)}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${AIRTABLE_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ records: [{ id, fields: { Setor: sectorIds } }] }),
+        cache: "no-store",
+      })
+
+      if (response.status === 404) continue
+      if (!response.ok) throw new Error(await response.text())
+      return NextResponse.json({ ok: true, sectorIds })
+    }
+
+    throw new Error("Tabela de usuários não encontrada.")
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível atualizar o usuário." }, { status: 500 })
+  }
 }

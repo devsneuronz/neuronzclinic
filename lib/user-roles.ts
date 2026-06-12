@@ -5,6 +5,8 @@ export type CurrentUser = {
   name: string
   role: UserRole
   source: "airtable" | "fallback" | "session"
+  sectorIds?: string[]
+  tagIds?: string[]
 }
 
 export type MentionableUser = Pick<CurrentUser, "email" | "name" | "role">
