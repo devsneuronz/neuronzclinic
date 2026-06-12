@@ -34,6 +34,7 @@ const CHAT_PAGE_SIZE = 50;
 const MESSAGE_PAGE_SIZE = 50;
 const CHAT_SYNC_INTERVAL_MS = 5000;
 const MESSAGE_SYNC_INTERVAL_MS = 2500;
+const CHAT_MESSAGE_TIMESTAMP_DRIFT_MS = 2 * 60 * 1000;
 const LAST_OPEN_CHAT_STORAGE_KEY = "neuronzclinic:last-open-chat-id";
 const MEDIA_PREVIEW_LABELS = new Set(["Foto", "Vídeo", "Áudio", "Figurinha", "Documento"]);
 const EMPTY_MESSAGES: MessageRecord[] = [];
@@ -122,6 +123,17 @@ function isMediaPreviewText(value?: string | null) {
   return MEDIA_PREVIEW_LABELS.has(value?.trim() ?? "");
 }
 
+function hasMatchingPreviewWithinTimestampDrift(chat: ChatRecord, message: ChatPreviewMessage) {
+  const chatTime = getTimestampValue(chat.last_message_time);
+  const messageTime = getTimestampValue(message.timestamp_msg);
+
+  if (!chatTime || !messageTime || Math.abs(chatTime - messageTime) > CHAT_MESSAGE_TIMESTAMP_DRIFT_MS) {
+    return false;
+  }
+
+  return chat.text_last_message?.trim() === getLatestChatMessagePreviewText(message);
+}
+
 function mergeMessages(currentMessages: MessageRecord[], incomingMessages: MessageRecord[]) {
   const realIncomingMessages = incomingMessages.filter((message) => !message.id.startsWith("optimistic-"));
   const filteredCurrentMessages = currentMessages.filter((message) => {
@@ -191,7 +203,12 @@ function mergeChats(currentChats: ChatRecord[], incomingChats: ChatRecord[]) {
     const shouldKeepCurrentLatestMessage =
       !!currentChat &&
       currentLastMessageTime > 0 &&
-      (currentLastMessageTime > incomingLastMessageTime || (currentLastMessageTime === incomingLastMessageTime && isMediaPreviewText(currentChat.text_last_message) && !isMediaPreviewText(chat.text_last_message)));
+      (currentLastMessageTime > incomingLastMessageTime ||
+        (currentLastMessageTime === incomingLastMessageTime && isMediaPreviewText(currentChat.text_last_message) && !isMediaPreviewText(chat.text_last_message)) ||
+        (currentLastMessageTime < incomingLastMessageTime &&
+          incomingLastMessageTime - currentLastMessageTime <= CHAT_MESSAGE_TIMESTAMP_DRIFT_MS &&
+          currentChat.text_last_message?.trim() === chat.text_last_message?.trim() &&
+          currentChat.last_message_fromMe !== chat.last_message_fromMe));
 
     if (chat.archived) {
       indexedChats.delete(chat.id);
@@ -249,7 +266,10 @@ function getLatestChatMessagePreviewText(message: Pick<LatestChatMessage, "conte
 }
 
 function updateChatPreview(chat: ChatRecord, message: ChatPreviewMessage) {
-  if (!message.timestamp_msg || getTimestampValue(message.timestamp_msg) < getTimestampValue(chat.last_message_time)) {
+  if (
+    !message.timestamp_msg ||
+    (getTimestampValue(message.timestamp_msg) < getTimestampValue(chat.last_message_time) && !hasMatchingPreviewWithinTimestampDrift(chat, message))
+  ) {
     return chat;
   }
 
