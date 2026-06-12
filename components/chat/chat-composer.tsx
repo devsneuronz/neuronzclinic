@@ -146,7 +146,16 @@ export function ChatComposer({
         <p className="mb-2 px-1 text-xs font-medium text-muted-foreground">Anexos salvos</p>
         <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
           {savedAttachments.map((savedAttachment) => {
-            const Icon = savedAttachment.kind === "text" ? MessageSquareText : savedAttachment.kind === "audio" ? FileAudio : savedAttachment.kind === "video" ? Video : FileImage;
+            const Icon =
+              savedAttachment.kind === "text"
+                ? MessageSquareText
+                : savedAttachment.kind === "audio"
+                  ? FileAudio
+                  : savedAttachment.kind === "video"
+                    ? Video
+                    : savedAttachment.kind === "document"
+                      ? FileText
+                      : FileImage;
             const description = savedAttachment.body?.trim() || savedAttachment.file_name?.trim() || savedAttachment.media_url?.trim() || "Anexo";
 
             return (

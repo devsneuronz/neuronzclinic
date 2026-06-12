@@ -3,7 +3,7 @@ create extension if not exists pgcrypto;
 create table if not exists public.saved_attachments (
   id uuid primary key default gen_random_uuid(),
   title text not null,
-  kind text not null check (kind in ('text', 'image', 'video', 'audio')),
+  kind text not null check (kind in ('text', 'image', 'video', 'audio', 'document')),
   body text,
   media_url text,
   media_path text,
@@ -21,6 +21,13 @@ create table if not exists public.saved_attachments (
 
 alter table public.saved_attachments
   add column if not exists media_path text;
+
+alter table public.saved_attachments
+  drop constraint if exists saved_attachments_kind_check;
+
+alter table public.saved_attachments
+  add constraint saved_attachments_kind_check
+  check (kind in ('text', 'image', 'video', 'audio', 'document'));
 
 create index if not exists saved_attachments_active_sort_idx
   on public.saved_attachments (is_active, title, created_at desc);
@@ -95,7 +102,20 @@ values (
     'audio/mp4',
     'audio/ogg',
     'audio/webm',
-    'audio/wav'
+    'audio/wav',
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'text/plain',
+    'text/csv',
+    'application/rtf',
+    'application/vnd.oasis.opendocument.text',
+    'application/vnd.oasis.opendocument.spreadsheet',
+    'application/vnd.oasis.opendocument.presentation'
   ]
 )
 on conflict (id) do update

@@ -12,7 +12,23 @@ const allowedPrefixes = {
   audio: "audio/",
 } as const
 
-type MediaKind = keyof typeof allowedPrefixes
+const documentMimeTypesByExtension: Record<string, string> = {
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  txt: "text/plain",
+  csv: "text/csv",
+  rtf: "application/rtf",
+  odt: "application/vnd.oasis.opendocument.text",
+  ods: "application/vnd.oasis.opendocument.spreadsheet",
+  odp: "application/vnd.oasis.opendocument.presentation",
+}
+
+type AttachmentKind = keyof typeof allowedPrefixes | "document"
 
 function getSupabaseBaseUrl() {
   return SUPABASE_REST_URL?.replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "")
@@ -39,8 +55,13 @@ function getPublicStorageUrl(baseUrl: string, objectPath: string) {
   return `${baseUrl}/storage/v1/object/public/${STORAGE_BUCKET}/${encodedPath}`
 }
 
-function isMediaKind(value: string): value is MediaKind {
-  return value === "image" || value === "video" || value === "audio"
+function isAttachmentKind(value: string): value is AttachmentKind {
+  return value === "image" || value === "video" || value === "audio" || value === "document"
+}
+
+function getDocumentMimeType(file: File) {
+  const extension = file.name.split(".").pop()?.toLowerCase() || ""
+  return documentMimeTypesByExtension[extension] || null
 }
 
 export async function POST(request: NextRequest) {
@@ -50,7 +71,7 @@ export async function POST(request: NextRequest) {
     const fileValue = formData.get("file")
     const file = fileValue instanceof File && fileValue.size > 0 ? fileValue : null
 
-    if (!isMediaKind(kind)) {
+    if (!isAttachmentKind(kind)) {
       return NextResponse.json({ message: "Tipo de anexo inválido." }, { status: 400 })
     }
 
@@ -62,8 +83,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "O arquivo deve ter no máximo 80 MB." }, { status: 400 })
     }
 
-    const mimeType = file.type || "application/octet-stream"
-    if (!mimeType.toLowerCase().startsWith(allowedPrefixes[kind])) {
+    let mimeType = file.type
+
+    if (kind === "document") {
+      const documentMimeType = getDocumentMimeType(file)
+      if (!documentMimeType) {
+        return NextResponse.json({ message: "Formato de documento não suportado." }, { status: 400 })
+      }
+      mimeType = documentMimeType
+    } else if (!mimeType.toLowerCase().startsWith(allowedPrefixes[kind])) {
       return NextResponse.json({ message: "O arquivo selecionado não corresponde ao tipo do anexo." }, { status: 400 })
     }
 

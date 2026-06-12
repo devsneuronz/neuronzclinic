@@ -259,7 +259,7 @@ export interface ImportAirtableContactNotesResult {
   fields?: string[]
 }
 
-export type SavedAttachmentKind = "text" | "image" | "video" | "audio"
+export type SavedAttachmentKind = "text" | "image" | "video" | "audio" | "document"
 
 export interface SavedAttachmentRecord {
   id: string

@@ -17,7 +17,7 @@ import {
   type SavedAttachmentKind,
   type SavedAttachmentRecord,
 } from "@/lib/supabase-rest";
-import { FileAudio, FileImage, Loader2, MessageSquareText, PenLine, Plus, Search, Trash2, Upload, Video } from "lucide-react";
+import { FileAudio, FileImage, FileText, Loader2, MessageSquareText, PenLine, Plus, Search, Trash2, Upload, Video } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 const kindLabels: Record<SavedAttachmentKind, string> = {
@@ -25,6 +25,7 @@ const kindLabels: Record<SavedAttachmentKind, string> = {
   image: "Imagem",
   video: "Vídeo",
   audio: "Áudio",
+  document: "Documento",
 };
 
 const kindIcons = {
@@ -32,6 +33,7 @@ const kindIcons = {
   image: FileImage,
   video: Video,
   audio: FileAudio,
+  document: FileText,
 };
 
 type AttachmentFormState = {
@@ -86,6 +88,7 @@ function getAcceptForKind(kind: SavedAttachmentKind) {
   if (kind === "image") return "image/*";
   if (kind === "video") return "video/*";
   if (kind === "audio") return "audio/*";
+  if (kind === "document") return ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp";
   return undefined;
 }
 
@@ -330,6 +333,7 @@ export function SavedAttachmentsManager() {
                   <SelectItem value="image">Imagem</SelectItem>
                   <SelectItem value="video">Vídeo</SelectItem>
                   <SelectItem value="audio">Áudio</SelectItem>
+                  <SelectItem value="document">Documento</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -345,7 +349,7 @@ export function SavedAttachmentsManager() {
                     <Upload className="h-5 w-5 text-teal-500" />
                     <span className="text-sm font-medium text-foreground">{selectedFile ? selectedFile.name : form.fileName || "Selecionar arquivo"}</span>
                     <span className="text-xs text-muted-foreground">
-                      {selectedFile ? formatFileSize(selectedFile.size) : form.fileName ? "Arquivo atual mantido ao salvar" : "Imagem, vídeo ou áudio conforme o tipo escolhido"}
+                      {selectedFile ? formatFileSize(selectedFile.size) : form.fileName ? "Arquivo atual mantido ao salvar" : "Imagem, vídeo, áudio ou documento conforme o tipo escolhido"}
                     </span>
                     <input type="file" accept={getAcceptForKind(form.kind)} className="hidden" onChange={(event) => handleFileChange(event.target.files?.[0])} />
                   </label>
@@ -377,7 +381,7 @@ export function SavedAttachmentsManager() {
             </div>
             <DialogTitle>Excluir anexo</DialogTitle>
             <DialogDescription>
-              O anexo "{deleteConfirmationAttachment?.title}" será removido da lista de anexos rápidos. Essa ação não pode ser desfeita.
+              O anexo &quot;{deleteConfirmationAttachment?.title}&quot; será removido da lista de anexos rápidos. Essa ação não pode ser desfeita.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

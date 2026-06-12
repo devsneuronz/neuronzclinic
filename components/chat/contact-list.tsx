@@ -17,11 +17,10 @@ import { getChatInterestTags, getChatTags, getReadableTextColor } from "@/lib/ch
 import { ChatRecord, LatestMessageStatus } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 import { formatBoldText } from "@/utils/utils";
-import { TooltipProvider } from "@radix-ui/react-tooltip";
 import { ChevronDown, ChevronUp, Feather, FilterX, HatGlasses, Loader2, Search, Send, SquarePlus } from "lucide-react";
 import type { FormEvent, UIEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { ExpandedImageModal } from "./expanded-image-modal";
 import { MessageStatusIcon } from "./message-status-icon";
 
