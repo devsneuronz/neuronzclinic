@@ -12,8 +12,9 @@ import type { ChatStatusOption } from "@/lib/chat-status";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getReadableTextColor } from "@/lib/chat-tags";
 import { actionLabels, createEmptyAction, triggerColors, triggerOptions, type Routine, type RoutineAction, type RoutineActionType, type RoutineMessageTemplate, type RoutineTrigger } from "@/lib/routines";
+import { uploadSavedAttachmentFile, type SavedAttachmentKind } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
-import { Bot, Clock3, CopyPlus, CornerDownRight, FileText, Loader2, PenSquare, Play, Plus, RefreshCw, Save, Search, Sparkles, Target, Trash2, Wand2, Workflow, X } from "lucide-react";
+import { Bot, Clock3, CopyPlus, CornerDownRight, FileText, Loader2, Paperclip, PenSquare, Play, Plus, RefreshCw, Save, Search, Sparkles, Target, Trash2, Upload, Wand2, Workflow, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
@@ -32,6 +33,7 @@ type MessageTemplateForm = {
   label: string;
   type: string;
   content: string;
+  media: RoutineMessageTemplate["media"];
 };
 
 const emptyRoutine: RoutineForm = {
@@ -127,6 +129,19 @@ function limitMessageTemplates(templates: RoutineMessageTemplate[] = []) {
   return templates.slice(0, MAX_MESSAGE_TEMPLATES);
 }
 
+function getTemplateMediaKind(file: File): Exclude<SavedAttachmentKind, "text"> {
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("video/")) return "video";
+  if (file.type.startsWith("audio/")) return "audio";
+  return "document";
+}
+
+function formatFileSize(size?: number) {
+  if (!size) return "";
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
 function parsePromptToActions(prompt: string): RoutineAction[] {
   const parts = prompt
     .split(/\b(?:depois|em seguida|entao|então|,|;)\b/i)
@@ -175,7 +190,8 @@ export function RoutinesPage() {
   const [templateError, setTemplateError] = useState("");
   const [assistantPrompt, setAssistantPrompt] = useState("");
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
-  const [templateForm, setTemplateForm] = useState<MessageTemplateForm>({ label: "", type: "Marketing", content: "" });
+  const [templateForm, setTemplateForm] = useState<MessageTemplateForm>({ label: "", type: "Marketing", content: "", media: null });
+  const [templateMediaFile, setTemplateMediaFile] = useState<File | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -251,7 +267,9 @@ export function RoutinesPage() {
     [routines],
   );
 
-  const hasInvalidMessageAction = form.actions.some((action) => action.type === "send_message" && (!action.templateId || !messageTemplates.some((template) => template.id === action.templateId && template.content)));
+  const hasInvalidMessageAction = form.actions.some(
+    (action) => action.type === "send_message" && (!action.templateId || !messageTemplates.some((template) => template.id === action.templateId && (template.content || template.media))),
+  );
 
   const targetOptions = form.trigger === "tag" ? tags.map((tag) => ({ id: tag.id, label: tag.label, color: tag.color })) : statuses.map((status) => ({ id: status.label, label: status.label, color: status.color }));
 
@@ -263,7 +281,8 @@ export function RoutinesPage() {
 
   function openNewTemplate() {
     setEditingTemplateId(null);
-    setTemplateForm({ label: "", type: "Marketing", content: "" });
+    setTemplateForm({ label: "", type: "Marketing", content: "", media: null });
+    setTemplateMediaFile(null);
     setTemplateError("");
     setIsTemplateDialogOpen(true);
   }
@@ -274,7 +293,9 @@ export function RoutinesPage() {
       label: template.label,
       type: template.type || "Marketing",
       content: template.content,
+      media: template.media ?? null,
     });
+    setTemplateMediaFile(null);
     setTemplateError("");
     setIsTemplateDialogOpen(true);
   }
@@ -360,10 +381,22 @@ export function RoutinesPage() {
 
     try {
       const isEditingTemplate = Boolean(editingTemplateId);
+      const uploadedMedia = templateMediaFile ? await uploadSavedAttachmentFile(templateMediaFile, getTemplateMediaKind(templateMediaFile)) : null;
+      const payload = {
+        ...templateForm,
+        media: uploadedMedia
+          ? {
+              url: uploadedMedia.mediaUrl,
+              fileName: uploadedMedia.fileName,
+              mimeType: uploadedMedia.mediaMimeType,
+              size: templateMediaFile?.size,
+            }
+          : templateForm.media,
+      };
       const response = await fetch("/api/airtable/message-templates", {
         method: isEditingTemplate ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(isEditingTemplate ? { ...templateForm, id: editingTemplateId } : templateForm),
+        body: JSON.stringify(isEditingTemplate ? { ...payload, id: editingTemplateId } : payload),
       });
 
       if (!response.ok) throw new Error(await readApiMessage(response, isEditingTemplate ? "Não foi possível atualizar o template de mensagem." : "Não foi possível criar o template de mensagem."));
@@ -378,6 +411,7 @@ export function RoutinesPage() {
       }
       setIsTemplateDialogOpen(false);
       setEditingTemplateId(null);
+      setTemplateMediaFile(null);
     } catch (err) {
       setTemplateError(err instanceof Error ? err.message : editingTemplateId ? "Não foi possível atualizar o template de mensagem." : "Não foi possível criar o template de mensagem.");
     } finally {
@@ -618,7 +652,10 @@ export function RoutinesPage() {
           open={isTemplateDialogOpen}
           onOpenChange={(open) => {
             setIsTemplateDialogOpen(open);
-            if (!open) setEditingTemplateId(null);
+            if (!open) {
+              setEditingTemplateId(null);
+              setTemplateMediaFile(null);
+            }
           }}
         >
           <DialogContent className="max-w-2xl">
@@ -644,13 +681,48 @@ export function RoutinesPage() {
                 </Select>
               </div>
               <Textarea value={templateForm.content} onChange={(event) => setTemplateForm((current) => ({ ...current, content: event.target.value }))} placeholder="Mensagem do template" className="min-h-40" />
+              <div className="space-y-2">
+                <span className="text-xs font-medium text-muted-foreground">Mídia opcional</span>
+                <label className="flex cursor-pointer items-center gap-3 rounded-md border border-dashed border-border bg-muted/20 px-4 py-4 transition hover:bg-muted/40">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-background text-theme-primary">
+                    <Upload className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-foreground">{templateMediaFile?.name || templateForm.media?.fileName || "Selecionar imagem, áudio, vídeo ou documento"}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {templateMediaFile ? formatFileSize(templateMediaFile.size) : templateForm.media ? [templateForm.media.mimeType, formatFileSize(templateForm.media.size)].filter(Boolean).join(" · ") : "O arquivo será salvo no campo Midia do template"}
+                    </span>
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp"
+                    className="hidden"
+                    onChange={(event) => setTemplateMediaFile(event.target.files?.[0] ?? null)}
+                  />
+                </label>
+                {templateForm.media || templateMediaFile ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="gap-2 text-muted-foreground hover:text-destructive"
+                    onClick={() => {
+                      setTemplateMediaFile(null);
+                      setTemplateForm((current) => ({ ...current, media: null }));
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Remover mídia
+                  </Button>
+                ) : null}
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsTemplateDialogOpen(false)} className="gap-2">
                 <X className="h-4 w-4" />
                 Cancelar
               </Button>
-              <Button onClick={() => void saveTemplate()} disabled={isSavingTemplate || !templateForm.label.trim() || !templateForm.content.trim()} className="gap-2">
+              <Button onClick={() => void saveTemplate()} disabled={isSavingTemplate || !templateForm.label.trim() || (!templateForm.content.trim() && !templateForm.media && !templateMediaFile)} className="gap-2">
                 {isSavingTemplate ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 Salvar
               </Button>
@@ -737,7 +809,10 @@ function TemplateRow({ template, onEdit }: { template: RoutineMessageTemplate; o
       </Badge>
 
       <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-foreground">{template.label}</p>
+        <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-foreground">
+          <span className="truncate">{template.label}</span>
+          {template.media ? <Paperclip className="h-3.5 w-3.5 shrink-0 text-theme-primary" aria-label="Template com mídia" /> : null}
+        </p>
         <p className="line-clamp-2 text-sm text-muted-foreground">{description}</p>
       </div>
 
@@ -908,7 +983,7 @@ function ActionEditor({
   onRemove: () => void;
 }) {
   const selectedTemplate = messageTemplates.find((template) => template.id === action.templateId);
-  const usableMessageTemplates = messageTemplates.filter((template) => template.content);
+  const usableMessageTemplates = messageTemplates.filter((template) => template.content || template.media);
 
   return (
     <div className="overflow-hidden rounded-md border border-border bg-card">
@@ -1002,7 +1077,13 @@ function ActionEditor({
             {selectedTemplate ? (
               <>
                 <p className="mb-1 font-medium text-foreground">{selectedTemplate.label}</p>
-                <p className="line-clamp-3 whitespace-pre-wrap">{selectedTemplate.content}</p>
+                {selectedTemplate.content ? <p className="line-clamp-3 whitespace-pre-wrap">{selectedTemplate.content}</p> : null}
+                {selectedTemplate.media ? (
+                  <p className="mt-1 flex items-center gap-1.5 text-xs text-theme-primary">
+                    <Paperclip className="h-3.5 w-3.5" />
+                    {selectedTemplate.media.fileName}
+                  </p>
+                ) : null}
               </>
             ) : (
               "Escolha o template que será usado no envio real."

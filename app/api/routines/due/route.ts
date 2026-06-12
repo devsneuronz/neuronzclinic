@@ -8,6 +8,7 @@ const TASK_TABLE = process.env.AIRTABLE_TASKS_TABLE || "Encaminhamentos";
 const CONTACTS_TABLE = process.env.AIRTABLE_CONTACTS_TABLE || "Contatos";
 const MESSAGE_TEMPLATES_TABLE = process.env.AIRTABLE_MESSAGE_TEMPLATES_TABLE || "Templates mensagens";
 const TEMPLATE_CONTENT_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_CONTENT_FIELDS, ["Mensagem", "Conteudo", "Conteúdo", "Texto", "Message", "Content"]);
+const TEMPLATE_MEDIA_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_MEDIA_FIELDS, ["Midia", "Mídia", "Media"]);
 const SEND_MESSAGE_WEBHOOK_URL = process.env.SEND_MESSAGE_WEBHOOK_URL || "https://n8n.srv1150529.hstgr.cloud/webhook/send-message";
 const ROUTINES_WEBHOOK_SECRET = process.env.ROUTINES_WEBHOOK_SECRET;
 
@@ -43,6 +44,36 @@ function getStringField(fields: RawRecord, candidates: string[]) {
   }
 
   return "";
+}
+
+function getTemplateMedia(fields: RawRecord) {
+  for (const candidate of TEMPLATE_MEDIA_FIELDS) {
+    const value = fields[candidate];
+    if (!Array.isArray(value)) continue;
+
+    for (const item of value) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+      const attachment = item as RawRecord;
+      const url = getString(attachment.url);
+      if (!url) continue;
+
+      return {
+        url,
+        fileName: getString(attachment.filename) || "midia",
+        mimeType: getString(attachment.type) || "application/octet-stream",
+      };
+    }
+  }
+
+  return null;
+}
+
+function getMediaType(mimeType: string) {
+  const normalized = mimeType.toLowerCase();
+  if (normalized.startsWith("audio/")) return "audio";
+  if (normalized.startsWith("image/")) return "image";
+  if (normalized.startsWith("video/")) return "video";
+  return "document";
 }
 
 function isAuthorized(request: Request) {
@@ -213,15 +244,17 @@ async function createTask(run: RawRecord, action: RawRecord, type: "Aviso" | "Ta
   });
 }
 
-async function fetchTemplateContent(templateId: string) {
+async function fetchTemplate(templateId: string) {
   const template = await fetchAirtableRecordById(MESSAGE_TEMPLATES_TABLE, templateId);
-  const content = getStringField(template.fields ?? {}, TEMPLATE_CONTENT_FIELDS);
+  const fields = template.fields ?? {};
+  const content = getStringField(fields, TEMPLATE_CONTENT_FIELDS);
+  const media = getTemplateMedia(fields);
 
-  if (!content) {
-    throw new Error(`Template de mensagem sem conteúdo configurado: ${templateId}.`);
+  if (!content && !media) {
+    throw new Error(`Template de mensagem sem conteúdo ou mídia configurada: ${templateId}.`);
   }
 
-  return content;
+  return { content, media };
 }
 
 function getPayloadRecord(run: RawRecord) {
@@ -251,17 +284,21 @@ function renderTemplate(template: string, run: RawRecord) {
   });
 }
 
-async function resolveMessageText(run: RawRecord, action: RawRecord) {
+async function resolveMessage(run: RawRecord, action: RawRecord) {
   const manualMessage = getString(action.message);
-  if (manualMessage) return renderTemplate(manualMessage, run);
+  if (manualMessage) return { text: renderTemplate(manualMessage, run), media: null };
 
   const templateId = getString(action.templateId);
   if (templateId) {
-    return renderTemplate(await fetchTemplateContent(templateId), run);
+    const template = await fetchTemplate(templateId);
+    return {
+      text: template.content ? renderTemplate(template.content, run) : "",
+      media: template.media,
+    };
   }
 
   const subject = getString(action.subject);
-  if (subject) return renderTemplate(subject, run);
+  if (subject) return { text: renderTemplate(subject, run), media: null };
 
   throw new Error("A ação de mensagem precisa de texto/template.");
 }
@@ -281,21 +318,39 @@ async function sendMessage(run: RawRecord, action: RawRecord) {
   const chatId = getString(run.chat_id);
   if (!chatId) throw new Error("chat_id é obrigatório para enviar mensagem.");
 
-  const text = await resolveMessageText(run, action);
+  const { text, media } = await resolveMessage(run, action);
+  const contactName = getString(run.contact_name);
 
   const response = await fetch(SEND_MESSAGE_WEBHOOK_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      type: "text",
-      chat_id: chatId,
-      number: chatId,
-      contact_name: getString(run.contact_name),
-      text,
-      content: text,
-      routine_run_id: run.id,
-      routine_action_id: getString(action.id),
-    }),
+    body: JSON.stringify(
+      media
+        ? {
+            type: getMediaType(media.mimeType),
+            chat_id: chatId,
+            number: chatId,
+            contact_name: contactName,
+            nome_contato: contactName,
+            caption: text,
+            filename: media.fileName,
+            media_url: media.url,
+            media_mime_type: media.mimeType,
+            routine_run_id: run.id,
+            routine_action_id: getString(action.id),
+          }
+        : {
+            type: "text",
+            chat_id: chatId,
+            number: chatId,
+            contact_name: contactName,
+            nome_contato: contactName,
+            text,
+            content: text,
+            routine_run_id: run.id,
+            routine_action_id: getString(action.id),
+          },
+    ),
   });
   const webhookResponse = await readWebhookResponse(response);
 
@@ -307,6 +362,7 @@ async function sendMessage(run: RawRecord, action: RawRecord) {
     type: "send_message",
     chatId,
     textPreview: text.slice(0, 120),
+    mediaType: media ? getMediaType(media.mimeType) : null,
     templateId: getString(action.templateId) || null,
     webhookStatus: response.status,
     webhookResponse,

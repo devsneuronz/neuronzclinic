@@ -9,7 +9,15 @@ const TEMPLATE_CONTENT_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLAT
 const TEMPLATE_DESCRIPTION_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_DESCRIPTION_FIELDS, ["Descrição", "Descricao", "Description"]);
 const TEMPLATE_TYPE_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_TYPE_FIELDS, ["Tipo_mensagem", "Tipo", "Categoria"]);
 const TEMPLATE_COLOR_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_COLOR_FIELDS, ["HEXCOLOR", "HEXCOR", "Cor", "Color"]);
+const TEMPLATE_MEDIA_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_MEDIA_FIELDS, ["Midia", "Mídia", "Media"]);
 const TEMPLATE_ACTIVE_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_ACTIVE_FIELDS, ["Ativo", "Active", "Status"]);
+
+type AirtableAttachment = {
+  url?: unknown;
+  filename?: unknown;
+  type?: unknown;
+  size?: unknown;
+};
 
 type AirtableRecord = {
   id: string;
@@ -54,6 +62,25 @@ function getActiveValue(fields: Record<string, unknown>) {
   }
 
   return true;
+}
+
+function getMediaField(fields: Record<string, unknown>) {
+  for (const candidate of TEMPLATE_MEDIA_FIELDS) {
+    const value = fields[candidate];
+    if (!Array.isArray(value)) continue;
+
+    const attachment = value.find((item): item is AirtableAttachment => Boolean(item && typeof item === "object" && !Array.isArray(item) && typeof (item as AirtableAttachment).url === "string"));
+    if (!attachment || typeof attachment.url !== "string") continue;
+
+    return {
+      url: attachment.url,
+      fileName: typeof attachment.filename === "string" ? attachment.filename : "midia",
+      mimeType: typeof attachment.type === "string" ? attachment.type : "application/octet-stream",
+      size: typeof attachment.size === "number" ? attachment.size : undefined,
+    };
+  }
+
+  return null;
 }
 
 async function airtableRequest(path = "", init?: RequestInit) {
@@ -101,6 +128,7 @@ function mapTemplate(record: AirtableRecord): RoutineMessageTemplate {
     description: getStringField(fields, TEMPLATE_DESCRIPTION_FIELDS),
     type,
     color: getStringField(fields, TEMPLATE_COLOR_FIELDS),
+    media: getMediaField(fields),
     active: getActiveValue(fields),
   };
 }
@@ -115,7 +143,7 @@ function buildTemplateFields(input: Partial<RoutineMessageTemplate>) {
   const type = typeof input.type === "string" ? input.type.trim() : "";
 
   if (!label) throw new Error("Informe o nome do template.");
-  if (!content) throw new Error("Informe o conteúdo da mensagem.");
+  if (!content && !input.media?.url) throw new Error("Informe uma mensagem ou selecione uma mídia.");
 
   const fields: Record<string, unknown> = {
     [getFirstFieldName(TEMPLATE_NAME_FIELDS)]: label,
@@ -123,6 +151,17 @@ function buildTemplateFields(input: Partial<RoutineMessageTemplate>) {
   };
 
   if (type) fields[getFirstFieldName(TEMPLATE_TYPE_FIELDS)] = type;
+  if (Object.prototype.hasOwnProperty.call(input, "media")) {
+    const media = input.media;
+    fields[getFirstFieldName(TEMPLATE_MEDIA_FIELDS)] = media?.url
+      ? [
+          {
+            url: media.url,
+            ...(media.fileName ? { filename: media.fileName } : {}),
+          },
+        ]
+      : [];
+  }
 
   return fields;
 }

@@ -29,7 +29,15 @@ export interface RoutineMessageTemplate {
   description?: string;
   type?: string;
   color?: string;
+  media?: RoutineMessageTemplateMedia | null;
   active: boolean;
+}
+
+export interface RoutineMessageTemplateMedia {
+  url: string;
+  fileName: string;
+  mimeType: string;
+  size?: number;
 }
 
 export interface Routine {
