@@ -6,13 +6,6 @@ import { CalendarClock, ChevronDown, ChevronUp, Clock, SquarePen, Trash2 } from 
 import { useState } from "react";
 import { EditingScheduledDialog } from "./edit-scheduled-dialog";
 
-function toLocalDateTimeValue(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000);
-  return localDate.toISOString().slice(0, 16);
-}
-
 function formatScheduledDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "--";
@@ -44,12 +37,9 @@ export function ScheduledMessagesStrip({
   className?: string | undefined;
 }) {
   const visibleMessages = messages.filter((message) => message.status === "scheduled" || message.status === "processing" || message.status === "failed");
-  const [editingMessage, setEditingMessage] = useState<ScheduledMessageRecord | null>(null);
-  const [editText, setEditText] = useState("");
-  const [editDateTime, setEditDateTime] = useState("");
-  const [editError, setEditError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const editingMessage = visibleMessages.find((message) => message.id === editingMessageId) ?? null;
 
   if (visibleMessages.length === 0) return null;
 
@@ -80,7 +70,7 @@ export function ScheduledMessagesStrip({
                       size="icon-sm"
                       variant="ghost"
                       className="h-7 w-7 rounded-full text-muted-foreground hover:text-teal-500 hover:bg-teal-500/10"
-                      onClick={() => setEditingMessage(message)}
+                      onClick={() => setEditingMessageId(message.id)}
                       aria-label="Editar agendamento"
                     >
                       <SquarePen className="h-3.5 w-3.5" />
@@ -104,7 +94,7 @@ export function ScheduledMessagesStrip({
           </div>
         )}
       </div>
-      <EditingScheduledDialog message={editingMessage} onClose={() => setEditingMessage(null)} onUpdate={onUpdate} />
+      <EditingScheduledDialog message={editingMessage} onClose={() => setEditingMessageId(null)} onUpdate={onUpdate} />
     </div>
   );
 }
