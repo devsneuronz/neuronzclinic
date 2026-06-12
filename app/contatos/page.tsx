@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { getAvatarInitials } from "@/lib/avatar-initials";
-import { getChatStatusColor, getChatStatusLabel, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
+import { getChatStatusColor, getChatStatusLabel, normalizeStatusColor, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
 import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, getReadableTextColor, type ChatTag } from "@/lib/chat-tags";
 import { ChatRecord, fetchChats, updateChatDetails } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
@@ -62,10 +62,13 @@ function getFallbackStatusOptions(chats: ChatRecord[]) {
 
   for (const chat of chats) {
     const label = getChatStatusLabel(chat);
-    if (!label || options.has(label)) continue;
-    options.set(label, {
+    if (!label) continue;
+
+    const key = label.toLowerCase();
+    const current = options.get(key);
+    options.set(key, {
       label,
-      color: getChatStatusColor(chat),
+      color: current?.color || normalizeStatusColor(chat.hex_status),
     });
   }
 

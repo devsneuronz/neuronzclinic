@@ -6,7 +6,7 @@ import { ContactDetails } from "@/components/contact-details/contact-details";
 import type { ContactInfoValues } from "@/components/contact-details/profile-view";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { getChatStatusColor, getChatStatusLabel, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
+import { getChatStatusLabel, normalizeStatusColor, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
 import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, type ChatTag } from "@/lib/chat-tags";
 import { createSupabaseRealtimeSubscription, type SupabasePostgresChangePayload } from "@/lib/supabase-realtime";
 import {
@@ -356,10 +356,13 @@ function getFallbackStatusOptions(chats: ChatRecord[]) {
 
   for (const chat of chats) {
     const label = getChatStatusLabel(chat);
-    if (!label || options.has(label)) continue;
-    options.set(label, {
+    if (!label) continue;
+
+    const key = label.toLowerCase();
+    const current = options.get(key);
+    options.set(key, {
       label,
-      color: getChatStatusColor(chat),
+      color: current?.color || normalizeStatusColor(chat.hex_status),
     });
   }
 

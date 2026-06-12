@@ -24,12 +24,16 @@ export function sortStatusOptions(statuses: ChatStatusOption[]) {
   });
 }
 
-export function getChatStatusColor(chat?: Partial<ChatRecord>) {
-  if (chat?.hex_status && /^#[0-9a-f]{6}$/i.test(chat.hex_status)) {
-    return chat.hex_status;
-  }
+export function normalizeStatusColor(value?: string | null) {
+  const color = value?.trim();
+  if (!color) return undefined;
 
-  return "#ff0000";
+  const normalized = color.startsWith("#") ? color : `#${color}`;
+  return /^#[0-9a-f]{6}$/i.test(normalized) ? normalized : undefined;
+}
+
+export function getChatStatusColor(chat?: Partial<ChatRecord>) {
+  return normalizeStatusColor(chat?.hex_status) || "#ff0000";
 }
 
 export function getChatStatusLabel(chat?: Partial<ChatRecord>) {

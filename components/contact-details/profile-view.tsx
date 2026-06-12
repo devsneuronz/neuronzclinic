@@ -1,5 +1,5 @@
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { getChatStatusColor, getChatStatusLabel, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
+import { getChatStatusColor, getChatStatusLabel, normalizeStatusColor, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getChatInterestTags, getChatTags, getReadableTextColor } from "@/lib/chat-tags";
 import { formatDateTime } from "@/lib/date";
@@ -131,11 +131,12 @@ function getMergedStatusOptions(...groups: ChatStatusOption[][]) {
     for (const status of group) {
       if (!status.label) continue;
 
-      const current = statuses.get(status.label);
+      const key = status.label.toLowerCase();
+      const current = statuses.get(key);
 
-      statuses.set(status.label, {
+      statuses.set(key, {
         ...status,
-        color: current?.color || status.color,
+        color: current?.color || normalizeStatusColor(status.color),
       });
     }
   }
@@ -280,14 +281,17 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
   const availableTags = getMergedTags(tags, tagOptions);
   const availableInterest = getMergedTags(interests, interestOptions ?? tagOptions);
   const availableStatuses = getMergedStatusOptions(
+    statusOptions,
     [
       {
         label: getChatStatusLabel(chat)!,
-        color: getChatStatusColor(chat),
+        color: normalizeStatusColor(chat?.hex_status),
       },
     ],
-    statusOptions,
   );
+  const selectedStatusColor =
+    availableStatuses.find((status) => status.label.toLowerCase() === getChatStatusLabel(chat)?.toLowerCase())?.color ||
+    getChatStatusColor(chat);
 
   const appointmentsRef = useRef<HTMLDivElement>(null);
   const [highlightAppointmentId, setHighlightAppointmentId] = useState<string | null>(null);
@@ -812,8 +816,8 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                 <button
                   className="flex w-full items-center justify-between rounded px-3 py-1.5 text-sm font-medium shadow-sm"
                   style={{
-                    backgroundColor: getChatStatusColor(chat),
-                    color: getReadableTextColor(getChatStatusColor(chat)),
+                    backgroundColor: selectedStatusColor,
+                    color: getReadableTextColor(selectedStatusColor),
                   }}
                   title={getChatStatusLabel(chat)!}
                 >

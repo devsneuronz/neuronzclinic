@@ -1,4 +1,4 @@
-import { getChatStatusColor, getChatStatusLabel, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
+import { getChatStatusLabel, normalizeStatusColor, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
 import { getChatTags, type ChatTag } from "@/lib/chat-tags";
 import { NextResponse } from "next/server";
 
@@ -72,16 +72,18 @@ function getStatusOptions(chats: CatalogChatRecord[]) {
   const options = new Map<string, ChatStatusOption>();
   for (const chat of chats) {
     const label = getChatStatusLabel(chat);
-    if (!label || options.has(label)) continue;
+    if (!label) continue;
 
     const normalizedLabel = label.toLowerCase();
     if (normalizedLabel === "aberta" || normalizedLabel === "finalizada" || normalizedLabel === "fechada") {
       continue;
     }
 
-    options.set(label, {
+    const current = options.get(normalizedLabel);
+    const color = normalizeStatusColor(chat.hex_status);
+    options.set(normalizedLabel, {
       label,
-      color: getChatStatusColor(chat),
+      color: current?.color || color,
     });
   }
 
@@ -96,8 +98,9 @@ function mergeStatusOptions(...groups: ChatStatusOption[][]) {
       const label = status.label.trim();
       if (!label) continue;
 
-      const current = options.get(label);
-      options.set(label, {
+      const key = label.toLowerCase();
+      const current = options.get(key);
+      options.set(key, {
         label,
         color: current?.color || status.color,
       });
