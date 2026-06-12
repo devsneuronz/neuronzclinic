@@ -1,7 +1,7 @@
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getChatStatusColor, getChatStatusLabel, normalizeStatusColor, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
 import type { ChatTag } from "@/lib/chat-tags";
-import { getChatInterestTags, getChatTags, getReadableTextColor } from "@/lib/chat-tags";
+import { getChatInterestTags, getChatTags, getReadableTextColor, resolveChatTags } from "@/lib/chat-tags";
 import { formatDateTime } from "@/lib/date";
 import { createContactNote, deleteContactNote, fetchContactNotes, importAirtableContactNotes, type ChatRecord, type ContactNoteRecord } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
@@ -273,8 +273,8 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
   const [contactInfoFeedback, setContactInfoFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const pendingReorderedTagsRef = useRef<ChatTag[] | null>(null);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
-  const tags = getChatTags(chat);
-  const interests = getChatInterestTags(chat);
+  const tags = resolveChatTags(getChatTags(chat), tagOptions);
+  const interests = resolveChatTags(getChatInterestTags(chat), interestOptions ?? tagOptions);
   const patientName = getDisplayName(chat);
   const selectedTagKeys = new Set(tags.flatMap((tag) => [tag.id, tag.label.toLowerCase()]));
   const selectedInterestKeys = new Set(interests.flatMap((tag) => [tag.id, tag.label.toLowerCase()]));

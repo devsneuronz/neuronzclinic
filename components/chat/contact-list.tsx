@@ -13,7 +13,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { CHAT_DRAFT_CHANGED_EVENT, CHAT_DRAFT_STORAGE_PREFIX, readChatDraft, type ChatDraftChangedDetail } from "@/lib/chat-drafts";
 import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
-import { getChatInterestTags, getChatTags, getReadableTextColor } from "@/lib/chat-tags";
+import { getChatInterestTags, getChatTags, getReadableTextColor, resolveChatTags, type ChatTag } from "@/lib/chat-tags";
 import { ChatRecord, LatestMessageStatus } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 import { formatBoldText } from "@/utils/utils";
@@ -34,6 +34,7 @@ interface ContactListProps {
   selectedId?: string;
   latestMessageStatuses?: Record<string, LatestMessageStatus>;
   statusOptions?: ChatStatusOption[];
+  tagOptions?: ChatTag[];
   onSearchChange?: (value: string) => void;
   onSelect?: (id: string) => void;
   onLoadMore?: () => void;
@@ -165,6 +166,7 @@ export function ContactList({
   selectedId,
   latestMessageStatuses = {},
   statusOptions: catalogStatusOptions = [],
+  tagOptions: catalogTagOptions = [],
   onSearchChange,
   onSelect,
   onLoadMore,
@@ -651,7 +653,7 @@ export function ContactList({
         ) : (
           visibleChats.map((chat) => {
             const name = getDisplayName(chat);
-            const tags = getChatTags(chat).slice(0, 3);
+            const tags = resolveChatTags(getChatTags(chat), catalogTagOptions).slice(0, 3);
             const latestStatus = latestMessageStatuses[chat.chat_id];
             const draft = draftsByChatId[chat.chat_id]?.trim();
             const hasDraft = !!draft;

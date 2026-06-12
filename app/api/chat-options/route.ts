@@ -237,8 +237,10 @@ async function fetchAirtableTagTableNamesFromMetadata() {
     .filter((table) => {
       const tableName = table.name?.toLowerCase() ?? "";
       const fieldNames = (table.fields ?? []).map((field) => field.name?.toLowerCase() ?? "");
+      const hasLabelField = fieldNames.some((field) => ["tag", "nome", "name", "label"].includes(field));
+      const hasColorField = fieldNames.some((field) => ["hexcor", "hex_status", "color", "cor"].includes(field));
 
-      return tableName.includes("tag") || tableName.includes("etiqueta") || fieldNames.some((field) => ["tag", "tags", "ida tag", "hexcor", "cor"].includes(field));
+      return (tableName.includes("tag") || tableName.includes("etiqueta")) && hasLabelField && hasColorField;
     })
     .map((table) => table.name)
     .filter((name): name is string => Boolean(name));

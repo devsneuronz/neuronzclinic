@@ -1789,6 +1789,7 @@ export default function ChatsPage() {
           selectedId={undefined}
           latestMessageStatuses={latestMessageStatuses}
           statusOptions={contactStatusOptions}
+          tagOptions={contactTagOptions}
           onSearchChange={setSearch}
           onSelect={(id) => {
             handleSelectChat(id);
@@ -1869,6 +1870,7 @@ export default function ChatsPage() {
         selectedId={selectedChat?.id}
         latestMessageStatuses={latestMessageStatuses}
         statusOptions={contactStatusOptions}
+        tagOptions={contactTagOptions}
         onSearchChange={handleSearchChange}
         onSelect={handleSelectChat}
         onLoadMore={loadMoreChats}

@@ -158,6 +158,33 @@ export function getChatInterestTags(chat?: Partial<ChatRecord>): ChatTag[] {
   return tags
 }
 
+export function resolveChatTags(tags: ChatTag[], catalog: ChatTag[]): ChatTag[] {
+  if (catalog.length === 0) return tags
+
+  const catalogByKey = new Map<string, ChatTag>()
+
+  for (const tag of catalog) {
+    for (const value of [tag.id, tag.label]) {
+      const key = value.trim().toLowerCase()
+      if (key && !catalogByKey.has(key)) catalogByKey.set(key, tag)
+    }
+  }
+
+  return tags.map((tag) => {
+    const resolved =
+      catalogByKey.get(tag.id.trim().toLowerCase()) ??
+      catalogByKey.get(tag.label.trim().toLowerCase())
+
+    if (!resolved) return tag
+
+    return {
+      id: resolved.id,
+      label: resolved.label,
+      color: resolved.color ?? tag.color,
+    }
+  })
+}
+
 export function getReadableTextColor(backgroundColor?: string) {
   if (!backgroundColor) return undefined
 

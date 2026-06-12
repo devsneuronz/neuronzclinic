@@ -166,12 +166,10 @@ function getTableByCandidates(tables: AirtableTable[], candidates: string[]) {
 function hasTagShape(table: AirtableTable) {
   const tableName = table.name ? normalize(table.name) : ""
   const fieldNames = (table.fields ?? []).map((field) => (field.name ? normalize(field.name) : ""))
+  const hasLabelField = fieldNames.some((field) => ["tag", "nome", "name", "label"].includes(field))
+  const hasColorField = fieldNames.some((field) => ["hexcor", "hex status", "color", "cor"].includes(field))
 
-  return (
-    tableName.includes("tag") ||
-    tableName.includes("etiqueta") ||
-    fieldNames.some((field) => ["tag", "tags", "ida tag", "hexcor", "cor", "color"].includes(field))
-  )
+  return (tableName.includes("tag") || tableName.includes("etiqueta")) && hasLabelField && hasColorField
 }
 
 async function airtableRequest(path: string, init?: RequestInit) {
