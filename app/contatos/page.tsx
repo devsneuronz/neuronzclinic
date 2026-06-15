@@ -9,14 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { getChatStatusColor, getChatStatusLabel, normalizeStatusColor, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
 import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, getReadableTextColor, type ChatTag } from "@/lib/chat-tags";
 import { ChatRecord, fetchChats, updateChatDetails } from "@/lib/supabase-rest";
-import { cn } from "@/lib/utils";
 import { filterChatsForUser } from "@/lib/user-access";
+import { cn } from "@/lib/utils";
 import { ArrowDown, ArrowRight, Loader2, Maximize2, RefreshCw, Search, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -143,10 +143,7 @@ export default function ContatosPage() {
     setContacts(nextContacts);
   }, []);
 
-  const accessibleContacts = useMemo(
-    () => isCurrentUserLoading ? [] : filterChatsForUser(user, contacts),
-    [contacts, isCurrentUserLoading, user],
-  );
+  const accessibleContacts = useMemo(() => (isCurrentUserLoading ? [] : filterChatsForUser(user, contacts)), [contacts, isCurrentUserLoading, user]);
   const selectedContact = accessibleContacts.find((contact) => contact.id === selectedContactId);
   const fallbackStatusOptions = useMemo(() => getFallbackStatusOptions(contacts), [contacts]);
   const fallbackTagOptions = useMemo(() => getFallbackTagOptions(contacts), [contacts]);
@@ -509,7 +506,7 @@ export default function ContatosPage() {
                 <div className="w-full  min-h-18.25 overflow-y-auto split-scroll flex flex-col items-center justify-center">
                   {isLoading ? (
                     <div className="my-auto w-fit inline-flex items-center justify-center gap-2 rounded-xl bg-muted/80 px-5 text-xs font-semibold text-foreground border border-border/80 shadow-xs py-2">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--sidebar-custom-primary)]" />
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-theme-primary" />
                       <span>Carregando contatos...</span>
                     </div>
                   ) : filteredContacts.length > 0 ? (
@@ -593,7 +590,7 @@ export default function ContatosPage() {
                           >
                             {isLoadingMore ? (
                               <>
-                                <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--sidebar-custom-primary)]" />
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-theme-primary" />
                                 <span>Carregando contatos...</span>
                               </>
                             ) : (

@@ -2,13 +2,13 @@
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getAvatarInitials } from "@/lib/avatar-initials";
-import { cn } from "@/lib/utils";
 import { FolderKanban, HardHat, Loader2, Mail, Pencil, Shield, User } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import type { Sector } from "./sectors-manager";
 
 export type SettingsUser = {
@@ -21,20 +21,6 @@ export type SettingsUser = {
   tagIds: string[];
 };
 
-const tagStyles = ["bg-emerald-600 text-white", "bg-violet-600 text-white", "bg-yellow-600 text-white", "bg-sky-600 text-white", "bg-indigo-500 text-white", "bg-rose-600 text-white"];
-
-function getTagClass(tag: string) {
-  const value = tag.toLowerCase();
-
-  if (value.includes("venda")) return tagStyles[0];
-  if (value.includes("compra")) return tagStyles[1];
-  if (value.includes("financeiro")) return tagStyles[2];
-  if (value.includes("adm") || value.includes("admin")) return tagStyles[3];
-  if (value.includes("clínica") || value.includes("clinica")) return tagStyles[4];
-
-  const index = Array.from(value).reduce((total, char) => total + char.charCodeAt(0), 0) % tagStyles.length;
-  return tagStyles[index];
-}
 interface UserCardProps {
   user: SettingsUser;
   sectors: Sector[];
@@ -46,6 +32,11 @@ export function UserCard({ user, sectors, onUpdated }: UserCardProps) {
   const [selectedIds, setSelectedIds] = useState(user.sectorIds);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const visibleTags = user.tags!.slice(0, 3);
+  const hiddenTags = user.tags!.slice(3);
+
+  const sectorMap = useMemo(() => Object.fromEntries(sectors.map((sector) => [sector.name, sector])), [sectors]);
 
   async function save() {
     setIsSaving(true);
@@ -74,11 +65,11 @@ export function UserCard({ user, sectors, onUpdated }: UserCardProps) {
           <Avatar className="h-11 w-11 rounded-full bg-[var(--sidebar-custom-primary)] text-[var(--sidebar-custom-primary-fg)] font-semibold shadow-xs">
             <AvatarFallback className="rounded-xl bg-transparent">{getAvatarInitials(user.name)}</AvatarFallback>
           </Avatar>
-          <div className="overflow-hidden flex flex-row justify-between w-full">
-            <CardTitle title={user.name} className="text-base font-semibold text-foreground truncate transition-colors">
+          <div className="flex min-w-0 items-center justify-between gap-2 w-full">
+            <CardTitle title={user.name} className="min-w-0 flex-1 truncate text-base font-semibold">
               {user.name}
             </CardTitle>
-            <div className="flex items-center px-2 text-[11px] font-medium text-muted-foreground bg-muted rounded-md">
+            <div className="shrink-0 flex items-center px-2 py-1 text-[11px] font-medium text-muted-foreground bg-muted rounded-md">
               {user.role === "admin" && (
                 <div className="inline-flex items-center gap-1">
                   <Shield className="h-3 w-3" />
@@ -112,26 +103,78 @@ export function UserCard({ user, sectors, onUpdated }: UserCardProps) {
         </div>
       </CardContent>
 
-      <div className="mt-auto border-t border-border/60 bg-muted/30 px-5 py-4 space-y-3 min-h-[96px]">
-        <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase flex items-center gap-1.5">
-          <FolderKanban className="h-3.5 w-3.5 opacity-70" />
-          Setores sob responsabilidade
-        </span>
-        {/^rec[a-zA-Z0-9]+$/.test(user.id) && (
-          <Button variant="ghost" size="icon-sm" className="h-7 w-7" onClick={() => { setSelectedIds(user.sectorIds); setIsOpen(true); }} aria-label={`Editar setores de ${user.name}`}>
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-        )}
+      <div className="mt-auto border-t border-border/60 bg-muted/30 px-5 py-4 space-y-3 h-24.75">
+        <div className="flex items-center justify-between gap-2 h-7">
+          <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase flex items-center gap-1.5">
+            <FolderKanban className="h-3.5 w-3.5 opacity-70" />
+            Setores sob responsabilidade
+          </span>
+          {/^rec[a-zA-Z0-9]+$/.test(user.id) && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="h-7 w-7"
+              onClick={() => {
+                setSelectedIds(user.sectorIds);
+                setIsOpen(true);
+              }}
+              aria-label={`Editar setores de ${user.name}`}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
 
         {user.tags?.length ? (
           <div className="flex flex-wrap gap-1.5">
-            {user.tags.map((tag) => (
-              <Badge key={`${user.email}-${tag}`} className={cn(getTagClass(tag), "border-transparent px-2.5 py-1 text-xs font-medium rounded-lg transition-opacity hover:opacity-90 shadow-2xs")}>
-                {tag}
-              </Badge>
-            ))}
+            {visibleTags.map((tag) => {
+              const sector = sectorMap[tag];
+
+              return (
+                <span
+                  key={`${user.email}-${tag}`}
+                  className="inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold"
+                  style={{
+                    backgroundColor: `${sector?.color}50`,
+                    borderColor: sector?.color,
+                  }}
+                >
+                  {tag}
+                </span>
+              );
+            })}
+
+            {hiddenTags.length > 0 && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="outline" className="rounded-full">
+                      +{hiddenTags.length}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent className="p-2 rounded-full">
+                    <div className="flex gap-1">
+                      {hiddenTags.map((tag) => {
+                        const sector = sectorMap[tag];
+
+                        return (
+                          <Badge
+                            key={tag}
+                            className="rounded-full border"
+                            style={{
+                              backgroundColor: `${sector?.color}50`,
+                              borderColor: sector?.color,
+                            }}
+                          >
+                            {tag}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
         ) : (
           <p className="text-xs text-muted-foreground/80 italic">Nenhum setor atribuído até o momento</p>
@@ -139,14 +182,17 @@ export function UserCard({ user, sectors, onUpdated }: UserCardProps) {
       </div>
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Setores de {user.name}</DialogTitle><DialogDescription>Escolha os setores sob responsabilidade deste usuário.</DialogDescription></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Setores de {user.name}</DialogTitle>
+            <DialogDescription>Escolha os setores sob responsabilidade deste usuário.</DialogDescription>
+          </DialogHeader>
           <div className="grid max-h-80 gap-2 overflow-y-auto">
             {sectors.map((sector) => (
               <label key={sector.id} className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 hover:bg-muted/50">
                 <input
                   type="checkbox"
                   checked={selectedIds.includes(sector.id)}
-                  onChange={() => setSelectedIds((current) => current.includes(sector.id) ? current.filter((id) => id !== sector.id) : [...current, sector.id])}
+                  onChange={() => setSelectedIds((current) => (current.includes(sector.id) ? current.filter((id) => id !== sector.id) : [...current, sector.id]))}
                   className="size-4 accent-primary"
                 />
                 <span className="size-3 rounded-full" style={{ backgroundColor: sector.color }} />
@@ -156,8 +202,12 @@ export function UserCard({ user, sectors, onUpdated }: UserCardProps) {
             {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsOpen(false)}>Cancelar</Button>
-            <Button onClick={() => void save()} disabled={isSaving}>{isSaving && <Loader2 className="animate-spin" />} Salvar</Button>
+            <Button variant="outline" onClick={() => setIsOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void save()} disabled={isSaving}>
+              {isSaving && <Loader2 className="animate-spin" />} Salvar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

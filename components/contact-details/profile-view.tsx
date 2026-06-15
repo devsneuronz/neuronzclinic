@@ -280,18 +280,13 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
   const selectedInterestKeys = new Set(interests.flatMap((tag) => [tag.id, tag.label.toLowerCase()]));
   const availableTags = getMergedTags(tags, tagOptions);
   const availableInterest = getMergedTags(interests, interestOptions ?? tagOptions);
-  const availableStatuses = getMergedStatusOptions(
-    statusOptions,
-    [
-      {
-        label: getChatStatusLabel(chat)!,
-        color: normalizeStatusColor(chat?.hex_status),
-      },
-    ],
-  );
-  const selectedStatusColor =
-    availableStatuses.find((status) => status.label.toLowerCase() === getChatStatusLabel(chat)?.toLowerCase())?.color ||
-    getChatStatusColor(chat);
+  const availableStatuses = getMergedStatusOptions(statusOptions, [
+    {
+      label: getChatStatusLabel(chat)!,
+      color: normalizeStatusColor(chat?.hex_status),
+    },
+  ]);
+  const selectedStatusColor = availableStatuses.find((status) => status.label.toLowerCase() === getChatStatusLabel(chat)?.toLowerCase())?.color || getChatStatusColor(chat);
 
   const appointmentsRef = useRef<HTMLDivElement>(null);
   const [highlightAppointmentId, setHighlightAppointmentId] = useState<string | null>(null);
@@ -869,7 +864,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
               }}
             >
               {isLoadingLatestAppointment ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin text-theme-primary" />
               ) : latestAppointment?.status ? (
                 <>
                   <span>{latestAppointment?.status}</span>

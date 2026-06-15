@@ -741,7 +741,7 @@ export function KanbanBoard() {
                 ))}
 
                 <Button type="button" variant="outline" className="sm:justify-start bg-background h-10 shrink-0 sm:w-auto justify-center" onClick={() => loadTasks({ refresh: true })} disabled={isLoading || isRefreshing}>
-                  {isLoading || isRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  {isLoading || isRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-theme-primary" /> : <RefreshCw className="h-4 w-4" />}
                   <span className="hidden lg:inline ml-2">{isRefreshing ? "Atualizando" : "Atualizar"}</span>
                 </Button>
               </div>
@@ -794,7 +794,7 @@ export function KanbanBoard() {
               {isLoading ? (
                 <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin text-theme-primary" />
                     Carregando encaminhamentos
                   </div>
                 </div>

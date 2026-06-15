@@ -3,9 +3,9 @@ import type { MessageRecord } from "@/lib/supabase-rest";
 import type { Task } from "@/lib/task";
 import { cn } from "@/lib/utils";
 import { ExternalLink, Loader2, MessageCircle } from "lucide-react";
+import { getMediaKind, getMediaUrl, getMessagePreviewText, getMessageText, isDeletedMessage } from "../chat/message-utils";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
-import { getMediaKind, getMediaUrl, getMessagePreviewText, getMessageText, isDeletedMessage } from "../chat/message-utils";
 
 interface TaskPatientMessagesDialogProps {
   task: Task | null;
@@ -95,7 +95,7 @@ export function TaskPatientMessagesDialog({ task, open, onOpenChange, messages, 
             <div className="min-h-0 flex-1 overflow-y-auto bg-background px-4 py-4">
               {isLoading ? (
                 <div className="flex min-h-56 items-center justify-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin text-theme-primary" />
                   Carregando mensagens
                 </div>
               ) : errorMessage ? (

@@ -1,8 +1,8 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { SettingsUser, UserCard } from "./user-card";
 import type { Sector } from "./sectors-manager";
+import { SettingsUser, UserCard } from "./user-card";
 
 interface UsersGridProps {
   sortedUsers: SettingsUser[];
@@ -15,8 +15,8 @@ interface UsersGridProps {
 export function UsersGrid({ sortedUsers, isLoadingUsers, usersError, sectors, onUserUpdated }: UsersGridProps) {
   if (isLoadingUsers) {
     return (
-      <div className="flex min-h-64 flex-col gap-3 items-center justify-center rounded-2xl border border-dashed bg-card/50 text-sm text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin text-[var(--sidebar-custom-primary)]" />
+      <div className="flex h-full flex-row gap-3 items-center justify-center rounded-2xl border border-dashed bg-card/50 text-sm text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin text-theme-primary" />
         <span>Carregando usuários...</span>
       </div>
     );
@@ -32,7 +32,7 @@ export function UsersGrid({ sortedUsers, isLoadingUsers, usersError, sectors, on
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className=" grid gap-4 grid-cols-[repeat(auto-fit,minmax(320px,1fr))] ">
       {sortedUsers.map((user) => (
         <UserCard key={user.email} user={user} sectors={sectors} onUpdated={onUserUpdated} />
       ))}

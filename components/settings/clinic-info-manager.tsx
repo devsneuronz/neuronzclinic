@@ -229,7 +229,7 @@ export function ClinicInfoManager() {
   if (isLoading) {
     return (
       <section className="flex h-64 items-center justify-center rounded-md border border-dashed border-border bg-card text-sm text-muted-foreground">
-        <Loader2 className="mr-2 animate-spin" />
+        <Loader2 className="mr-2 animate-spin text-theme-primary" />
         Carregando informações
       </section>
     );

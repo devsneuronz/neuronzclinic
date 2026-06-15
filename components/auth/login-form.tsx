@@ -265,7 +265,7 @@ export function LoginForm() {
                 {notice ? <p className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400">{notice}</p> : null}
                 <Button type="submit" className="h-10 w-full gap-2 font-medium cursor-pointer bg-theme-primary text-white hover:bg-theme-primary/90" disabled={isLoading || isResetting}>
                   Entrar
-                  {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}
+                  {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-theme-primary" /> : <ArrowRight className="h-3.5 w-3.5" />}
                 </Button>
               </form>
             </div>

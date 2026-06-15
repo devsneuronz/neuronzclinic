@@ -190,7 +190,7 @@ export function TagsManager() {
                 color: getReadableTextColor(isHexColor(newColor) ? newColor : DEFAULT_COLOR),
               }}
             >
-              <div className="absolute left-2 h-2 w-2 rounded-full bg-background shadow-inner" />
+              <div className="absolute left-2 h-2 w-2 rounded-full bg-muted shadow-inner" />
               <span className="text-[11px] font-bold tracking-wide truncate uppercase select-none">{newLabel.trim() ? newLabel : "Amostra"}</span>
             </div>
 
@@ -246,9 +246,14 @@ export function TagsManager() {
         </Button>
       </form>
 
-      <div className="flex items-center justify-between gap-3 shrink-0 px-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="text-sm font-semibold text-foreground bg-muted px-2.5 py-0.5 rounded-full">{sortedTags.length} tags</span>
+      <div className="flex items-end justify-between gap-3 shrink-0 px-1">
+        <div className="flex min-w-0 items-center">
+          {isLoading ? (
+            <Loader2 className="animate-spin w-4 h-4" />
+          ) : (
+            <span className="font-semibold bg-muted px-2.5 py-0.5 rounded-full text-xs text-muted-foreground">{sortedTags.length < 1 ? "Nenhuma" : `${sortedTags.length} ${sortedTags.length === 1 ? "Tag" : "Tags"}`}</span>
+          )}
+
           {error ? <span className="truncate text-sm text-destructive font-medium">{error}</span> : null}
         </div>
 

@@ -680,7 +680,7 @@ export function WeeklyCalendar() {
 
           {isLoadingAppointments && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
-              <Loader2 className="h-3 w-3 animate-spin" />
+              <Loader2 className="h-3 w-3 animate-spin text-theme-primary" />
               <span className="hidden md:inline">Carregando...</span>
             </div>
           )}
@@ -916,7 +916,7 @@ export function WeeklyCalendar() {
         <aside className="flex flex-row w-full lg:w-64 lg:flex-col shrink-0 border-border bg-card p-4 transition-all duration-300 border-t lg:border-l lg:border-t">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-foreground hidden lg:inline">Filtros</h3>
-            {isLoadingOptions && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mr-4" />}
+            {isLoadingOptions && <Loader2 className="h-4 w-4 animate-spin text-theme-primary mr-4" />}
           </div>
 
           <div className="grid grid-cols-3 gap-3 lg:flex lg:flex-col lg:gap-4 w-full">

@@ -9,10 +9,10 @@ import { ClinicInfoManager } from "./clinic-info-manager";
 import ColorScheme from "./color-scheme";
 import { SavedAttachmentsManager } from "./saved-attachments-manager";
 import { ScheduledMessagesManager } from "./scheduled-messages-manager";
-import { TagsManager } from "./tags-manager";
-import { UsersGrid } from "./users";
 import { SectorsManager, type Sector } from "./sectors-manager";
+import { TagsManager } from "./tags-manager";
 import type { SettingsUser as UserCardSettingsUser } from "./user-card";
+import { UsersGrid } from "./users";
 
 type SettingsUser = {
   id: string;
@@ -56,7 +56,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetch("/api/airtable/sectors", { cache: "no-store" })
-      .then((response) => response.ok ? response.json() : Promise.reject(new Error("Não foi possível carregar os setores.")))
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error("Não foi possível carregar os setores."))))
       .then((data: { sectorRecords?: Sector[] }) => setSectors(data.sectorRecords ?? []))
       .catch(() => setSectors([]));
   }, []);
@@ -111,7 +111,7 @@ export default function SettingsPage() {
                   <CardTitle className="text-xl font-semibold text-foreground">Aparência</CardTitle>
                   <CardDescription className="text-sm text-muted-foreground">Personalize o esquema de cores do sistema para o seu conforto visual.</CardDescription>
                 </CardHeader>
-                <CardContent className="flex-1 overflow-y-auto">
+                <CardContent className="flex-1 overflow-y-auto custom-scrollbar">
                   <div className="flex flex-col md:flex-row gap-6">
                     <ColorScheme />
                     <BackgroundOptions />
@@ -125,13 +125,13 @@ export default function SettingsPage() {
                   <CardTitle className="text-xl font-semibold text-foreground">Equipe e Permissões</CardTitle>
                   <CardDescription className="text-sm text-muted-foreground">Visualize os profissionais cadastrados na plataforma, seus e-mails e setores de atuação.</CardDescription>
                 </CardHeader>
-                <CardContent className="flex-1 overflow-y-auto">
+                <CardContent className="flex-1 overflow-y-auto custom-scrollbar">
                   <UsersGrid
                     sortedUsers={sortedUsers}
                     isLoadingUsers={isLoadingUsers}
                     usersError={usersError}
                     sectors={sectors}
-                    onUserUpdated={(updated: UserCardSettingsUser) => setUsers((current) => current.map((user) => user.id === updated.id ? updated : user))}
+                    onUserUpdated={(updated: UserCardSettingsUser) => setUsers((current) => current.map((user) => (user.id === updated.id ? updated : user)))}
                   />
                 </CardContent>
               </Card>
@@ -142,7 +142,7 @@ export default function SettingsPage() {
                   <CardTitle className="text-xl font-semibold text-foreground">Gerenciamento de Setores</CardTitle>
                   <CardDescription className="text-sm text-muted-foreground">Crie setores e defina quais tags de contatos pertencem a cada um.</CardDescription>
                 </CardHeader>
-                <CardContent className="flex-1 overflow-y-auto">
+                <CardContent className="flex-1 overflow-y-auto custom-scrollbar">
                   <SectorsManager onSectorsChanged={setSectors} />
                 </CardContent>
               </Card>
@@ -153,7 +153,7 @@ export default function SettingsPage() {
                   <CardTitle className="text-xl font-semibold text-foreground">Gerenciamento de Tags</CardTitle>
                   <CardDescription className="text-sm text-muted-foreground">Crie, edite cores e mantenha as tags usadas nos contatos e chats.</CardDescription>
                 </CardHeader>
-                <CardContent className="flex-1 overflow-y-auto">
+                <CardContent className="flex-1 overflow-y-auto custom-scrollbar">
                   <TagsManager />
                 </CardContent>
               </Card>
@@ -164,7 +164,7 @@ export default function SettingsPage() {
                   <CardTitle className="text-xl font-semibold text-foreground">Mensagens Agendadas</CardTitle>
                   <CardDescription className="text-sm text-muted-foreground">Acompanhe e cancele mensagens pendentes agrupadas por contato.</CardDescription>
                 </CardHeader>
-                <CardContent className="flex-1 overflow-y-auto">
+                <CardContent className="flex-1 overflow-y-auto custom-scrollbar">
                   <ScheduledMessagesManager />
                 </CardContent>
               </Card>
@@ -175,7 +175,7 @@ export default function SettingsPage() {
                   <CardTitle className="text-xl font-semibold text-foreground">Anexos Rápidos</CardTitle>
                   <CardDescription className="text-sm text-muted-foreground">Gerencie mensagens, imagens, vídeos e áudios reutilizáveis no menu de clipe dos chats.</CardDescription>
                 </CardHeader>
-                <CardContent className="flex-1 overflow-y-auto">
+                <CardContent className="flex-1 overflow-y-auto custom-scrollbar">
                   <SavedAttachmentsManager />
                 </CardContent>
               </Card>

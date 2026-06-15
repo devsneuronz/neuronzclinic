@@ -182,11 +182,11 @@ function DashboardAppointments({ appointments }: { appointments: CalendarAppoint
         <span className="text-right">Status</span>
       </div>
 
-      <CardContent className="flex-1 overflow-y-auto p-0 min-h-0 custom-scrollbar">
+      <CardContent className="flex-1 overflow-y-auto p-0  custom-scrollbar">
         {appointments.length === 0 ? (
-          <div className="flex h-44 flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground p-6">
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground p-6">
             <Calendar className="h-8 w-8 text-muted-foreground/60 stroke-[1.5]" />
-            <p className="font-medium">Nenhuma consulta encontrada para hoje.</p>
+            Nenhuma consulta encontrada para hoje.
           </div>
         ) : (
           <div className="flex flex-col w-full divide-y divide-border/60">
@@ -547,7 +547,7 @@ export function DashboardContent() {
               {isLoading ? (
                 <div className="flex h-64 lg:h-full items-center justify-center rounded-lg border border-dashed">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin text-theme-primary" />
                     Carregando dashboard
                   </div>
                 </div>
