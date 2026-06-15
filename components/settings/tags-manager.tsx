@@ -330,11 +330,11 @@ export function TagsManager() {
                           <span className="text-xs font-bold tracking-wide truncate uppercase select-none">{tag.label || "Sem Nome"}</span>
                         </div>
 
-                        <div className="flex items-center gap-0.5 shrink-0 transition-opacity">
-                          <Button type="button" variant="ghost" size="icon-sm" onClick={() => updateDraft(tag.id, { isEditing: true })} disabled={isSaving} className="h-7 w-7 rounded-md" aria-label="Editar tag">
+                        <div className="flex items-center gap-1 shrink-0 transition-opacity">
+                          <Button type="button" variant="ghost" size="icon-sm" onClick={() => updateDraft(tag.id, { isEditing: true })} disabled={isSaving} aria-label="Editar tag">
                             <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
                           </Button>
-                          <Button type="button" variant="ghost" size="icon-sm" onClick={() => void deleteTag(tag)} disabled={isSaving} className="h-7 w-7 text-destructive hover:bg-destructive/10" aria-label="Apagar tag">
+                          <Button type="button" variant="ghost" size="icon-sm" onClick={() => void deleteTag(tag)} disabled={isSaving} className=" text-destructive! hover:bg-destructive/10" aria-label="Apagar tag">
                             {isSaving ? <Loader2 className="animate-spin w-3.5 h-3.5" /> : <Trash2 className="w-3.5 h-3.5" />}
                           </Button>
                         </div>

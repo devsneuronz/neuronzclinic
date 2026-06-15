@@ -189,14 +189,14 @@ export function SectorsManager({ onSectorsChanged }: { onSectorsChanged?: (secto
                     <span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border" style={{ borderColor: sector.color, backgroundColor: `${sector.color}50` }}>
                       {sector.name}
                     </span>
-                    <p className="mt-2 text-xs text-muted-foreground">{sector.description || "Sem descrição"}</p>
+                    <p className="mt-2 text-xs text-muted-foreground">{sector.description || "Nenhuma descrição cadastrada"}</p>
                   </div>
-                  <div className="flex">
+                  <div className="flex items-center gap-1 shrink-0 transition-opacity">
                     <Button variant="ghost" size="icon-sm" onClick={() => openEdit(sector)} aria-label={`Editar ${sector.name}`}>
-                      <Pencil />
+                      <Pencil className="w-3.5 h-3. text-muted-foreground" />
                     </Button>
-                    <Button variant="ghost" size="icon-sm" className="text-destructive hover:bg-destructive/10" onClick={() => setDeleting(sector)} aria-label={`Excluir ${sector.name}`}>
-                      <Trash2 />
+                    <Button variant="ghost" size="icon-sm" className="text-destructive! hover:bg-destructive/10" onClick={() => setDeleting(sector)} aria-label={`Excluir ${sector.name}`}>
+                      <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
                 </div>
