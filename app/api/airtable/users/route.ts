@@ -37,6 +37,7 @@ type ListedUser = {
   tags: string[]
   sectorIds: string[]
   tagIds: string[]
+  canAccessUntaggedChats: boolean
 }
 
 function getStringField(fields: Record<string, unknown>, candidates: string[]) {
@@ -184,6 +185,26 @@ async function getLinkedTagLabels(ids: string[]) {
   return labels
 }
 
+async function getUntaggedSectorIds() {
+  const sectorIds = new Set<string>()
+
+  for (const table of SECTOR_TABLE_CANDIDATES) {
+    const records = await fetchAllRecords(table)
+    if (records.length === 0) continue
+
+    for (const record of records) {
+      const fields = record.fields ?? {}
+      if (!isInactive(fields) && getStringArrayField(fields, ["Tags", "tags"]).length === 0) {
+        sectorIds.add(record.id)
+      }
+    }
+
+    break
+  }
+
+  return sectorIds
+}
+
 async function findUserByEmail(email: string) {
   const normalizedEmail = email.trim().toLowerCase()
 
@@ -199,6 +220,7 @@ async function findUserByEmail(email: string) {
     if (record?.fields) {
       const sectorIds = getStringArrayField(record.fields, ["Setor", "Setores"])
       const tagIds = getStringArrayField(record.fields, ["Tags", "tags"])
+      const untaggedSectorIds = await getUntaggedSectorIds()
       return {
         email: normalizedEmail,
         name: getName(record.fields, normalizedEmail),
@@ -206,6 +228,7 @@ async function findUserByEmail(email: string) {
         source: "airtable" as const,
         sectorIds,
         tagIds,
+        canAccessUntaggedChats: sectorIds.some((id) => untaggedSectorIds.has(id)),
       }
     }
   }
@@ -235,6 +258,7 @@ async function listActiveUsers() {
         tags: getUserTags(fields),
         sectorIds: getStringArrayField(fields, ["Setor", "Setores"]),
         tagIds: getStringArrayField(fields, ["Tags", "tags"]),
+        canAccessUntaggedChats: false,
       })
     }
 
@@ -254,16 +278,19 @@ async function listActiveUsers() {
         tags: user.role === "admin" ? ["ADM"] : [],
         sectorIds: [],
         tagIds: [],
+        canAccessUntaggedChats: false,
       })
     }
   }
 
   const linkedTagLabels = await getLinkedTagLabels(Array.from(indexedUsers.values()).flatMap((user) => user.tags))
+  const untaggedSectorIds = await getUntaggedSectorIds()
 
   return Array.from(indexedUsers.values())
     .map((user) => ({
       ...user,
       tags: Array.from(new Set(user.tags.map((tag) => linkedTagLabels.get(tag) ?? tag).filter((tag) => !/^rec[a-zA-Z0-9]+$/.test(tag)))),
+      canAccessUntaggedChats: user.sectorIds.some((id) => untaggedSectorIds.has(id)),
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
 }

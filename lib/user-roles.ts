@@ -7,6 +7,7 @@ export type CurrentUser = {
   source: "airtable" | "fallback" | "session"
   sectorIds?: string[]
   tagIds?: string[]
+  canAccessUntaggedChats?: boolean
 }
 
 export type MentionableUser = Pick<CurrentUser, "email" | "name" | "role">

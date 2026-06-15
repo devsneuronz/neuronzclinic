@@ -203,7 +203,7 @@ export function SectorsManager({ onSectorsChanged }: { onSectorsChanged?: (secto
                 <Separator />
                 <div className="w-full flex justify-between gap-2">
                   <span>Tags do setor</span>
-                  <span className="text-xs text-muted-foreground">{sector.tagIds.length < 1 ? "Nenhuma" : `${sector.tagIds.length} ${sector.tagIds.length === 1 ? "Tag" : "Tags"}`}</span>
+                  <span className="text-xs text-muted-foreground">{sector.tagIds.length < 1 ? "Sem tag" : `${sector.tagIds.length} ${sector.tagIds.length === 1 ? "Tag" : "Tags"}`}</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {sector.tagIds.length ? (
@@ -216,7 +216,7 @@ export function SectorsManager({ onSectorsChanged }: { onSectorsChanged?: (secto
                       );
                     })
                   ) : (
-                    <span className="text-xs italic text-muted-foreground">Nenhuma tag vinculada</span>
+                    <span className="rounded-md bg-muted px-2 py-1 text-xs">Contatos sem tags</span>
                   )}
                 </div>
               </div>
@@ -265,6 +265,9 @@ export function SectorsManager({ onSectorsChanged }: { onSectorsChanged?: (secto
                     </label>
                   ))}
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Se nenhuma tag for selecionada, o setor exibirá exclusivamente os contatos sem tags.
+                </p>
               </div>
             </div>
             <DialogFooter>

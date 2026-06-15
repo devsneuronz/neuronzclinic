@@ -34,10 +34,13 @@ export function canUserAccessChat(user: CurrentUser | null | undefined, chat: Pa
   if (!user) return false
   if (user.role === "admin") return true
 
+  const chatTags = getChatTags(chat)
+  if (chatTags.length === 0) return user.canAccessUntaggedChats === true
+
   const allowedTagIds = new Set(user.tagIds ?? [])
   if (allowedTagIds.size === 0) return false
 
-  return getChatTags(chat).some((tag) => allowedTagIds.has(tag.id))
+  return chatTags.some((tag) => allowedTagIds.has(tag.id))
 }
 
 export function filterChatsForUser<T extends Partial<ChatRecord>>(user: CurrentUser | null | undefined, chats: T[]) {
