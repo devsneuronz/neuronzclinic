@@ -639,8 +639,8 @@ export async function POST(request: Request) {
   const creatorName = getString(body.creatorName)
   const creatorUserId = getString(body.creatorUserId)
 
-  if (!type || !status || !createdAt || !dueDate || !responsibleUserId || !subject || !creatorName) {
-    return NextResponse.json({ message: "Preencha tipo, status, prazo, responsável e assunto." }, { status: 400 })
+  if (!type || !status || !createdAt || !dueDate || !responsibleUserId || !subject || !creatorName || !creatorUserId) {
+    return NextResponse.json({ message: "Preencha tipo, status, prazo, responsável, criador e assunto." }, { status: 400 })
   }
 
   if (!isAirtableRecordId(responsibleUserId)) {
@@ -672,9 +672,8 @@ export async function POST(request: Request) {
       Data_prazo: dueDate,
       Contato: [contactId],
       User: [responsibleUserId],
-      Criador: creatorName,
+      User_criador: [creatorUserId],
       Assunto: subject,
-      ...(creatorUserId ? { User_criador: [creatorUserId] } : {}),
     }
 
     if (observations) fields["Observações"] = observations
