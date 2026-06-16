@@ -70,7 +70,8 @@
   --color-chat-me: var(--chat-me);
   --color-chat-other: var(--chat-other);
 
-  --color-chat-scheduled: var(--chat-scheduled) --login-background: var(--login-custom-bg);
+  --color-chat-scheduled: var(--chat-scheduled);
+  --login-background: var(--login-custom-bg);
 }
 
 @layer base {
