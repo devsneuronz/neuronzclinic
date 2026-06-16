@@ -1,13 +1,9 @@
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn, normalizeText } from "@/lib/utils";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { CalendarPlus, Loader2, Search } from "lucide-react";
-import React, { useEffect, useMemo, useState } from "react";
+import { Search } from "lucide-react";
+import React, { useMemo, useState } from "react";
 import { CalendarAppointment } from "./weekly-calendar";
 
 export interface AppointmentDialogProps {
@@ -29,15 +25,7 @@ export interface AppointmentDialogProps {
   initialPatient?: { id: string; label: string } | null;
 }
 
-export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ open, onOpenChange, appointment, startDate, endDate, options, onCreate, onUpdate, isSaving = false, initialPatient = null }) => {
-  const isEdit = Boolean(appointment);
-
-  const [appointmentStatus, setAppointmentStatus] = useState("");
-  const [appointmentType, setAppointmentType] = useState("");
-  const [appointmentStartDateTime, setAppointmentStartDateTime] = useState("");
-  const [appointmentEndDateTime, setAppointmentEndDateTime] = useState("");
-  const [appointmentAttendanceMode, setAppointmentAttendanceMode] = useState("");
-  const [appointmentProfessionalId, setAppointmentProfessionalId] = useState("");
+export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ options }) => {
   const [appointmentPatientId, setAppointmentPatientId] = useState("");
   const [appointmentPatientSearch, setAppointmentPatientSearch] = useState("");
   const [appointmentObservations, setAppointmentObservations] = useState("");
@@ -51,150 +39,11 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
     return options.patients.filter((patient) => normalizeText(patient.label).includes(query)).slice(0, 8);
   }, [appointmentPatientSearch, options.patients]);
 
-  const formatDateTimeLocal = (date?: Date) => {
-    if (!date) return "";
-    const tzOffset = date.getTimezoneOffset() * 60000;
-    const localISOTime = new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
-    return localISOTime;
-  };
-
-  useEffect(() => {
-    if (isEdit && appointment) {
-      setAppointmentStatus(appointment.status);
-      setAppointmentType(appointment.type);
-      setAppointmentStartDateTime(formatDateTimeLocal(startDate));
-      setAppointmentEndDateTime(formatDateTimeLocal(endDate));
-      setAppointmentAttendanceMode(appointment.attendanceMode);
-      setAppointmentProfessionalId(appointment.professionalId);
-      setAppointmentPatientId(appointment.patientId ?? "");
-      setAppointmentObservations(appointment.observations ?? "");
-    } else if (open) {
-      setAppointmentStatus("");
-      setAppointmentType("");
-      setAppointmentStartDateTime(formatDateTimeLocal(startDate));
-      setAppointmentEndDateTime(formatDateTimeLocal(endDate));
-      setAppointmentAttendanceMode("");
-      setAppointmentProfessionalId("");
-      setAppointmentPatientId(initialPatient?.id ?? "");
-      setAppointmentPatientSearch(initialPatient?.label ?? "");
-      setAppointmentObservations("");
-    }
-  }, [isEdit, appointment, open, startDate, endDate, initialPatient?.id, initialPatient?.label]);
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-
-    const formData = new FormData();
-    formData.append("status", appointmentStatus);
-    formData.append("type", appointmentType);
-    formData.append("attendanceMode", appointmentAttendanceMode);
-    formData.append("startDateTime", appointmentStartDateTime);
-    if (appointmentEndDateTime) formData.append("endDateTime", appointmentEndDateTime);
-    formData.append("professionalId", appointmentProfessionalId);
-    if (appointmentPatientId) formData.append("patientId", appointmentPatientId);
-    if (appointmentObservations) formData.append("observations", appointmentObservations);
-
-    try {
-      if (isEdit && appointment && onUpdate) {
-        await onUpdate(appointment.id, formData);
-      } else {
-        await onCreate(formData);
-      }
-      onOpenChange(false);
-    } catch {
-      // The parent already displays the API error and keeps the form open.
-    }
-  };
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog>
       <DialogContent className="max-w-2xl max-h-[85dvh] flex flex-col p-0 overflow-hidden">
-        <DialogHeader className="p-6 pb-2 shrink-0">
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <CalendarPlus className="h-4 w-4 text-primary" />
-            {isEdit ? "Editar agendamento" : "Novo agendamento"}
-          </DialogTitle>
-          <DialogDescription>{appointmentStartDateTime ? format(new Date(appointmentStartDateTime), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : "Selecione os dados do agendamento."}</DialogDescription>
-        </DialogHeader>
-
-        <form className="flex flex-1 flex-col overflow-hidden" onSubmit={handleSubmit}>
+        <form className="flex flex-1 flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto p-6 pt-2 space-y-4 min-h-0">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">Status</label>
-                <Select value={appointmentStatus} onValueChange={setAppointmentStatus} required>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options.status.map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {status}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">Tipo</label>
-                <Select value={appointmentType} onValueChange={setAppointmentType} required>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options.types.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {type}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">Início</label>
-                <Input type="datetime-local" value={appointmentStartDateTime} onChange={(e) => setAppointmentStartDateTime(e.target.value)} required />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">Fim</label>
-                <Input type="datetime-local" value={appointmentEndDateTime} onChange={(e) => setAppointmentEndDateTime(e.target.value)} />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">Presencial/Online</label>
-                <Select value={appointmentAttendanceMode} onValueChange={setAppointmentAttendanceMode} required>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Formato" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options.attendanceModes.map((mode) => (
-                      <SelectItem key={mode} value={mode}>
-                        {mode}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">Profissional</label>
-                <Select value={appointmentProfessionalId} onValueChange={setAppointmentProfessionalId} required>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Profissional" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options.professionals.map((professional) => (
-                      <SelectItem key={professional.id} value={professional.id}>
-                        {professional.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
             <div className="space-y-2">
               <label className="text-xs font-semibold text-foreground">Paciente</label>
               <div className="relative">
@@ -249,16 +98,6 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
               <Textarea className="min-h-20 resize-none" value={appointmentObservations} onChange={(e) => setAppointmentObservations(e.target.value)} />
             </div>
           </div>
-
-          <DialogFooter className="p-6 pt-4 border-t border-border bg-muted/20 shrink-0">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isEdit ? "Salvar alterações" : "Salvar agendamento"}
-            </Button>
-          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

@@ -5,8 +5,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type ChatTag } from "@/lib/chat-tags";
-import { Loader2, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import ColorPicker from "../ui/color-picker";
 import { Separator } from "../ui/separator";
 
 export type Sector = {
@@ -168,7 +169,7 @@ export function SectorsManager({ onSectorsChanged }: { onSectorsChanged?: (secto
             {isLoading ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
             Atualizar
           </Button>
-          <Button size="sm" onClick={openCreate}>
+          <Button size="sm" variant="primary" onClick={openCreate}>
             <Plus /> Novo setor
           </Button>
         </div>
@@ -248,15 +249,11 @@ export function SectorsManager({ onSectorsChanged }: { onSectorsChanged?: (secto
               </div>
               <div className="space-y-2">
                 <Label htmlFor="sector-color">Cor</Label>
-                <Input id="sector-color" type="color" value={draft.color} onChange={(event) => setDraft((current) => ({ ...current, color: event.target.value }))} className="p-1" />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="sector-description">Descrição</Label>
-                <Input id="sector-description" value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} />
+                <ColorPicker classname="h-9" value={draft.color || "#3b82f6"} onChange={(newColor) => setDraft((current) => ({ ...current, color: newColor }))} />
               </div>
               <div className="space-y-2 sm:col-span-2">
                 <Label>Tags vinculadas</Label>
-                <div className="grid max-h-64 gap-2 overflow-y-auto rounded-lg border p-3 sm:grid-cols-2">
+                <div className="grid max-h-64 gap-2 overflow-y-auto rounded-lg border p-3 sm:grid-cols-2 custom-scrollbar">
                   {tags.map((tag) => (
                     <label key={tag.id} className="flex cursor-pointer items-center gap-2 rounded-md p-2 text-sm hover:bg-muted">
                       <input type="checkbox" checked={draft.tagIds.includes(tag.id)} onChange={() => toggleTag(tag.id)} className="size-4 accent-primary" />
@@ -265,9 +262,7 @@ export function SectorsManager({ onSectorsChanged }: { onSectorsChanged?: (secto
                     </label>
                   ))}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Se nenhuma tag for selecionada, o setor exibirá exclusivamente os contatos sem tags.
-                </p>
+                <p className="text-xs text-muted-foreground">Se nenhuma tag for selecionada, o setor exibirá exclusivamente os contatos sem tags.</p>
               </div>
             </div>
             <DialogFooter>
@@ -282,8 +277,8 @@ export function SectorsManager({ onSectorsChanged }: { onSectorsChanged?: (secto
               >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isSaving || !draft.name.trim()}>
-                {isSaving && <Loader2 className="animate-spin" />} Salvar setor
+              <Button type="submit" variant="primary" disabled={isSaving || !draft.name.trim()}>
+                {isSaving ? <Loader2 className="animate-spin" /> : <Save />} Salvar setor
               </Button>
             </DialogFooter>
           </form>

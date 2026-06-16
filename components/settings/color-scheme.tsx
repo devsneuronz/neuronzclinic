@@ -3,10 +3,9 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useColorTheme } from "@/hooks/use-color-theme";
-import { Tabs } from "@radix-ui/react-tabs";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
-import { TabsList, TabsTrigger } from "../ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
 import { ThemeCircle } from "./colors";
 
 const colorThemes = [

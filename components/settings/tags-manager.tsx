@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getReadableTextColor, type ChatTag } from "@/lib/chat-tags";
-import { Check, Loader2, Pencil, Plus, RefreshCw, Tag, Trash2, X } from "lucide-react";
+import { Check, Loader2, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import ColorPicker from "../ui/color-picker";
 
 type EditableTag = ChatTag & {
   draftLabel: string;
@@ -212,34 +213,18 @@ export function TagsManager() {
           <Label htmlFor="new-tag-color" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Cor de Identificação
           </Label>
-          <div className="flex items-center gap-2 bg-background border border-input rounded-md px-2.5 h-9 focus-within:ring-1 focus-within:ring-primary transition-all">
-            <Input
-              id="new-tag-color"
-              type="color"
-              value={isHexColor(newColor) ? newColor : DEFAULT_COLOR}
-              onChange={(event) => setNewColor(event.target.value)}
-              className="h-5 w-6 border-0 shrink-0 p-0 cursor-pointer bg-transparent! rounded-sm"
-              disabled={isCreating}
-            />
-            <Input
-              value={newColor}
-              onChange={(event) => setNewColor(event.target.value)}
-              className="font-mono text-xs uppercase border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent! w-full"
-              placeholder="#000000"
-              disabled={isCreating}
-            />
-          </div>
+          <ColorPicker value={isHexColor(newColor) ? newColor : DEFAULT_COLOR} disabled={isCreating} onChange={(color) => setNewColor(color)} />
         </div>
 
-        <Button type="submit" disabled={isCreating || !newLabel.trim()} className="w-full md:w-auto h-9 font-medium shadow-xs">
+        <Button type="submit" variant="primary" disabled={isCreating || !newLabel.trim()} className="w-full md:w-auto h-9 font-medium shadow-xs">
           {isCreating ? (
             <>
-              <Loader2 className="animate-spin w-4 h-4 mr-2" />
+              <Loader2 className="animate-spin w-4 h-4" />
               Criando...
             </>
           ) : (
             <>
-              <Plus className="w-4 h-4 mr-2 stroke-[2.5]" />
+              <Plus className="w-4 h-4 stroke-[2.5]" />
               Criar Tag
             </>
           )}
@@ -278,41 +263,44 @@ export function TagsManager() {
               return (
                 <div key={tag.id} className="flex flex-col justify-between gap-3 rounded-xl border border-border bg-background p-3.5 overflow-hidden transition-all hover:border-border/80 hover:shadow-2xs group min-w-0">
                   {tag.isEditing ? (
-                    <div className="flex flex-col gap-2.5 w-full">
-                      <div className="space-y-1 w-full min-w-0">
-                        <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Nome da Tag</Label>
-                        <div className="relative flex items-center">
-                          <Tag className="absolute left-3 h-4 w-4 text-muted-foreground/60" />
-                          <Input value={tag.draftLabel} onChange={(event) => updateDraft(tag.id, { draftLabel: event.target.value })} disabled={isSaving} className="h-9 pl-9" placeholder="Nome do marcador..." />
+                    <div className="flex flex-col justify-between h-full w-full gap-3 min-w-0">
+                      <div className="flex items-start justify-between gap-5 w-full min-w-0">
+                        <div
+                          className="relative flex h-7 max-w-full flex-1 shrink-0 items-center pl-6 pr-2 rounded-l-md rounded-r-[13px] border border-black/10 shadow-3xs [corner-shape:round_bevel_bevel_round] transition-all"
+                          style={{
+                            backgroundColor: isHexColor(tag.draftColor) ? tag.draftColor : DEFAULT_COLOR,
+                            color: getReadableTextColor(isHexColor(tag.draftColor) ? tag.draftColor : DEFAULT_COLOR),
+                          }}
+                        >
+                          <div className="absolute left-2 h-2 w-2 rounded-full bg-background/90 shadow-inner" />
+
+                          <input
+                            type="text"
+                            value={tag.draftLabel}
+                            onChange={(event) => updateDraft(tag.id, { draftLabel: event.target.value })}
+                            disabled={isSaving}
+                            className="w-full bg-transparent p-0 text-xs font-bold tracking-wide uppercase select-none outline-none border-0 placeholder:text-current/50 focus:ring-0 focus-visible:ring-0"
+                            placeholder="NOME DA TAG..."
+                            autoFocus
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button type="button" size="icon-sm" onClick={() => void saveTag(tag)} disabled={isSaving || !tag.draftLabel.trim()} aria-label="Salvar tag">
+                            {isSaving ? <Loader2 className="animate-spin w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}
+                          </Button>
+                          <Button type="button" variant="ghost" size="icon-sm" onClick={() => cancelEdit(tag)} disabled={isSaving} className="text-muted-foreground hover:bg-muted" aria-label="Cancelar edição">
+                            <X className="w-3.5 h-3.5" />
+                          </Button>
                         </div>
                       </div>
 
-                      <div className="space-y-1 w-full">
-                        <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cor Hexadecimal</Label>
-                        <div className="flex items-center gap-2 bg-background border border-input rounded-md px-2.5 h-9 focus-within:ring-1 focus-within:ring-ring transition-all">
-                          <Input
-                            type="color"
-                            value={isHexColor(tag.draftColor) ? tag.draftColor : DEFAULT_COLOR}
-                            onChange={(event) => updateDraft(tag.id, { draftColor: event.target.value })}
-                            className="h-5 w-6 shrink-0 p-0 border-0 cursor-pointer bg-transparent rounded-sm"
-                            disabled={isSaving}
-                          />
-                          <Input
-                            value={tag.draftColor}
-                            onChange={(event) => updateDraft(tag.id, { draftColor: event.target.value })}
-                            className="font-mono text-xs uppercase border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0 w-full"
-                            disabled={isSaving}
-                          />
-                        </div>
-                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t border-border/40 w-full text-[11px] font-mono font-medium text-muted-foreground/80">
+                        <span className="bg-muted px-1.5 py-0.5 rounded tracking-tight">ID: {tag.id}</span>
 
-                      <div className="flex justify-end gap-1.5 pt-1.5 border-t border-dashed border-border/60">
-                        <Button type="button" size="icon-sm" onClick={() => void saveTag(tag)} disabled={isSaving || !tag.draftLabel.trim()} aria-label="Salvar tag">
-                          {isSaving ? <Loader2 className="animate-spin w-4 h-4" /> : <Check className="w-4 h-4" />}
-                        </Button>
-                        <Button type="button" variant="outline" size="icon-sm" onClick={() => cancelEdit(tag)} disabled={isSaving} aria-label="Cancelar edição">
-                          <X className="w-4 h-4" />
-                        </Button>
+                        <div className="w-28 shrink-0">
+                          <ColorPicker value={isHexColor(tag.draftColor) ? tag.draftColor : DEFAULT_COLOR} disabled={isSaving} onChange={(newColor) => updateDraft(tag.id, { draftColor: newColor })} />
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -334,7 +322,7 @@ export function TagsManager() {
                           <Button type="button" variant="ghost" size="icon-sm" onClick={() => updateDraft(tag.id, { isEditing: true })} disabled={isSaving} aria-label="Editar tag">
                             <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
                           </Button>
-                          <Button type="button" variant="ghost" size="icon-sm" onClick={() => void deleteTag(tag)} disabled={isSaving} className=" text-destructive! hover:bg-destructive/10" aria-label="Apagar tag">
+                          <Button type="button" variant="destructive" size="icon-sm" onClick={() => void deleteTag(tag)} disabled={isSaving} aria-label="Apagar tag">
                             {isSaving ? <Loader2 className="animate-spin w-3.5 h-3.5" /> : <Trash2 className="w-3.5 h-3.5" />}
                           </Button>
                         </div>

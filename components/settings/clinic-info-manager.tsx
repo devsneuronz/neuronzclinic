@@ -252,7 +252,7 @@ export function ClinicInfoManager() {
               <RefreshCw className="mr-2 w-3.5 h-3.5" />
               Atualizar
             </Button>
-            <Button type="button" size="sm" onClick={() => void saveAssistant()} disabled={isSavingAssistant || !assistantChanged} className="h-9">
+            <Button type="button" size="sm" variant="primary" onClick={() => void saveAssistant()} disabled={isSavingAssistant || !assistantChanged} className="h-9">
               {isSavingAssistant ? <Loader2 className="animate-spin mr-2 w-3.5 h-3.5" /> : <Save className="mr-2 w-3.5 h-3.5" />}
               Salvar Alterações
             </Button>
@@ -344,8 +344,8 @@ export function ClinicInfoManager() {
             />
           </div>
 
-          <Button type="submit" disabled={isCreating || (!newProcedure.name.trim() && !newProcedure.interest.trim()) || !newProcedure.description.trim()} className="h-9 w-full lg:w-auto">
-            {isCreating ? <Loader2 className="animate-spin w-4 h-4" /> : <Plus className="w-4 h-4 mr-1.5" />}
+          <Button type="submit" variant="primary" disabled={isCreating || (!newProcedure.name.trim() && !newProcedure.interest.trim()) || !newProcedure.description.trim()} className="h-9 w-full lg:w-auto">
+            {isCreating ? <Loader2 className="animate-spin w-4 h-4" /> : <Plus className="w-4 h-4" />}
             Adicionar
           </Button>
         </form>
