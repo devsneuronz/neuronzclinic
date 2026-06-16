@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { getReadableTextColor, type ChatTag } from "@/lib/chat-tags";
 import { Check, Info, Loader2, Pencil, Plus, RefreshCw, Tag, Trash2, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import { Badge } from "../ui/badge";
 
 type EditableTag = ChatTag & {
   draftLabel: string;
@@ -328,7 +328,6 @@ export function TagsManager() {
                     <div className="flex flex-col justify-between h-full w-full gap-3 min-w-0">
                       <div className="flex items-start justify-between gap-2 w-full min-w-0">
                         <div className="flex min-w-0 flex-row items-center gap-1.5">
-                          {/* CORPO DA TAG */}
                           <div
                             className="relative flex h-7 max-w-full shrink-0 items-center justify-center pl-6 pr-4 rounded-l-md rounded-r-[13px] border border-black/10 shadow-3xs [corner-shape:round_bevel_bevel_round]"
                             style={{
@@ -337,26 +336,17 @@ export function TagsManager() {
                             }}
                           >
                             <div className="absolute left-2 h-2 w-2 rounded-full bg-background/90 shadow-inner" />
+
                             <span className="text-xs font-bold tracking-wide truncate uppercase select-none">{tag.label || "Sem Nome"}</span>
                           </div>
-
-                          {isWithoutSector && (
-                            <TooltipProvider delayDuration={200}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="text-muted-foreground hover:text-foreground cursor-help p-0.5 transition-colors shrink-0">
-                                    <Info className="w-4 h-4" />
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" align="center" className=" ">
-                                  <p>Tag sem setor</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
+                          {!isWithoutSector ? (
+                            <Badge className="text-background flex flex-row items-center gap-1">
+                              <Info className="w-3.25 h-3.25" />
+                              Tag sem setor
+                            </Badge>
+                          ) : null}
                         </div>
 
-                        {/* BOTÕES DE AÇÃO */}
                         <div className="flex items-center gap-0.5 shrink-0 transition-opacity">
                           <Button type="button" variant="ghost" size="icon-sm" onClick={() => updateDraft(tag.id, { isEditing: true })} disabled={isSaving} className="h-7 w-7 rounded-md" aria-label="Editar tag">
                             <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
@@ -367,7 +357,6 @@ export function TagsManager() {
                         </div>
                       </div>
 
-                      {/* RODAPÉ DO CARD */}
                       <div className="flex items-center justify-between pt-2 border-t border-border/40 w-full text-[11px] font-mono font-medium text-muted-foreground/80">
                         <span className="bg-muted px-1.5 py-0.5 rounded tracking-tight">ID: {tag.id}</span>
                         <span className="uppercase tracking-wider">{previewColor}</span>
