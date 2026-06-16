@@ -6,10 +6,13 @@ import { useColorTheme } from "@/hooks/use-color-theme";
 import { Tabs } from "@radix-ui/react-tabs";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
+import type { ColorTheme } from "../theme-provider";
 import { TabsList, TabsTrigger } from "../ui/tabs";
 import { ThemeCircle } from "./colors";
 
-const colorThemes = [
+type ThemeMode = "light" | "dark" | "system";
+
+const colorThemes: Array<{ id: ColorTheme; name: string; primary: string; secondary: string; muted: string }> = [
   { id: "default", name: "Padrão", primary: "#e5ddd5", secondary: "#5e5c47", muted: "#6c6a55" },
   { id: "theme-sand", name: "Areia Premium", primary: "#795548", secondary: "#ffe0b2", muted: "#bcaaa4" },
   { id: "theme-gray", name: "Cinza Neutro", primary: "#1f1f1f", secondary: "#e3e3e3", muted: "#757575" },
@@ -30,13 +33,14 @@ const colorThemes = [
 export default function ColorScheme() {
   const { theme, setTheme } = useTheme();
   const { colorTheme, setColorTheme } = useColorTheme();
+  const selectedTheme: ThemeMode = theme === "light" || theme === "dark" || theme === "system" ? theme : "system";
 
   return (
     <Card className="border border-border bg-card shadow-sm w-full p-0 mb-0 h-fit overflow-hidden">
       <CardContent className="p-4 sm:p-6 space-y-6">
         <div className="space-y-2">
           <Label className="text-sm font-medium text-foreground">Tema</Label>
-          <Tabs value={theme} onValueChange={(value) => setTheme(value)} className="w-full">
+          <Tabs value={selectedTheme} onValueChange={(value) => setTheme(value as ThemeMode)} className="w-full">
             <TabsList className="w-full grid grid-cols-3 gap-1 rounded-full h-11! bg-secondary/40 p-1">
               <TabsTrigger value="light" className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs">
                 <Sun className="h-3.5 w-3.5 text-yellow-500" />
@@ -62,7 +66,7 @@ export default function ColorScheme() {
           <div className="flex flex-wrap gap-5 justify-center bg-muted/25 p-4 rounded-xl border border-border/60">
             {colorThemes.map((color) => (
               <div key={color.id} className="transition-transform active:scale-95">
-                <ThemeCircle {...color} isActive={colorTheme === color.id} onClick={() => setColorTheme(color.id as any)} />
+                <ThemeCircle {...color} isActive={colorTheme === color.id} onClick={() => setColorTheme(color.id)} />
               </div>
             ))}
           </div>

@@ -3,7 +3,7 @@
 import { ThemeProvider as NextThemeProvider } from "next-themes";
 import React, { createContext, useEffect, useState } from "react";
 
-type ColorTheme = "default" | "theme-sand" | "theme-blue" | "theme-gray" | "theme-teal";
+export type ColorTheme = "default" | "theme-sand" | "theme-blue" | "theme-gray" | "theme-teal";
 
 type ThemeProviderState = {
   colorTheme: ColorTheme;
@@ -12,22 +12,28 @@ type ThemeProviderState = {
 
 export const ColorThemeContext = createContext<ThemeProviderState | undefined>(undefined);
 
+const COLOR_THEME_STORAGE_KEY = "tournieux-color-theme";
+const COLOR_THEMES: ColorTheme[] = ["default", "theme-sand", "theme-blue", "theme-gray", "theme-teal"];
+
+function isColorTheme(value: string | null): value is ColorTheme {
+  return COLOR_THEMES.includes(value as ColorTheme);
+}
+
 export function ThemeProvider({ children, ...props }: React.ComponentProps<typeof NextThemeProvider>) {
   const [colorTheme, setColorThemeState] = useState<ColorTheme>(() => {
-    if (typeof window !== "undefined") {
-      return (localStorage.getItem("tournieux-color-theme") as ColorTheme) || "default";
-    }
-    return "default";
+    if (typeof window === "undefined") return "default";
+
+    const savedTheme = localStorage.getItem(COLOR_THEME_STORAGE_KEY);
+    return isColorTheme(savedTheme) ? savedTheme : "default";
   });
 
   useEffect(() => {
     const root = document.documentElement;
 
-    const allThemes: ColorTheme[] = ["default", "theme-sand", "theme-blue", "theme-gray", "theme-teal"];
-    allThemes.forEach((t) => root.classList.remove(t));
+    COLOR_THEMES.forEach((theme) => root.classList.remove(theme));
 
     root.classList.add(colorTheme);
-    localStorage.setItem("tournieux-color-theme", colorTheme);
+    localStorage.setItem(COLOR_THEME_STORAGE_KEY, colorTheme);
   }, [colorTheme]);
 
   const setColorTheme = (theme: ColorTheme) => {

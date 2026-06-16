@@ -13,6 +13,10 @@ type EditableTag = ChatTag & {
   isEditing: boolean;
 };
 
+type TagSectorRecord = {
+  tagIds: string[];
+};
+
 const DEFAULT_COLOR = "#0d9488";
 
 function isHexColor(value: string) {
@@ -35,6 +39,7 @@ async function readApiError(response: Response, fallback: string) {
 
 export function TagsManager() {
   const [tags, setTags] = useState<EditableTag[]>([]);
+  const [sectors, setSectors] = useState<TagSectorRecord[]>([]);
   const [newLabel, setNewLabel] = useState("");
   const [newColor, setNewColor] = useState(DEFAULT_COLOR);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,17 +48,21 @@ export function TagsManager() {
   const [error, setError] = useState<string | null>(null);
 
   const sortedTags = useMemo(() => tags.slice().sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" })), [tags]);
+  const sectorTagIds = useMemo(() => new Set(sectors.flatMap((sector) => sector.tagIds)), [sectors]);
 
   async function loadTags() {
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/airtable/tags", { cache: "no-store" });
-      if (!response.ok) throw new Error(await readApiError(response, "Nao foi possivel carregar as tags."));
+      const [tagResponse, sectorResponse] = await Promise.all([fetch("/api/airtable/tags", { cache: "no-store" }), fetch("/api/airtable/sectors", { cache: "no-store" })]);
+      if (!tagResponse.ok) throw new Error(await readApiError(tagResponse, "Nao foi possivel carregar as tags."));
+      if (!sectorResponse.ok) throw new Error(await readApiError(sectorResponse, "Nao foi possivel carregar os setores."));
 
-      const data = (await response.json()) as { tags?: ChatTag[] };
-      setTags((data.tags ?? []).map(toEditableTag));
+      const tagData = (await tagResponse.json()) as { tags?: ChatTag[] };
+      const sectorData = (await sectorResponse.json()) as { sectorRecords?: TagSectorRecord[] };
+      setTags((tagData.tags ?? []).map(toEditableTag));
+      setSectors(sectorData.sectorRecords ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Nao foi possivel carregar as tags.");
     } finally {
@@ -64,14 +73,20 @@ export function TagsManager() {
   useEffect(() => {
     let isMounted = true;
 
-    fetch("/api/airtable/tags", { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(await readApiError(response, "Nao foi possivel carregar as tags."));
+    Promise.all([fetch("/api/airtable/tags", { cache: "no-store" }), fetch("/api/airtable/sectors", { cache: "no-store" })])
+      .then(async ([tagResponse, sectorResponse]) => {
+        if (!tagResponse.ok) throw new Error(await readApiError(tagResponse, "Nao foi possivel carregar as tags."));
+        if (!sectorResponse.ok) throw new Error(await readApiError(sectorResponse, "Nao foi possivel carregar os setores."));
 
-        return (await response.json()) as { tags?: ChatTag[] };
+        const tagData = (await tagResponse.json()) as { tags?: ChatTag[] };
+        const sectorData = (await sectorResponse.json()) as { sectorRecords?: TagSectorRecord[] };
+        return { tagData, sectorData };
       })
-      .then((data) => {
-        if (isMounted) setTags((data.tags ?? []).map(toEditableTag));
+      .then(({ tagData, sectorData }) => {
+        if (isMounted) {
+          setTags((tagData.tags ?? []).map(toEditableTag));
+          setSectors(sectorData.sectorRecords ?? []);
+        }
       })
       .catch((err) => {
         if (isMounted) setError(err instanceof Error ? err.message : "Nao foi possivel carregar as tags.");
@@ -201,8 +216,7 @@ export function TagsManager() {
                 onChange={(event) => setNewLabel(event.target.value)}
                 placeholder="Digitar nome da nova tag..."
                 disabled={isCreating}
-                className="h-9 focus-visibl
-              e:ring-primary pl-3"
+                className="h-9 focus-visible:ring-primary pl-3"
               />
             </div>
           </div>
@@ -274,6 +288,7 @@ export function TagsManager() {
             {sortedTags.map((tag) => {
               const isSaving = savingId === tag.id;
               const previewColor = tag.isEditing ? tag.draftColor : tag.color || DEFAULT_COLOR;
+              const isWithoutSector = !sectorTagIds.has(tag.id);
 
               return (
                 <div key={tag.id} className="flex flex-col justify-between gap-3 rounded-xl border border-border bg-background p-3.5 overflow-hidden transition-all hover:border-border/80 hover:shadow-2xs group min-w-0">
@@ -318,16 +333,24 @@ export function TagsManager() {
                   ) : (
                     <div className="flex flex-col justify-between h-full w-full gap-3 min-w-0">
                       <div className="flex items-start justify-between gap-2 w-full min-w-0">
-                        <div
-                          className="relative flex h-7  max-w-full shrink-0 items-center justify-center pl-6 pr-4 rounded-l-md rounded-r-[13px] border border-black/10 shadow-3xs [corner-shape:round_bevel_bevel_round]"
-                          style={{
-                            backgroundColor: previewColor,
-                            color: getReadableTextColor(previewColor),
-                          }}
-                        >
-                          <div className="absolute left-2 h-2 w-2 rounded-full bg-background/90 shadow-inner" />
+                        <div className="flex min-w-0 flex-col items-start gap-1.5">
+                          <div
+                            className="relative flex h-7 max-w-full shrink-0 items-center justify-center pl-6 pr-4 rounded-l-md rounded-r-[13px] border border-black/10 shadow-3xs [corner-shape:round_bevel_bevel_round]"
+                            style={{
+                              backgroundColor: previewColor,
+                              color: getReadableTextColor(previewColor),
+                            }}
+                          >
+                            <div className="absolute left-2 h-2 w-2 rounded-full bg-background/90 shadow-inner" />
 
-                          <span className="text-xs font-bold tracking-wide truncate uppercase select-none">{tag.label || "Sem Nome"}</span>
+                            <span className="text-xs font-bold tracking-wide truncate uppercase select-none">{tag.label || "Sem Nome"}</span>
+                          </div>
+
+                          {isWithoutSector ? (
+                            <span className="rounded-full border border-amber-300/70 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                              tag sem setor
+                            </span>
+                          ) : null}
                         </div>
 
                         <div className="flex items-center gap-0.5 shrink-0 transition-opacity">
