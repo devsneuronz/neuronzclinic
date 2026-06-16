@@ -222,6 +222,7 @@ async function findUserByEmail(email: string) {
       const tagIds = getStringArrayField(record.fields, ["Tags", "tags"])
       const untaggedSectorIds = await getUntaggedSectorIds()
       return {
+        id: record.id,
         email: normalizedEmail,
         name: getName(record.fields, normalizedEmail),
         role: getRole(record.fields),

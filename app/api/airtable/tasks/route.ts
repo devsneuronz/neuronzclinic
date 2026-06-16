@@ -18,6 +18,7 @@ type CreateTaskBody = {
   subject?: unknown
   observations?: unknown
   creatorName?: unknown
+  creatorUserId?: unknown
 }
 
 type UpdateTaskBody = {
@@ -187,6 +188,23 @@ type TaskPayload = ReturnType<typeof mapTaskRecord>
 
 const TASK_CACHE_TTL_MS = 45_000
 let taskListCache: { expiresAt: number; tasks: TaskPayload[] } | null = null
+
+function normalizeTaskViewerRole(value: string) {
+  const normalized = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+
+  return ["adm", "admin", "administrador", "administrator", "owner", "dono"].includes(normalized) ? "admin" : "user"
+}
+
+function filterTasksForViewer(tasks: TaskPayload[], viewerUserId: string, viewerRole: string) {
+  if (normalizeTaskViewerRole(viewerRole) === "admin") return tasks
+  if (!isAirtableRecordId(viewerUserId)) return []
+
+  return tasks.filter((task) => task.responsibleUserId === viewerUserId)
+}
 
 function onlyDigits(value: string) {
   return value.replace(/\D/g, "")
@@ -474,10 +492,12 @@ export async function GET(request: Request) {
   const chatId = getString(searchParams.get("chatId"))
   const contactPhone = getString(searchParams.get("contactPhone"))
   const shouldRefresh = searchParams.get("refresh") === "1"
+  const viewerUserId = getString(searchParams.get("userId"))
+  const viewerRole = getString(searchParams.get("role"))
 
   try {
     if (!chatId && !contactPhone && !shouldRefresh && taskListCache && taskListCache.expiresAt > Date.now()) {
-      return NextResponse.json({ tasks: taskListCache.tasks })
+      return NextResponse.json({ tasks: filterTasksForViewer(taskListCache.tasks, viewerUserId, viewerRole) })
     }
 
     const contactId = chatId || contactPhone ? await findContactId({ chatId, contactPhone }) : ""
@@ -499,7 +519,7 @@ export async function GET(request: Request) {
       taskListCache = { expiresAt: Date.now() + TASK_CACHE_TTL_MS, tasks }
     }
 
-    return NextResponse.json({ tasks })
+    return NextResponse.json({ tasks: filterTasksForViewer(tasks, viewerUserId, viewerRole) })
   } catch (error) {
     return NextResponse.json(
       { tasks: [], message: error instanceof Error ? error.message : "Não foi possível carregar encaminhamentos do Airtable." },
@@ -617,6 +637,7 @@ export async function POST(request: Request) {
   const subject = getString(body.subject)
   const observations = getString(body.observations)
   const creatorName = getString(body.creatorName)
+  const creatorUserId = getString(body.creatorUserId)
 
   if (!type || !status || !createdAt || !dueDate || !responsibleUserId || !subject || !creatorName) {
     return NextResponse.json({ message: "Preencha tipo, status, prazo, responsável e assunto." }, { status: 400 })
@@ -624,6 +645,10 @@ export async function POST(request: Request) {
 
   if (!isAirtableRecordId(responsibleUserId)) {
     return NextResponse.json({ message: "Usuário responsável inválido." }, { status: 400 })
+  }
+
+  if (creatorUserId && !isAirtableRecordId(creatorUserId)) {
+    return NextResponse.json({ message: "Usuário criador inválido." }, { status: 400 })
   }
 
   const createdAtDate = new Date(createdAt)
@@ -647,8 +672,9 @@ export async function POST(request: Request) {
       Data_prazo: dueDate,
       Contato: [contactId],
       User: [responsibleUserId],
-      User_criador: [responsibleUserId],
+      Criador: creatorName,
       Assunto: subject,
+      ...(creatorUserId ? { User_criador: [creatorUserId] } : {}),
     }
 
     if (observations) fields["Observações"] = observations

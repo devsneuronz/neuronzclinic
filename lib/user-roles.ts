@@ -1,6 +1,7 @@
 export type UserRole = "admin" | "manager" | "user"
 
 export type CurrentUser = {
+  id?: string
   email: string
   name: string
   role: UserRole

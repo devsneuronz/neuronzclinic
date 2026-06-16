@@ -154,8 +154,18 @@ function uniqueValues(tasks: Task[], key: keyof Task) {
   return Array.from(new Set(tasks.map((task) => String(task[key] || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
 }
 
-async function fetchTaskRecords({ signal, refresh = false }: { signal?: AbortSignal; refresh?: boolean } = {}) {
-  const response = await fetch(`/api/airtable/tasks${refresh ? "?refresh=1" : ""}`, { cache: "no-store", signal });
+function getTaskAccessParams(user: { id?: string; role?: string } | null | undefined) {
+  const params = new URLSearchParams();
+  if (user?.id) params.set("userId", user.id);
+  if (user?.role) params.set("role", user.role);
+  return params;
+}
+
+async function fetchTaskRecords({ signal, refresh = false, user }: { signal?: AbortSignal; refresh?: boolean; user?: { id?: string; role?: string } | null } = {}) {
+  const params = getTaskAccessParams(user);
+  if (refresh) params.set("refresh", "1");
+  const query = params.toString();
+  const response = await fetch(`/api/airtable/tasks${query ? `?${query}` : ""}`, { cache: "no-store", signal });
   const data = (await response.json()) as { tasks?: Task[]; message?: string };
 
   if (!response.ok) {
@@ -289,7 +299,7 @@ export function KanbanBoard() {
     void (async () => {
       try {
         setErrorMessage("");
-        const loadedTasks = await fetchTaskRecords({ signal: controller.signal });
+        const loadedTasks = await fetchTaskRecords({ signal: controller.signal, user });
         setTasks(loadedTasks);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -301,7 +311,7 @@ export function KanbanBoard() {
     })();
 
     return () => controller.abort();
-  }, [isCurrentUserLoading]);
+  }, [isCurrentUserLoading, user]);
 
   useEffect(() => {
     fetchChats({ limit: 1000 })
@@ -316,7 +326,7 @@ export function KanbanBoard() {
     setErrorMessage("");
 
     try {
-      const loadedTasks = await fetchTaskRecords({ refresh });
+      const loadedTasks = await fetchTaskRecords({ refresh, user });
       setTasks(loadedTasks);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Não foi possível carregar os encaminhamentos.");
@@ -547,6 +557,7 @@ export function KanbanBoard() {
           subject: taskSubject,
           observations: taskObservations,
           creatorName: user.name,
+          creatorUserId: user.id || "",
         }),
       });
       const data = (await response.json()) as { message?: string };

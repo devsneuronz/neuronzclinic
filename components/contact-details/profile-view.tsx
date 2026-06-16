@@ -412,12 +412,15 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
     const chatId = chat?.chat_id || "";
     const phone = contactPhone || chat?.phone_contact || "";
     const key = `${chatId}|${phone}`;
+    if (isCurrentUserLoading) return;
     if (!chatId && !phone) return;
 
     let isMounted = true;
     const params = new URLSearchParams();
     if (chatId) params.set("chatId", chatId);
     if (phone) params.set("contactPhone", phone);
+    if (user?.id) params.set("userId", user.id);
+    if (user?.role) params.set("role", user.role);
 
     fetch(`/api/airtable/tasks?${params.toString()}`)
       .then((response) => response.json() as Promise<{ tasks?: ContactTask[] }>)
@@ -436,7 +439,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
     return () => {
       isMounted = false;
     };
-  }, [chat?.chat_id, chat?.phone_contact, contactPhone]);
+  }, [chat?.chat_id, chat?.phone_contact, contactPhone, isCurrentUserLoading, user]);
 
   useEffect(() => {
     let isMounted = true;
@@ -640,6 +643,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
           subject: taskSubject,
           observations: taskObservations,
           creatorName: user.name,
+          creatorUserId: user.id || "",
         }),
       });
       const data = (await response.json()) as { id?: string; message?: string };

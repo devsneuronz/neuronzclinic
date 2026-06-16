@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -107,15 +108,18 @@ function toDateTimeLocalValue(date: Date) {
   return format(date, "yyyy-MM-dd'T'HH:mm");
 }
 
-async function fetchDashboardData() {
+async function fetchDashboardData(user?: { id?: string; role?: string } | null) {
   const todayStart = startOfToday();
   const tomorrowStart = addDays(todayStart, 1);
 
   const appointmentsUrl = new URL("/api/airtable/appointments", window.location.origin);
   appointmentsUrl.searchParams.set("start", todayStart.toISOString());
   appointmentsUrl.searchParams.set("end", tomorrowStart.toISOString());
+  const tasksUrl = new URL("/api/airtable/tasks", window.location.origin);
+  if (user?.id) tasksUrl.searchParams.set("userId", user.id);
+  if (user?.role) tasksUrl.searchParams.set("role", user.role);
 
-  const [appointmentsResponse, tasksResponse] = await Promise.all([fetch(appointmentsUrl, { cache: "no-store" }), fetch("/api/airtable/tasks", { cache: "no-store" })]);
+  const [appointmentsResponse, tasksResponse] = await Promise.all([fetch(appointmentsUrl, { cache: "no-store" }), fetch(tasksUrl, { cache: "no-store" })]);
 
   const appointmentsData = (await appointmentsResponse.json()) as { appointments?: CalendarAppointment[]; message?: string };
   const tasksData = (await tasksResponse.json()) as { tasks?: Task[]; message?: string };
@@ -306,6 +310,7 @@ function PendingTasks({ tasks }: { tasks: Task[] }) {
 }
 
 export function DashboardContent() {
+  const { user, isLoading: isCurrentUserLoading } = useCurrentUser();
   const [appointments, setAppointments] = useState<CalendarAppointment[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -333,7 +338,7 @@ export function DashboardContent() {
     setErrorMessage("");
 
     try {
-      const data = await fetchDashboardData();
+      const data = await fetchDashboardData(user);
       setAppointments(data.appointments);
       setTasks(data.tasks);
     } catch (error) {
@@ -347,9 +352,11 @@ export function DashboardContent() {
   useEffect(() => {
     let isActive = true;
 
+    if (isCurrentUserLoading) return;
+
     void (async () => {
       try {
-        const data = await fetchDashboardData();
+        const data = await fetchDashboardData(user);
         if (!isActive) return;
         setAppointments(data.appointments);
         setTasks(data.tasks);
@@ -364,7 +371,7 @@ export function DashboardContent() {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [isCurrentUserLoading, user]);
 
   const selectedAppointmentPatient = useMemo(() => appointmentOptions.patients.find((patient) => patient.id === appointmentPatientId), [appointmentOptions.patients, appointmentPatientId]);
 
