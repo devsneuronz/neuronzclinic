@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getReadableTextColor, type ChatTag } from "@/lib/chat-tags";
-import { Check, Loader2, Pencil, Plus, RefreshCw, Tag, Trash2, X } from "lucide-react";
+import { Check, Info, Loader2, Pencil, Plus, RefreshCw, Tag, Trash2, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Badge } from "../ui/badge";
 
 type EditableTag = ChatTag & {
   draftLabel: string;
@@ -210,14 +211,7 @@ export function TagsManager() {
             </div>
 
             <div className="relative flex-1">
-              <Input
-                id="new-tag-label"
-                value={newLabel}
-                onChange={(event) => setNewLabel(event.target.value)}
-                placeholder="Digitar nome da nova tag..."
-                disabled={isCreating}
-                className="h-9 focus-visible:ring-primary pl-3"
-              />
+              <Input id="new-tag-label" value={newLabel} onChange={(event) => setNewLabel(event.target.value)} placeholder="Digitar nome da nova tag..." disabled={isCreating} className="h-9 focus-visible:ring-primary pl-3" />
             </div>
           </div>
         </div>
@@ -333,7 +327,7 @@ export function TagsManager() {
                   ) : (
                     <div className="flex flex-col justify-between h-full w-full gap-3 min-w-0">
                       <div className="flex items-start justify-between gap-2 w-full min-w-0">
-                        <div className="flex min-w-0 flex-col items-start gap-1.5">
+                        <div className="flex min-w-0 flex-row items-center gap-1.5">
                           <div
                             className="relative flex h-7 max-w-full shrink-0 items-center justify-center pl-6 pr-4 rounded-l-md rounded-r-[13px] border border-black/10 shadow-3xs [corner-shape:round_bevel_bevel_round]"
                             style={{
@@ -345,11 +339,11 @@ export function TagsManager() {
 
                             <span className="text-xs font-bold tracking-wide truncate uppercase select-none">{tag.label || "Sem Nome"}</span>
                           </div>
-
-                          {isWithoutSector ? (
-                            <span className="rounded-full border border-amber-300/70 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-                              tag sem setor
-                            </span>
+                          {!isWithoutSector ? (
+                            <Badge className="text-background flex flex-row items-center gap-1">
+                              <Info className="w-3.25 h-3.25" />
+                              Tag sem setor
+                            </Badge>
                           ) : null}
                         </div>
 
