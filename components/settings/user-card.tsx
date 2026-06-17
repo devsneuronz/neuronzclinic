@@ -152,8 +152,8 @@ export function UserCard({ user, sectors, onUpdated }: UserCardProps) {
                       +{hiddenTags.length}
                     </Badge>
                   </TooltipTrigger>
-                  <TooltipContent className="p-2 rounded-full">
-                    <div className="flex gap-1">
+                  <TooltipContent className="p-2 rounded-[20px]">
+                    <div className="flex gap-1 flex-wrap justify-between">
                       {hiddenTags.map((tag) => {
                         const sector = sectorMap[tag];
 

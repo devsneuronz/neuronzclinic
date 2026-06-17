@@ -34,7 +34,7 @@ export type CalendarAppointment = {
   observations: string;
 };
 
-type AppointmentOptions = {
+export type AppointmentOptions = {
   status: string[];
   types: string[];
   attendanceModes: string[];

@@ -1,7 +1,7 @@
 "use client";
 
 import { Avatar } from "@radix-ui/react-avatar";
-import { Calendar, CheckSquare, ChevronLeft, ChevronRight, LayoutDashboard, LogOut, MessageSquare, Settings, Users, Workflow } from "lucide-react";
+import { Calendar, CheckSquare, ChevronLeft, ChevronRight, ClipboardList, LayoutDashboard, LogOut, MessageSquare, Settings, Users, Workflow } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType } from "react";
@@ -21,6 +21,7 @@ export const navItems = [
   { icon: CheckSquare, label: "Tarefas", href: "/tarefas", roles: ["admin", "manager", "user"] },
   { icon: Users, label: "Contatos", href: "/contatos", roles: ["admin", "manager", "user"] },
   { icon: Workflow, label: "Automação", href: "/rotinas", roles: ["admin", "manager"] },
+  { icon: ClipboardList, label: "Prontuários", href: "/prontuarios", roles: ["admin", "manager"] },
   { icon: Settings, label: "Configurações", href: "/configuracoes", roles: ["admin"] },
 ] satisfies Array<{
   icon: ComponentType<{ className?: string }>;

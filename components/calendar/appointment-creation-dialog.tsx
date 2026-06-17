@@ -1,13 +1,13 @@
-import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn, normalizeText } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarPlus, Loader2, Search } from "lucide-react";
+import { CalendarPlus, Loader2, Save, Search } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
+import { Button } from "../ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { CalendarAppointment } from "./weekly-calendar";
 
 export interface AppointmentDialogProps {
@@ -251,11 +251,11 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
           </div>
 
           <DialogFooter className="p-6 pt-4 border-t border-border bg-muted/20 shrink-0">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving} className="gap-2 h-9 text-xs">
               Cancelar
             </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+            <Button variant="primary" type="submit" disabled={isSaving} className="gap-2 h-9 text-xs bg-theme-primary text-white hover:bg-theme-primary/90">
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {isEdit ? "Salvar alterações" : "Salvar agendamento"}
             </Button>
           </DialogFooter>

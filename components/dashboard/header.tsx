@@ -9,7 +9,7 @@ export function Header({ onCreateAppointment }: { onCreateAppointment?: () => vo
       <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
 
       <div className="flex items-center gap-4">
-        <Button className="gap-2 bg-theme-primary text-theme-fgprimary-foreground hover:bg-theme-primary/90" onClick={onCreateAppointment}>
+        <Button className="gap-2 bg-theme-primary text-white primary-foreground hover:bg-theme-primary/90" onClick={onCreateAppointment}>
           <Plus className="h-4 w-4" />
           Novo Agendamento
         </Button>

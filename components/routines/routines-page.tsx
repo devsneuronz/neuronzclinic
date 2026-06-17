@@ -14,8 +14,9 @@ import { getReadableTextColor } from "@/lib/chat-tags";
 import { actionLabels, createEmptyAction, triggerColors, triggerOptions, type Routine, type RoutineAction, type RoutineActionType, type RoutineMessageTemplate, type RoutineTrigger } from "@/lib/routines";
 import { uploadSavedAttachmentFile, type SavedAttachmentKind } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
-import { Bot, Clock3, CopyPlus, CornerDownRight, FileText, Loader2, Paperclip, PenSquare, Play, Plus, RefreshCw, Save, Search, Sparkles, Target, Trash2, Upload, Wand2, Workflow, X } from "lucide-react";
+import { Bot, Clock3, CopyPlus, CornerDownRight, FileText, Loader2, Paperclip, PenSquare, Play, Plus, RefreshCw, Save, Search, Sparkles, Target, Trash2, Upload, Wand2, Workflow, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { Label } from "../ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
 type RoutineForm = Omit<Routine, "id" | "createdAt" | "updatedAt"> & { id?: string };
@@ -57,7 +58,7 @@ const fallbackRoutines: Routine[] = [
     trigger: "tag",
     targetId: "sample-indicacao",
     targetLabel: "Indicação",
-    targetColor: "#78b73f",
+    targetColor: "#ff0000",
     birthdayEnabled: false,
     active: true,
     actions: [
@@ -437,7 +438,7 @@ export function RoutinesPage() {
           <div className="flex min-w-0 items-center gap-3">
             <h1 className="truncate text-xl font-semibold text-foreground">Automação</h1>
           </div>
-          <Button onClick={activeTab === "templates" ? openNewTemplate : openNewRoutine} className="gap-2 bg-theme-primary text-theme-fgprimary-foreground hover:bg-theme-primary/90">
+          <Button onClick={activeTab === "templates" ? openNewTemplate : openNewRoutine} className="gap-2 bg-theme-primary text-white primary-foreground hover:bg-theme-primary/90">
             <Plus className="h-4 w-4" />
             {activeTab === "templates" ? "Novo template" : "Nova rotina"}
           </Button>
@@ -491,14 +492,23 @@ export function RoutinesPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="all">Todos os gatilhos</SelectItem>
+                          <SelectItem value="all">
+                            <div className="flex items-center gap-2">
+                              <span className="h-2 w-2 rounded-full bg-muted-foreground/40 shrink-0 mx-1" />
+                              <span>Todos os gatilhos</span>
+                            </div>
+                          </SelectItem>
+
                           {triggerOptions.map((option) => {
                             const Icon = option.icon;
+
+                            const triggerKey = option.value as RoutineTrigger;
+                            const iconColor = triggerColors[triggerKey] || "#6b7280";
 
                             return (
                               <SelectItem key={option.value} value={option.value}>
                                 <div className="flex items-center gap-2">
-                                  <Icon className="h-4 w-4 text-muted-foreground/70 shrink-0" />
+                                  <Icon className="h-4 w-4 shrink-0 transition-colors" style={{ color: iconColor }} />
                                   <span>{option.label}</span>
                                 </div>
                               </SelectItem>
@@ -555,97 +565,207 @@ export function RoutinesPage() {
           </div>
         </main>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-h-[92dvh] max-w-5xl overflow-y-auto p-0">
-            <DialogHeader className="border-b border-border px-5 py-4">
-              <DialogTitle>{form.id ? "Editar rotina" : "Nova rotina"}</DialogTitle>
+          <DialogContent className="max-h-[92dvh] max-w-4xl p-0 overflow-hidden gap-0 flex flex-col">
+            <DialogHeader className="border-b border-border px-6 py-4 bg-background shrink-0">
+              <DialogTitle className="text-lg font-bold flex items-center gap-2">{form.id ? "Editar rotina" : "Nova rotina"}</DialogTitle>
               <DialogDescription>Configure o gatilho e a sequência de ações que será executada para cada contato elegível.</DialogDescription>
             </DialogHeader>
-            <div className="grid gap-5 px-5 py-4">
-              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px]">
-                <Input value={form.name} onChange={(event) => updateForm({ name: event.target.value })} placeholder="Nome da rotina" />
-                <label className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
-                  <span>Ativa</span>
-                  <Switch checked={form.active} onCheckedChange={(active) => updateForm({ active })} />
-                </label>
-              </div>
-              <Textarea value={form.description} onChange={(event) => updateForm({ description: event.target.value })} placeholder="Descrição curta da rotina" className="min-h-20" />
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-muted-foreground">Gatilho</label>
-                  <Select
-                    value={form.trigger}
-                    onValueChange={(value) =>
-                      updateForm({
-                        trigger: value as RoutineTrigger,
-                        targetId: "",
-                        targetLabel: "",
-                        targetColor: "",
-                        specificDate: value === "specific_date" ? form.specificDate : "",
-                      })
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {triggerOptions.map((option) => {
-                        const Icon = option.icon;
 
-                        return (
-                          <SelectItem key={option.value} value={option.value}>
-                            <div className="flex items-center gap-2">
-                              <Icon className="h-4 w-4 text-muted-foreground/70 shrink-0" />
-                              <span>{option.label}</span>
-                            </div>
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
+            <div className="space-y-6 px-6 py-5 overflow-y-auto flex-1 min-h-0 custom-scrollbar">
+              <div className="space-y-3">
+                <div className="grid gap-3 md:grid-cols-[1fr_160px]">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-muted-foreground">Nome da Rotina</Label>
+                    <Input value={form.name} onChange={(event) => updateForm({ name: event.target.value })} placeholder="Ex: Pós-Consulta de Tratamento Capilar" className="h-9" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-muted-foreground">Status</Label>
+                    <label className="flex h-9 items-center justify-between rounded-md border border-input bg-background px-3 text-sm cursor-pointer hover:bg-muted/20 transition-all">
+                      <span className="text-xs font-medium text-muted-foreground">Ativa</span>
+                      <Switch checked={form.active} onCheckedChange={(active) => updateForm({ active })} />
+                    </label>
+                  </div>
                 </div>
-                <TargetField form={form} targetOptions={targetOptions} onApplyTarget={applyTarget} onUpdate={updateForm} />
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-muted-foreground">Descrição</Label>
+                  <Textarea value={form.description} onChange={(event) => updateForm({ description: event.target.value })} placeholder="Descreva brevemente o objetivo desta automação..." className="min-h-16 resize-none" />
+                </div>
               </div>
-              <section className="rounded-md border border-border bg-muted/30 p-3">
-                <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                  <Bot className="h-4 w-4 text-theme-primary" />
+
+              <hr className="border-border/60" />
+
+              <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-4">
+                <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+                  <Zap className="h-4 w-4 text-amber-500 fill-amber-500/20" />
+                  <span>Quando isso acontecer... (Gatilho de Entrada)</span>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2 items-end">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground">Selecione o Evento</Label>
+                    <Select
+                      value={form.trigger}
+                      onValueChange={(value) =>
+                        updateForm({
+                          trigger: value as RoutineTrigger,
+                          targetId: "",
+                          targetLabel: "",
+                          targetColor: "",
+                          specificDate: value === "specific_date" ? form.specificDate : "",
+                        })
+                      }
+                    >
+                      <SelectTrigger className="w-full bg-background/50 h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">
+                          <div className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full bg-muted-foreground/40 shrink-0 mx-1" />
+                            <span>Todos os gatilhos</span>
+                          </div>
+                        </SelectItem>
+
+                        {triggerOptions.map((option) => {
+                          const Icon = option.icon;
+
+                          const triggerKey = option.value as RoutineTrigger;
+                          const iconColor = triggerColors[triggerKey] || "#6b7280";
+
+                          return (
+                            <SelectItem key={option.value} value={option.value}>
+                              <div className="flex items-center gap-2">
+                                <Icon className="h-4 w-4 shrink-0 transition-colors" style={{ color: iconColor }} />
+                                <span>{option.label}</span>
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <TargetField form={form} targetOptions={targetOptions} onApplyTarget={applyTarget} onUpdate={updateForm} />
+                  </div>
+                </div>
+              </div>
+
+              <section className="rounded-xl border border-dashed border-theme-primary/30 bg-theme-primary/2 p-4">
+                <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-theme-primary">
+                  <Bot className="h-4 w-4" />
                   Assistente de ações
                 </div>
-                <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                <p className="text-xs text-muted-foreground mb-3 leading-relaxed">Digite abaixo o fluxo desejado em linguagem natural e nossa IA montará os passos automaticamente.</p>
+                <div className="flex flex-col md:flex-row gap-2 items-stretch">
                   <Textarea
                     value={assistantPrompt}
                     onChange={(event) => setAssistantPrompt(event.target.value)}
-                    placeholder="Ex: depois de 10 minutos criar aviso, depois de 10 minutos criar tarefa para ver o repasse"
-                    className="min-h-16"
+                    placeholder="Ex: depois de 10 minutos criar aviso, depois de 1 dia disparar template de boas-vindas..."
+                    className="min-h-12 flex-1 bg-input resize-y text-xs"
                   />
-                  <Button type="button" variant="outline" onClick={applyAssistantPrompt} disabled={!assistantPrompt.trim()} className="gap-2">
-                    <Wand2 className="h-4 w-4" />
+                  <Button type="button" variant="outline" onClick={applyAssistantPrompt} disabled={!assistantPrompt.trim()} className="gap-2 shrink-0 h-auto self-end md:self-auto text-xs">
+                    <Wand2 className="h-3.5 w-3.5 text-blue-500" />
                     Interpretar
                   </Button>
                 </div>
               </section>
-              <section className="space-y-3">
+
+              <hr className="border-border/60" />
+
+              <section className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-semibold text-foreground">Ações da rotina</h2>
-                  <Button type="button" variant="outline" size="sm" onClick={() => updateForm({ actions: [...form.actions, createEmptyAction(form.actions.length)] })} className="gap-2">
-                    <CopyPlus className="h-4 w-4" />
+                  <div className="space-y-0.5">
+                    <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
+                      <span className="hidden sm:inline">Então execute estas ações em sequência</span>
+                      <span className="inline sm:hidden">Ações</span>
+                      <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                        {form.actions.length} <span className="hidden md:inline">{form.actions.length === 1 ? "ação" : "ações"}</span>
+                      </span>
+                    </h2>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => updateForm({ actions: [...form.actions, createEmptyAction(form.actions.length)] })}
+                    className="gap-2 text-xs border-theme-primary/40 text-theme-primary! hover:bg-theme-primary/20"
+                  >
+                    <CopyPlus className="h-3.5 w-3.5" />
                     Adicionar ação
                   </Button>
                 </div>
-                <div className="space-y-3">
-                  {form.actions.map((action, index) => (
-                    <ActionEditor key={action.id} action={action} index={index} users={users} tags={tags} messageTemplates={messageTemplates} onChange={(patch) => updateAction(action.id, patch)} onRemove={() => removeAction(action.id)} />
-                  ))}
-                </div>
+
+                {form.actions.length === 0 ? (
+                  <div className="text-center py-8 rounded-xl border border-dashed border-border text-sm text-muted-foreground">Nenhuma ação adicionada a este fluxo ainda.</div>
+                ) : (
+                  <div className="space-y-0">
+                    {form.actions.map((action, index) => {
+                      const isFirst = index === 0;
+                      const isLast = index === form.actions.length - 1;
+
+                      return (
+                        <div key={action.id} className="grid grid-cols-[40px_1fr] group">
+                          <div className="flex flex-col items-center">
+                            <div className={cn("w-[3px] bg-theme-primary/30", isFirst ? "h-6 invisible" : "h-6")} />
+
+                            <div className="relative flex items-center justify-center h-10 w-10">
+                              {isFirst ? (
+                                <svg viewBox="0 -7 11 33" className="absolute inset-0 h-full w-full text-theme-primary/30  not-visited:group-hover:text-theme-primary transition-colors" stroke="currentColor" strokeWidth="2.5" fill="none">
+                                  <g id="Camada_1-2" data-name="Camada 1">
+                                    <circle cx="6" cy="6" r="6" />
+                                    <line x1="6" y1="12" x2="6" y2="26" />
+                                  </g>
+                                </svg>
+                              ) : isLast ? (
+                                <>
+                                  <svg viewBox="-7 0 14.5 33" className="absolute inset-0 h-full w-full text-theme-primary/30 group-hover:text-theme-primary transition-colors" stroke="currentColor" strokeWidth="2.5" fill="none">
+                                    <g id="Camada_1-2" data-name="Camada 1">
+                                      <path d="M.5,0v12c0,4.42,3.58,8,8,8h6" />
+                                    </g>
+                                  </svg>
+                                </>
+                              ) : (
+                                <svg viewBox="-7 0 14.5 33" className="absolute inset-0 h-full w-full text-theme-primary/30 group-hover:text-theme-primary transition-colors" stroke="currentColor" strokeWidth="2.5" fill="none">
+                                  <g id="Camada_1-2" data-name="Camada 1">
+                                    <path d="M.5,40v-12c0-4.42,3.58-8,8-8h6-6c-4.42,0-8-3.58-8-8V0" />
+                                  </g>
+                                </svg>
+                              )}
+                            </div>
+
+                            <div className={cn("w-[3px] flex-1 bg-theme-primary/30", isLast ? "invisible" : "")} />
+                          </div>
+
+                          <div className="pb-6 min-w-0">
+                            <ActionEditor
+                              action={action}
+                              index={index}
+                              users={users}
+                              tags={tags}
+                              messageTemplates={messageTemplates}
+                              onChange={(patch) => updateAction(action.id, patch)}
+                              onRemove={() => removeAction(action.id)}
+                              canRemove={form.actions.length > 1}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </section>
             </div>
-            <DialogFooter className="border-t border-border px-5 py-4">
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="gap-2">
+
+            <DialogFooter className="border-t border-border px-6 py-4 bg-background shrink-0 z-10">
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="gap-2 h-9 text-xs">
                 <X className="h-4 w-4" />
                 Cancelar
               </Button>
-              <Button onClick={() => void saveRoutine()} disabled={isSaving || !form.name.trim() || hasInvalidMessageAction} className="gap-2">
+              <Button variant="primary" onClick={() => void saveRoutine()} disabled={isSaving || !form.name.trim() || hasInvalidMessageAction} className="gap-2 h-9 text-xs font-bold bg-theme-primary text-white hover:bg-theme-primary/90">
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Salvar
+                Salvar Automação
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -660,73 +780,122 @@ export function RoutinesPage() {
             }
           }}
         >
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>{editingTemplateId ? "Editar template de mensagem" : "Novo template de mensagem"}</DialogTitle>
+          <DialogContent className="max-w-2xl p-0 overflow-hidden flex flex-col max-h-[85dvh]">
+            <DialogHeader className="border-b border-border px-6 py-4 bg-background shrink-0">
+              <DialogTitle className="text-lg font-bold">{editingTemplateId ? "Editar template de mensagem" : "Novo template de mensagem"}</DialogTitle>
               <DialogDescription>{editingTemplateId ? "Atualize o template usado nas ações de envio das rotinas." : "Crie um template para usar nas ações de envio das rotinas."}</DialogDescription>
             </DialogHeader>
-            <div className="grid gap-3">
-              {templateError ? <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{templateError}</div> : null}
-              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
-                <Input value={templateForm.label} onChange={(event) => setTemplateForm((current) => ({ ...current, label: event.target.value }))} placeholder="Nome do template" />
-                <Select value={templateForm.type} onValueChange={(type) => setTemplateForm((current) => ({ ...current, type }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {templateTypeOptions.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {type}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+
+            <div className="space-y-4 px-6 py-5 overflow-y-auto flex-1 min-h-0">
+              {templateError && <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-xs font-medium text-destructive transition-all">{templateError}</div>}
+
+              <div className="grid gap-4 grid-cols-1 md:grid-cols-[1fr_200px]">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-muted-foreground">Nome do Template</Label>
+                  <Input value={templateForm.label} onChange={(event) => setTemplateForm((current) => ({ ...current, label: event.target.value }))} placeholder="Ex: Boas-vindas primeiro contato" className="h-9 bg-background" />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-muted-foreground">Tipo de Mensagem</Label>
+                  <Select value={templateForm.type} onValueChange={(type) => setTemplateForm((current) => ({ ...current, type }))}>
+                    <SelectTrigger className="w-full h-9 bg-background">
+                      <SelectValue placeholder="Selecione um tipo..." />
+                    </SelectTrigger>
+
+                    <SelectContent>
+                      {templateTypeOptions.map((type) => {
+                        const typeKey = type.toLowerCase();
+                        const badgeColor = templateTypeColors[typeKey] || "#64748b";
+
+                        return (
+                          <SelectItem key={type} value={type}>
+                            <div className="flex items-center gap-2.5">
+                              <span className="h-2 w-2 rounded-full shrink-0 shadow-2xs block" style={{ backgroundColor: badgeColor }} aria-hidden="true" />
+                              <span className="capitalize text-sm">{type}</span>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <Textarea value={templateForm.content} onChange={(event) => setTemplateForm((current) => ({ ...current, content: event.target.value }))} placeholder="Mensagem do template" className="min-h-40" />
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground">Mensagem do Template</Label>
+                <Textarea
+                  value={templateForm.content}
+                  onChange={(event) => setTemplateForm((current) => ({ ...current, content: event.target.value }))}
+                  placeholder="Escreva o conteúdo da mensagem. Dica: evite blocos muito densos de texto para melhorar a leitura."
+                  className="min-h-36 max-h-80 resize-y bg-background text-sm leading-relaxed"
+                />
+              </div>
+
               <div className="space-y-2">
-                <span className="text-xs font-medium text-muted-foreground">Mídia opcional</span>
-                <label className="flex cursor-pointer items-center gap-3 rounded-md border border-dashed border-border bg-muted/20 px-4 py-4 transition hover:bg-muted/40">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-background text-theme-primary">
-                    <Upload className="h-5 w-5" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-foreground">{templateMediaFile?.name || templateForm.media?.fileName || "Selecionar imagem, áudio, vídeo ou documento"}</span>
-                    <span className="block text-xs text-muted-foreground">
-                      {templateMediaFile ? formatFileSize(templateMediaFile.size) : templateForm.media ? [templateForm.media.mimeType, formatFileSize(templateForm.media.size)].filter(Boolean).join(" · ") : "O arquivo será salvo no campo Midia do template"}
-                    </span>
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp"
-                    className="hidden"
-                    onChange={(event) => setTemplateMediaFile(event.target.files?.[0] ?? null)}
-                  />
-                </label>
-                {templateForm.media || templateMediaFile ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="gap-2 text-muted-foreground hover:text-destructive"
-                    onClick={() => {
-                      setTemplateMediaFile(null);
-                      setTemplateForm((current) => ({ ...current, media: null }));
-                    }}
+                <Label className="text-xs font-semibold text-muted-foreground">Mídia Opcional</Label>
+
+                <div className="relative group">
+                  <label
+                    className={cn(
+                      "flex cursor-pointer items-center gap-3.5 rounded-lg border-1 border-dashed border-border bg-muted/10 px-4 py-4 transition-all hover:bg-muted/30 hover:border-muted-foreground/30",
+                      (templateMediaFile || templateForm.media) && "border-solid border-theme-primary/30 bg-theme-primary/2",
+                    )}
                   >
-                    <Trash2 className="h-4 w-4" />
-                    Remover mídia
-                  </Button>
-                ) : null}
+                    <span
+                      className={cn(
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-background border border-border text-muted-foreground shadow-2xs group-hover:text-theme-primary transition-colors",
+                        (templateMediaFile || templateForm.media) && "text-theme-primary border-theme-primary/20",
+                      )}
+                    >
+                      <Upload className="h-4 w-4" />
+                    </span>
+
+                    <div className="min-w-0 flex-1 pr-8">
+                      <span className="block truncate text-xs font-medium text-foreground">{templateMediaFile?.name || templateForm.media?.fileName || "Selecionar arquivo de mídia..."}</span>
+                      <span className="block text-[11px] text-muted-foreground/80 mt-0.5 truncate">
+                        {templateMediaFile
+                          ? formatFileSize(templateMediaFile.size)
+                          : templateForm.media
+                            ? [templateForm.media.mimeType, formatFileSize(templateForm.media.size)].filter(Boolean).join(" · ")
+                            : "O arquivo será salvo no campo Midia do template"}
+                      </span>
+                    </div>
+
+                    <input type="file" accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" className="hidden" onChange={(event) => setTemplateMediaFile(event.target.files?.[0] ?? null)} />
+                  </label>
+
+                  {(templateForm.media || templateMediaFile) && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 h-7 w-7 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      title="Remover mídia anexada"
+                      onClick={() => {
+                        setTemplateMediaFile(null);
+                        setTemplateForm((current) => ({ ...current, media: null }));
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsTemplateDialogOpen(false)} className="gap-2">
+
+            <DialogFooter className="border-t border-border px-6 py-4 bg-background shrink-0 ">
+              <Button variant="outline" onClick={() => setIsTemplateDialogOpen(false)} className="gap-2 h-9 text-xs">
                 <X className="h-4 w-4" />
                 Cancelar
               </Button>
-              <Button onClick={() => void saveTemplate()} disabled={isSavingTemplate || !templateForm.label.trim() || (!templateForm.content.trim() && !templateForm.media && !templateMediaFile)} className="gap-2">
+              <Button
+                variant="primary"
+                onClick={() => void saveTemplate()}
+                disabled={isSavingTemplate || !templateForm.label.trim() || (!templateForm.content.trim() && !templateForm.media && !templateMediaFile)}
+                className="gap-2 h-9 text-xs font-bold bg-theme-primary text-white hover:bg-theme-primary/90"
+              >
                 {isSavingTemplate ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Salvar
+                Salvar Template
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -975,6 +1144,7 @@ function ActionEditor({
   messageTemplates,
   onChange,
   onRemove,
+  canRemove,
 }: {
   action: RoutineAction;
   index: number;
@@ -983,6 +1153,7 @@ function ActionEditor({
   messageTemplates: RoutineMessageTemplate[];
   onChange: (patch: Partial<RoutineAction>) => void;
   onRemove: () => void;
+  canRemove?: boolean;
 }) {
   const selectedTemplate = messageTemplates.find((template) => template.id === action.templateId);
   const usableMessageTemplates = messageTemplates.filter((template) => template.content || template.media);
@@ -990,15 +1161,15 @@ function ActionEditor({
 
   return (
     <div className="overflow-hidden rounded-md border border-border bg-card">
-      <div className="flex items-center justify-between bg-[#5b5a43] px-3 py-2 text-xs font-medium text-white">
+      <div className="flex items-center justify-between bg-theme-primary px-3 py-2 text-xs font-medium text-white">
         <span className="flex items-center gap-1">
           <Clock3 className="h-3.5 w-3.5" />
-          {action.delayMinutes ? `${action.delayMinutes} minutos` : "Nenhum intervalo"}
+          {action.delayMinutes ? `${action.delayMinutes} ${action.delayMinutes === 1 ? "minuto" : "minutos"}` : "Nenhum intervalo"}
         </span>
         <span>{index + 1}ª ação</span>
       </div>
 
-      <div className="grid gap-3 p-3 md:grid-cols-[170px_120px_minmax(0,1fr)_160px_auto] md:items-center">
+      <div className={cn("grid gap-2 p-2 md:grid-cols-[170px_120px_minmax(0,1fr)_160px_auto] md:items-center", !canRemove && " last:-mr-2 ")}>
         <Select
           value={action.type}
           onValueChange={(type) => {
@@ -1030,16 +1201,10 @@ function ActionEditor({
         </div>
 
         {action.type === "send_message" ? (
-          <div className="grid gap-3 md:col-span-2 md:grid-cols-[160px_minmax(0,1fr)]">
+          <div className="grid gap-3 items-center md:col-span-2 md:grid-cols-[160px_minmax(0,1fr)]">
             <Select
               value={messageMode}
-              onValueChange={(mode) =>
-                onChange(
-                  mode === "custom"
-                    ? { templateId: "", templateLabel: "" }
-                    : { message: "", templateId: usableMessageTemplates[0]?.id || "", templateLabel: usableMessageTemplates[0]?.label || "" },
-                )
-              }
+              onValueChange={(mode) => onChange(mode === "custom" ? { templateId: "", templateLabel: "" } : { message: "", templateId: usableMessageTemplates[0]?.id || "", templateLabel: usableMessageTemplates[0]?.label || "" })}
             >
               <SelectTrigger className="w-full">
                 <SelectValue />
@@ -1071,12 +1236,7 @@ function ActionEditor({
                 </SelectContent>
               </Select>
             ) : (
-              <Textarea
-                value={action.message ?? ""}
-                onChange={(event) => onChange({ message: event.target.value, templateId: "", templateLabel: "" })}
-                placeholder="Digite a mensagem que será enviada"
-                className="min-h-24 resize-y"
-              />
+              <Textarea value={action.message ?? ""} onChange={(event) => onChange({ message: event.target.value, templateId: "", templateLabel: "" })} placeholder="Digite a mensagem que será enviada" className="min-h-24 resize-y" />
             )}
           </div>
         ) : (
@@ -1101,9 +1261,11 @@ function ActionEditor({
           </>
         )}
 
-        <Button type="button" variant="ghost" size="icon" onClick={onRemove} title="Remover ação" className={cn(index === 0 && "md:opacity-60")}>
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        {canRemove && (
+          <Button type="button" variant="destructive" size="icon" onClick={onRemove} title="Remover ação">
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
 
         {action.type === "send_message" ? (
           <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground md:col-span-5">
