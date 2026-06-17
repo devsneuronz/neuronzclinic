@@ -259,7 +259,7 @@ export function LoginForm() {
                 </div>
                 <label className="flex cursor-pointer items-center gap-2.5 rounded-md border border-border/50 bg-secondary/20 px-3 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-secondary/40 select-none">
                   <input type="checkbox" checked={rememberDevice} onChange={(event) => setRememberDevice(event.target.checked)} className="h-3.5 w-3.5 accent-primary cursor-pointer rounded-sm" />
-                  <span>Lembrar este navegador/dispositivo</span>
+                  <span>Lembrar este navegador/dispositivo por 7 dias</span>
                 </label>
                 {error ? <p className="rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">{error}</p> : null}
                 {notice ? <p className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400">{notice}</p> : null}

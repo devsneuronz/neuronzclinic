@@ -1,5 +1,6 @@
 export const AUTH_SESSION_EVENT = "neuronzclinic:auth-session"
 export const AUTH_SESSION_STORAGE_KEY = "neuronzclinic.supabase.session"
+const REMEMBER_DEVICE_TTL_SECONDS = 7 * 24 * 60 * 60
 
 type SupabaseSession = {
   access_token?: string
@@ -17,6 +18,7 @@ type SupabaseSession = {
 
 type StoredSession = SupabaseSession & {
   saved_at: number
+  auth_expires_at?: number
   expires_at: number
 }
 
@@ -28,14 +30,35 @@ function getStorage(type: "local" | "session") {
   return type === "local" ? window.localStorage : window.sessionStorage
 }
 
-function normalizeSession(session: SupabaseSession): StoredSession {
+function normalizeSession(session: SupabaseSession, rememberDevice: boolean): StoredSession {
   const savedAt = Math.floor(Date.now() / 1000)
-  const expiresAt = session.expires_at ?? savedAt + (session.expires_in ?? 3600)
+  const authExpiresAt = session.expires_at ?? savedAt + (session.expires_in ?? 3600)
+  const appExpiresAt = rememberDevice ? savedAt + REMEMBER_DEVICE_TTL_SECONDS : authExpiresAt
 
   return {
     ...session,
     saved_at: savedAt,
-    expires_at: expiresAt,
+    auth_expires_at: authExpiresAt,
+    expires_at: appExpiresAt,
+  }
+}
+
+function migrateRememberedSession(session: StoredSession) {
+  if (session.auth_expires_at || !session.saved_at) {
+    return session
+  }
+
+  const rememberedExpiresAt = session.saved_at + REMEMBER_DEVICE_TTL_SECONDS
+  const now = Math.floor(Date.now() / 1000)
+
+  if (rememberedExpiresAt <= now + 60) {
+    return session
+  }
+
+  return {
+    ...session,
+    auth_expires_at: session.expires_at,
+    expires_at: rememberedExpiresAt,
   }
 }
 
@@ -48,7 +71,14 @@ function readSession(type: "local" | "session") {
   }
 
   try {
-    return JSON.parse(rawSession) as StoredSession
+    const session = JSON.parse(rawSession) as StoredSession
+    const nextSession = type === "local" ? migrateRememberedSession(session) : session
+
+    if (nextSession !== session) {
+      storage?.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(nextSession))
+    }
+
+    return nextSession
   } catch {
     storage?.removeItem(AUTH_SESSION_STORAGE_KEY)
     return null
@@ -112,7 +142,7 @@ export function saveSession(session: SupabaseSession, rememberDevice: boolean) {
   const storage = getStorage(storageType)
   const oppositeStorage = getStorage(oppositeStorageType)
 
-  storage?.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(normalizeSession(session)))
+  storage?.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(normalizeSession(session, rememberDevice)))
   oppositeStorage?.removeItem(AUTH_SESSION_STORAGE_KEY)
   window.dispatchEvent(new Event(AUTH_SESSION_EVENT))
 }

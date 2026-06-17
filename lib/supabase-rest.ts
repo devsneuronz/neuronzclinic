@@ -4,33 +4,6 @@ const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
 
 const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 const CHAT_ID_BATCH_SIZE = 40
-const MESSAGE_SELECT = [
-  "id",
-  "message_id",
-  "from_me",
-  "chat_id",
-  "participant",
-  "message_type",
-  "content",
-  "media_url",
-  "media_path",
-  "media_mime_type",
-  "public_media_url",
-  "timestamp_msg",
-  "status",
-  "quoted_message_id",
-  "metadata",
-  "is_deleted",
-].join(",")
-
-if (!SUPABASE_REST_URL || !SUPABASE_PUBLISHABLE_KEY) {
-  throw new Error("Missing NEXT_PUBLIC_SUPABASE_REST_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
-}
-
-const headers = {
-  apikey: SUPABASE_PUBLISHABLE_KEY,
-  Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
-}
 const supabaseRestUrl = SUPABASE_REST_URL
 
 export interface ChatRecord {
@@ -192,12 +165,6 @@ export interface UpdateChatDetailsInput {
   interestTags?: Array<{ id: string; label: string; color?: string | null }>
 }
 
-export interface LatestMessageStatusRecord {
-  chat_id: string | null
-  status: string | null
-  timestamp_msg: string | null
-}
-
 export interface LatestMessageStatus {
   status: string | null
   timestamp_msg: string | null
@@ -296,39 +263,17 @@ export interface SavedAttachmentUploadResult {
   fileName: string
 }
 
-function getTimestampValue(value?: string | null) {
-  if (!value) return 0
-  const time = Date.parse(value)
-  return Number.isFinite(time) ? time : 0
-}
-
-function hasMediaPreview(message: Pick<LatestChatMessage, "media_mime_type" | "message_type">) {
-  const type = `${message.media_mime_type || ""} ${message.message_type || ""}`.toLowerCase()
-  return (
-    type.includes("image") ||
-    type.includes("video") ||
-    type.includes("audio") ||
-    type.includes("sticker") ||
-    type.includes("document") ||
-    type.includes("file") ||
-    type.includes("application/")
-  )
-}
-
-function isBetterLatestMessage(message: LatestChatMessage, currentMessage?: LatestChatMessage) {
-  if (!currentMessage) return true
-
-  const messageTime = getTimestampValue(message.timestamp_msg)
-  const currentTime = getTimestampValue(currentMessage.timestamp_msg)
-
-  if (messageTime !== currentTime) return messageTime > currentTime
-  return hasMediaPreview(message) && !hasMediaPreview(currentMessage)
-}
-
 async function supabaseGet<T>(path: string): Promise<T> {
+  if (!supabaseRestUrl || !SUPABASE_PUBLISHABLE_KEY) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_REST_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
+  }
+
   const url = `${supabaseRestUrl.replace(/\/$/, "")}/${path}`
   const response = await fetch(url, {
-    headers,
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+    },
     cache: "no-store",
   })
 
@@ -341,11 +286,16 @@ async function supabaseGet<T>(path: string): Promise<T> {
 }
 
 async function supabaseWrite<T>(path: string, init: RequestInit): Promise<T> {
+  if (!supabaseRestUrl || !SUPABASE_PUBLISHABLE_KEY) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_REST_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
+  }
+
   const url = `${supabaseRestUrl.replace(/\/$/, "")}/${path}`
   const response = await fetch(url, {
     ...init,
     headers: {
-      ...headers,
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
       "Content-Type": "application/json",
       Prefer: "return=representation",
       ...init.headers,
@@ -369,44 +319,42 @@ interface ChatQueryOptions extends PaginationOptions {
   search?: string
 }
 
-function escapePostgrestPattern(value: string) {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/[%*_]/g, (character) => `\\${character}`)
+async function apiGet<T>(path: string): Promise<T> {
+  const response = await fetch(path, {
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || `Nao foi possivel carregar os dados (${response.status}).`)
+  }
+
+  return response.json() as Promise<T>
 }
 
-function buildChatSearchFilter(term: string) {
-  const pattern = `"*${escapePostgrestPattern(term)}*"`
-  const fields = [
-    "nome_contato",
-    "pushname",
-    "phone_contact",
-    "cidade_residencia",
-    "cidade_desejada",
-    "email_contato",
-    "chat_id",
-    "text_last_message",
-    "Status_chat",
-  ]
-
-  const params = new URLSearchParams()
-  params.set("or", `(${fields.map((field) => `${field}.ilike.${pattern}`).join(",")})`)
-
-  return `&${params.toString()}`
-}
-
-export function fetchChats({ limit = 50, offset = 0, search }: ChatQueryOptions = {}) {
-  const select = "*"
+export async function fetchChats({ limit = 50, offset = 0, search }: ChatQueryOptions = {}) {
+  const params = new URLSearchParams({
+    resource: "chats",
+    limit: String(limit),
+    offset: String(offset),
+  })
   const term = search?.trim()
-  const searchFilter = term ? buildChatSearchFilter(term) : ""
+  if (term) params.set("search", term)
 
-  return supabaseGet<ChatRecord[]>(
-    `chats?select=${select}&archived=is.false${searchFilter}&order=last_message_time.desc.nullslast&limit=${limit}&offset=${offset}`,
-  )
+  const data = await apiGet<{ chats?: ChatRecord[] }>(`/api/chat-data?${params.toString()}`)
+  return data.chats ?? []
 }
 
-export function fetchMessages(chatId: string, { limit = 50, offset = 0 }: PaginationOptions = {}) {
-  return supabaseGet<MessageRecord[]>(
-    `messages?select=${MESSAGE_SELECT}&chat_id=eq.${encodeURIComponent(chatId)}&order=timestamp_msg.desc.nullslast&limit=${limit}&offset=${offset}`,
-  )
+export async function fetchMessages(chatId: string, { limit = 50, offset = 0 }: PaginationOptions = {}) {
+  const params = new URLSearchParams({
+    resource: "messages",
+    chat_id: chatId,
+    limit: String(limit),
+    offset: String(offset),
+  })
+
+  const data = await apiGet<{ messages?: MessageRecord[] }>(`/api/chat-data?${params.toString()}`)
+  return data.messages ?? []
 }
 
 export function fetchLatestMessageStatuses(chatIds: string[]): Promise<Record<string, LatestMessageStatus>> {
@@ -422,30 +370,10 @@ export function fetchLatestMessageStatuses(chatIds: string[]): Promise<Record<st
     return Promise.all(batches.map((batch) => fetchLatestMessageStatuses(batch))).then((results) => Object.assign({}, ...results))
   }
 
-  const select = ["chat_id", "status", "timestamp_msg"].join(",")
-  const encodedIds = uniqueChatIds.map((chatId) => encodeURIComponent(chatId)).join(",")
-  const limit = Math.max(uniqueChatIds.length * 20, 1000)
+  const params = new URLSearchParams({ resource: "latest-statuses" })
+  uniqueChatIds.forEach((chatId) => params.append("chat_id", chatId))
 
-  return supabaseGet<LatestMessageStatusRecord[]>(
-    `messages?select=${select}&chat_id=in.(${encodedIds})&from_me=is.true&order=timestamp_msg.desc.nullslast&limit=${limit}`,
-  ).then((messages) => {
-    const initialStatuses = Object.fromEntries(
-      uniqueChatIds.map((chatId) => [chatId, { status: null, timestamp_msg: null }]),
-    )
-    const seenChatIds = new Set<string>()
-
-    return messages.reduce<Record<string, LatestMessageStatus>>((statuses, message) => {
-      if (message.chat_id && !seenChatIds.has(message.chat_id)) {
-        statuses[message.chat_id] = {
-          status: message.status,
-          timestamp_msg: message.timestamp_msg,
-        }
-        seenChatIds.add(message.chat_id)
-      }
-
-      return statuses
-    }, initialStatuses)
-  })
+  return apiGet<{ statuses?: Record<string, LatestMessageStatus> }>(`/api/chat-data?${params.toString()}`).then((data) => data.statuses ?? {})
 }
 
 export function fetchLatestMessagesForChats(chatIds: string[]): Promise<Record<string, LatestChatMessage>> {
@@ -461,23 +389,10 @@ export function fetchLatestMessagesForChats(chatIds: string[]): Promise<Record<s
     return Promise.all(batches.map((batch) => fetchLatestMessagesForChats(batch))).then((results) => Object.assign({}, ...results))
   }
 
-  const select = ["chat_id", "content", "message_type", "media_mime_type", "timestamp_msg", "from_me", "status"].join(",")
-  const encodedIds = uniqueChatIds.map((chatId) => encodeURIComponent(chatId)).join(",")
-  const limit = Math.max(uniqueChatIds.length * 20, 1000)
+  const params = new URLSearchParams({ resource: "latest-messages" })
+  uniqueChatIds.forEach((chatId) => params.append("chat_id", chatId))
 
-  return supabaseGet<LatestChatMessage[]>(
-    `messages?select=${select}&chat_id=in.(${encodedIds})&order=timestamp_msg.desc.nullslast&limit=${limit}`,
-  ).then((messages) => {
-    const latestMessages: Record<string, LatestChatMessage> = {}
-
-    for (const message of messages) {
-      if (message.chat_id && isBetterLatestMessage(message, latestMessages[message.chat_id])) {
-        latestMessages[message.chat_id] = message
-      }
-    }
-
-    return latestMessages
-  })
+  return apiGet<{ latestMessages?: Record<string, LatestChatMessage> }>(`/api/chat-data?${params.toString()}`).then((data) => data.latestMessages ?? {})
 }
 
 function mapSavedAttachmentInput(input: SavedAttachmentInput) {
