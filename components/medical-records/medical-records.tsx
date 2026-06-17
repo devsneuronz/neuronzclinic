@@ -282,75 +282,17 @@ export default function MedicalRecords() {
 
             {/* vvv Scrollavel vvv */}
             <div className="overflow-y-auto custom-scrollbar p-4 pt-0 space-y-4">
-              <div className="flex flex-row gap-4 pt-1">
-                <Card className={cn("w-1/3 justify-between h-90.25 transition-all ring-0 ring-theme-primary/50", !selectedAppointment && "ring-3")}>
-                  <CardHeader>
+              <div className="flex flex-col lg:flex-row gap-4 pt-1 items-stretch">
+                <Card className={cn("w-full lg:w-[360px] xl:w-1/3 min-h-[373px] flex flex-col justify-between transition-all ring-0 ring-theme-primary/50 shrink-0", !selectedAppointment && "ring-3")}>
+                  <CardHeader className="pb-3">
                     <CardTitle>Paciente e Agendamento</CardTitle>
                     <CardDescription>Escolha o paciente e o atendimento associado.</CardDescription>
                   </CardHeader>
 
-                  <CardContent className="space-y-2">
-                    {selectedContact ? (
-                      <div className="rounded-xl border border-border bg-muted/20 p-4 animate-in fade-in duration-200">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="min-w-0">
-                            <p className="truncate font-medium text-foreground" title={getDisplayName(selectedContact)}>
-                              {getDisplayName(selectedContact)}
-                            </p>
-
-                            <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-                              <Phone className="h-3.5 w-3.5 shrink-0" />
-                              {getContactPhone(selectedContact)}
-                            </div>
-                          </div>
-
-                          {getChatStatusLabel(selectedContact) && (
-                            <Badge className="text-white uppercase border-0 text-[10px] px-2 py-0.5" style={{ backgroundColor: getChatStatusColor(selectedContact) }}>
-                              {getChatStatusLabel(selectedContact)}
-                            </Badge>
-                          )}
-                        </div>
-
-                        <Separator className="my-3" />
-
-                        <div className="w-full sm:flex-[2] space-y-1.5">
-                          <Label className="text-sm font-semibold text-foreground">Agendamento</Label>
-                          <Select value={selectedAppointment} onValueChange={setSelectedAppointment}>
-                            <SelectTrigger className="w-full h-10 bg-background border-border text-sm">
-                              <SelectValue placeholder="Selecione o horário do atendimento..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Quarta-Feira, 20 de Maio de 2026 às 11:45 - Tratamento Capilar">Quarta-Feira, 20 de Maio de 2026 às 11:45 - Tratamento Capilar</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="-translate-y-8 rounded-xl border border-dashed border-border bg-muted/5 p-4 flex flex-col justify-between min-h-[118px] transition-colors">
-                        <div className="flex items-start justify-between opacity-60">
-                          <div className="space-y-1.5 w-full">
-                            <p className="text-sm font-medium text-muted-foreground/70 italic">Nenhum paciente selecionado</p>
-
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground/50">
-                              <Phone className="h-3.5 w-3.5 opacity-70" />
-                              <span>(00) 00000-0000</span>
-                            </div>
-                          </div>
-
-                          <Badge className=" bg-muted border border-border px-2 py-0.5 text-[10px] text-muted-foreground/60 font-semibold uppercase tracking-wider">Status</Badge>
-                        </div>
-
-                        <Separator className="my-3 opacity-50" />
-
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground/50">
-                          <CalendarDays className="h-3.5 w-3.5 opacity-70" />
-                          <span className="italic">Selecione um paciente abaixo para vincular os dados</span>
-                        </div>
-                      </div>
-                    )}
-                    <div className="flex flex-row gap-2">
+                  <CardContent className="space-y-4 flex-1 flex flex-col justify-between">
+                    <div className="flex flex-row gap-2 pt-2">
                       <div className="w-full space-y-1.5">
-                        <Label className="text-sm font-semibold text-foreground">Paciente</Label>
+                        <Label className="text-xs font-semibold text-foreground">Paciente</Label>
                         <div className="relative">
                           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
 
@@ -364,9 +306,7 @@ export default function MedicalRecords() {
                             onChange={(event) => {
                               const value = event.target.value;
                               setAppointmentPatientSearch(value);
-
                               setCurrentOffset(0);
-
                               loadPatients(value, 0);
                               setIsPatientSearchOpen(true);
                             }}
@@ -432,19 +372,80 @@ export default function MedicalRecords() {
                         </div>
                       </div>
                     </div>
+
+                    {selectedContact ? (
+                      <div className="rounded-xl border border-border bg-muted/20 p-4 animate-in fade-in duration-200">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-medium text-foreground text-sm" title={getDisplayName(selectedContact)}>
+                              {getDisplayName(selectedContact)}
+                            </p>
+
+                            <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                              <Phone className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{getContactPhone(selectedContact)}</span>
+                            </div>
+                          </div>
+
+                          {getChatStatusLabel(selectedContact) && (
+                            <Badge className="text-white uppercase border-0 text-[10px] px-2 py-0.5 shrink-0" style={{ backgroundColor: getChatStatusColor(selectedContact) }}>
+                              {getChatStatusLabel(selectedContact)}
+                            </Badge>
+                          )}
+                        </div>
+
+                        <Separator className="my-3" />
+
+                        <div className="w-full space-y-1.5">
+                          <Label className="text-xs font-semibold text-foreground">Agendamento</Label>
+                          <Select value={selectedAppointment} onValueChange={setSelectedAppointment}>
+                            <SelectTrigger className="w-full h-10 bg-background border-border text-sm">
+                              <SelectValue placeholder="Selecione o horário do atendimento..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Quarta-Feira, 20 de Maio de 2026 às 11:45 - Tratamento Capilar">
+                                <span className="text-xs block max-w-[280px] truncate">Quarta-Feira, 20 de Maio de 2026 às 11:45 - Tratamento Capilar</span>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-border bg-muted/5 p-4 flex flex-col justify-between min-h-[120px] transition-colors">
+                        <div className="flex items-start justify-between opacity-60 gap-2">
+                          <div className="space-y-1.5 w-full min-w-0">
+                            <p className="text-sm font-medium text-muted-foreground/70 italic truncate">Nenhum paciente selecionado</p>
+
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground/50">
+                              <Phone className="h-3.5 w-3.5 opacity-70 shrink-0" />
+                              <span>(00) 00000-0000</span>
+                            </div>
+                          </div>
+
+                          <Badge className="bg-muted border border-border px-2 py-0.5 text-[10px] text-muted-foreground/60 font-semibold uppercase tracking-wider shrink-0">Status</Badge>
+                        </div>
+
+                        <Separator className="my-3 opacity-50" />
+
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground/50">
+                          <CalendarDays className="h-3.5 w-3.5 opacity-70 shrink-0" />
+                          <span className="italic truncate">Selecione um paciente abaixo para vincular os dados</span>
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
-                <div className="rounded-xl border border-border bg-card shadow-xs overflow-hidden flex flex-col flex-1 relative">
+                <div className="rounded-xl border border-border bg-card shadow-xs overflow-hidden flex flex-col flex-1 relative min-h-[500px] lg:min-h-0">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-muted/30 border-b border-border px-5 py-3.5 gap-2 shrink-0">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-7 w-7 items-center justify-center rounded-md bg-theme-primary/10 text-theme-primary">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-md bg-theme-primary/10 text-theme-primary shrink-0">
                         <FolderOpen className="h-4 w-4" />
                       </div>
-                      <span className="text-xs font-semibold text-foreground/90 leading-none">{selectedAppointment ? selectedAppointment : "Prontuário Clínico"}</span>
+                      <span className="text-xs font-semibold text-foreground/90 leading-none truncate">{selectedAppointment ? selectedAppointment : "Prontuário Clínico"}</span>
                     </div>
 
                     {selectedAppointment && (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 border border-emerald-500/20 w-fit animate-in fade-in duration-300">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 border border-emerald-500/20 w-fit shrink-0 animate-in fade-in duration-300">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                         Agendamento selecionado
                       </span>
@@ -453,31 +454,33 @@ export default function MedicalRecords() {
 
                   <div
                     className={cn(
-                      "grid grid-cols-1 lg:grid-cols-[1fr_200px] divide-y lg:divide-y-0 lg:divide-x divide-border flex-1 min-h-0 transition-all duration-300",
+                      "grid grid-cols-1 xl:grid-cols-[1fr_230px] divide-y xl:divide-y-0 xl:divide-x divide-border flex-1 min-h-0 transition-all duration-300",
                       !selectedAppointment && "pointer-events-none select-none opacity-40",
                     )}
                   >
-                    <div className="flex flex-col bg-background/50 overflow-y-auto">
+                    <div className="flex flex-col bg-background/50 overflow-y-auto min-h-[350px] xl:min-h-0">
                       <Editor disabled={!selectedAppointment} />
                     </div>
 
-                    <div className="p-4 bg-muted/5 flex flex-col justify-start gap-2.5 overflow-y-auto">
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 mb-1 px-1 flex items-center gap-1.5">
+                    <div className="p-4 bg-muted/5 flex flex-col justify-start gap-2.5 overflow-y-auto shrink-0 xl:shrink flex-row xl:flex-col flex-wrap xl:flex-nowrap">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 mb-1 px-1 flex items-center gap-1.5 w-full">
                         <Sparkles className="h-3 w-3 text-blue-500" />
                         Ações Clínicas e IA
                       </div>
-                      <Button disabled={!selectedAppointment} variant="outline" className="w-full justify-start gap-2.5 h-10 text-xs font-medium text-foreground/80 border-border">
-                        <Mic className="h-4 w-4 shrink-0" />
+
+                      <Button disabled={!selectedAppointment} variant="outline" className="flex-1 xl:w-full xl:flex-initial justify-start gap-2.5 h-10 text-xs font-medium text-foreground/80 border-border min-w-[150px]">
+                        <Mic className="h-4 w-4 shrink-0 text-blue-500" />
                         Gravação com IA
                       </Button>
-                      <Button disabled={!selectedAppointment} variant="outline" className="w-full justify-start gap-2.5 h-10 text-xs font-medium text-foreground/80 border-border">
+                      <Button disabled={!selectedAppointment} variant="outline" className="flex-1 xl:w-full xl:flex-initial justify-start gap-2.5 h-10 text-xs font-medium text-foreground/80 border-border min-w-[150px]">
                         <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                         Nova Prescrição
                       </Button>
-                      <Button disabled={!selectedAppointment} variant="outline" className="w-full justify-start gap-2.5 h-10 text-xs font-medium text-foreground/80 border-border">
+                      <Button disabled={!selectedAppointment} variant="outline" className="flex-1 xl:w-full xl:flex-initial justify-start gap-2.5 h-10 text-xs font-medium text-foreground/80 border-border min-w-[150px]">
                         <FilePlus className="h-4 w-4 text-muted-foreground shrink-0" />+ Resultado/Exame
                       </Button>
-                      <Button disabled={!selectedAppointment} className="w-full justify-start gap-2.5 text-xs rounded-full font-bold mt-auto bg-emerald-600 text-white hover:bg-emerald-700">
+
+                      <Button disabled={!selectedAppointment} className="w-full text-xs rounded-full font-bold mt-2 xl:mt-auto bg-emerald-600 text-white hover:bg-emerald-700 h-10 justify-start gap-2.5">
                         <CheckCircle2 className="h-4 w-4 shrink-0" />
                         Finalizar Consulta
                       </Button>
@@ -485,7 +488,7 @@ export default function MedicalRecords() {
                   </div>
 
                   {!selectedAppointment && (
-                    <div className="rounded-xl absolute inset-0 bg-background/20 backdrop-blur-[1px] flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300 z-10">
+                    <div className="rounded-xl absolute inset-0 bg-background/40 backdrop-blur-[1px] flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300 z-10">
                       <div className="max-w-sm space-y-2">
                         <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-muted border border-border text-muted-foreground/70">
                           <ClipboardX className="h-5 w-5" />
@@ -516,16 +519,16 @@ export default function MedicalRecords() {
                     <TabsList className="gap-1.5 rounded-full h-11! bg-secondary/50 border border-border/40">
                       <TabsTrigger
                         value="agendamentos"
-                        className="data-[state=active]:border-theme-border group relative data-[state=active]:bg-theme-bg px-3.5 rounded-full text-xs font-medium transition-all gap-2 cursor-pointer data-[state=active]:shadow-xs data-[state=active]:text-theme-fg!"
+                        className="data-[state=active]:border-theme-border group relative data-[state=active]:bg-theme-bg px-3.5 rounded-full text-xs font-medium transition-all gap-2 cursor-pointer data-[state=active]:shadow-xs data-[state=active]:text-theme-fg"
                       >
-                        <CalendarClock className="group-data-[state=active]:text-theme-primary h-2 w-2 transition-all duration-300" />
+                        <CalendarClock className="group-data-[state=active]:text-theme-primary h-3.5 w-3.5 transition-all duration-300" />
                         Agendamentos
                       </TabsTrigger>
                       <TabsTrigger
                         value="exames"
-                        className="data-[state=active]:border-theme-border group relative data-[state=active]:bg-theme-bg px-3.5 rounded-full text-xs font-medium transition-all gap-2 cursor-pointer data-[state=active]:shadow-xs data-[state=active]:text-theme-fg!"
+                        className="data-[state=active]:border-theme-border group relative data-[state=active]:bg-theme-bg px-3.5 rounded-full text-xs font-medium transition-all gap-2 cursor-pointer data-[state=active]:shadow-xs data-[state=active]:text-theme-fg"
                       >
-                        <FolderClock className="group-data-[state=active]:text-theme-primary h-2 w-2 transition-all duration-300" />
+                        <FolderClock className="group-data-[state=active]:text-theme-primary h-3.5 w-3.5 transition-all duration-300" />
                         Exames e Laudos
                       </TabsTrigger>
                     </TabsList>
@@ -540,20 +543,20 @@ export default function MedicalRecords() {
 
                       <CardContent className="flex flex-col">
                         {dadosAgendamentos.map((item, index) => (
-                          <div key={item.id} className="relative flex gap-5 group">
-                            <div className="flex flex-col items-center translate-y-6.5">
-                              <div className="h-3.5 w-3.5 rounded-full border-2 border-theme-primary/50 z-10 shadow-xs group-hover:border-theme-primary transition-colors duration-300" />
-                              {index !== dadosAgendamentos.length - 1 && <div className="w-[1.5px] bg-border flex-1" />}
+                          <div key={item.id} className="relative flex gap-4 group">
+                            <div className="flex flex-col items-center translate-y-6.5 shrink-0">
+                              <div className="h-3.5 w-3.5 rounded-full border-2 border-theme-primary/50 bg-background z-10 shadow-xs group-hover:border-theme-primary transition-colors duration-300" />
+                              {index !== dadosAgendamentos.length - 1 && <div className="w-[1.5px] bg-border/60 flex-1 min-h-[40px]" />}
                             </div>
                             <Accordion type="single" collapsible className="w-full flex-1">
-                              <AccordionItem value={item.id} className="border border-border bg-background/40 shadow-2xs rounded-lg overflow-hidden transition-all hover:border-border/80 my-2 data-[state=open]:bg-background/80">
-                                <AccordionTrigger className="px-4 hover:no-underline group/trigger items-center">
-                                  <div className="w-fit flex items-center gap-2 text-xs font-semibold text-foreground/90 whitespace-nowrap">
-                                    <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                              <AccordionItem value={item.id} className="border border-border/70 bg-background/40 shadow-2xs rounded-xl overflow-hidden transition-all hover:border-border my-1.5 data-[state=open]:bg-background/80">
+                                <AccordionTrigger className="px-4 py-3.5 hover:no-underline group/trigger flex flex-col sm:flex-row items-start sm:items-center gap-2 text-left">
+                                  <div className="flex items-center gap-2 text-xs font-semibold text-foreground/90 whitespace-nowrap">
+                                    <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                                     {item.data}
                                   </div>
 
-                                  <div className="w-full flex items-center justify-end gap-3 ml-auto sm:ml-0 pr-4">
+                                  <div className="w-fit md:w-full flex items-center md:justify-end gap-3 md:ml-auto sm:ml-0 pr-4">
                                     <Badge className="gap-2 text-[11px] text-muted-foreground bg-background border border-border/60 px-3 py-1 rounded-full shrink-0">
                                       <Stethoscope className="h-3 w-3" />
                                       {item.medico} • {item.procedimento} • <span className="font-medium text-theme-primary">{item.tipo}</span>
@@ -561,27 +564,27 @@ export default function MedicalRecords() {
                                   </div>
                                 </AccordionTrigger>
 
-                                <AccordionContent className="pb-0!">
-                                  <div className="h-full grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-border/60 p-4 gap-4 md:gap-0 border-t border-border/50 bg-card/30">
+                                <AccordionContent className="pb-0">
+                                  <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-border/60 p-4 gap-4 md:gap-0 border-t border-border/40 bg-muted/5">
                                     <div className="md:pr-4">
-                                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Anotações Clínicas</h4>
+                                      <h4 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Anotações Clínicas</h4>
                                       <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">{item.anotacoes}</p>
                                     </div>
 
                                     <div className="md:px-4">
-                                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-theme-primary mb-1.5 flex items-center gap-1">
+                                      <h4 className="text-[10px] font-bold uppercase tracking-wider text-theme-primary mb-1 flex items-center gap-1">
                                         <span>✦</span> Resumo Inteligente IA
                                       </h4>
-                                      <p className="text-xs text-foreground/80 leading-relaxed bg-theme-primary/5 border border-theme-primary/10 rounded-md p-2.5">{item.resumoIA}</p>
+                                      <p className="text-xs text-foreground/80 leading-relaxed bg-theme-primary/5 border border-theme-primary/10 rounded-lg p-2.5">{item.resumoIA}</p>
                                     </div>
 
-                                    <div className="md:pl-4 relative group/btn">
-                                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 mb-1.5">Prescrições e Conduta</h4>
+                                    <div className="md:pl-4 relative group/btn min-h-[60px]">
+                                      <h4 className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 mb-1">Prescrições e Conduta</h4>
                                       <p className="text-xs text-foreground/80 leading-relaxed italic">{item.prescricoes}</p>
                                       <Button
                                         size="icon"
                                         variant="secondary"
-                                        className="absolute right-0 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full border border-border shadow-xs opacity-0 group-hover/btn:opacity-100 transition-opacity"
+                                        className="absolute right-0 bottom-0 md:top-1/2 md:-translate-y-1/2 h-7 w-7 rounded-full border border-border shadow-xs opacity-0 group-hover/btn:opacity-100 transition-opacity cursor-pointer"
                                       >
                                         <ChevronRight className="h-3.5 w-3.5" />
                                       </Button>
@@ -596,83 +599,79 @@ export default function MedicalRecords() {
                     </Card>
                   </TabsContent>
 
-                  <TabsContent value="exames" className="m-0">
+                  <TabsContent value="exames">
                     <Card>
                       <CardHeader className="flex flex-row gap-1.5">
                         <FolderClock className="h-4 w-4 text-muted-foreground" />
                         <h3 className="text-xs font-bold uppercase tracking-wider text-foreground/80">Histórico de exames e laudos</h3>
                       </CardHeader>
 
-                      <CardContent className="overflow-x-auto w-full">
-                        <div className="mx-auto flex w-full flex-col bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-                          <div className="flex flex-col min-w-0">
-                            <div className="hidden md:grid w-full md:grid-cols-[1.5fr_160px_220px_140px_100px] border-b border-border bg-muted/60 pl-5 pr-8 py-3 gap-4 text-xs font-semibold uppercase text-muted-foreground shrink-0">
-                              <span>Exame solicitado</span>
-                              <span>Resultado / Status</span>
-                              <span>Observações Clínicas</span>
-                              <span>Data do Exame</span>
-                              <span className="text-right">Ações</span>
-                            </div>
+                      <CardContent>
+                        <div className="w-full flex flex-col bg-card rounded-xl border border-border/70 shadow-2xs overflow-hidden">
+                          <div className="hidden md:grid w-full md:grid-cols-[1.5fr_140px_2fr_130px_90px] border-b border-border bg-muted/40 px-5 py-3 gap-4 text-[11px] font-bold uppercase tracking-wider text-muted-foreground shrink-0">
+                            <span>Exame solicitado</span>
+                            <span>Status</span>
+                            <span>Observações Clínicas</span>
+                            <span>Data</span>
+                            <span className="text-right">Ações</span>
+                          </div>
 
-                            <div className="w-full min-h-18.25 overflow-y-auto flex flex-col custom-scrollbar">
-                              <div className="h-full w-full flex flex-col justify-between">
-                                <div className="flex flex-col w-full max-h-78">
-                                  {dadosExames.map((item) => (
-                                    <div
-                                      key={item.id}
-                                      className="flex flex-col md:grid md:grid-cols-[1.5fr_160px_220px_140px_100px] items-start md:items-center gap-4 border-b border-border/70 last:border-b-0 px-5 py-4 transition-colors hover:bg-muted/45 text-left w-full relative group"
-                                    >
-                                      <div className="flex min-w-0 items-center gap-3 w-full md:w-auto">
-                                        <div className="h-9 w-9 shrink-0 rounded-full bg-theme-primary/10 flex items-center justify-center border border-theme-primary/20 text-theme-primary">
-                                          <FileText className="h-4 w-4" />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                          <span className="block truncate text-sm font-semibold text-foreground">{item.exame}</span>
-                                        </div>
-                                      </div>
-                                      <div className="flex flex-col md:contents gap-1.5 w-full">
-                                        <div className="inline-flex max-w-full md:w-auto">
-                                          <span
-                                            className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium border ${
-                                              item.status === "Anexado" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : "bg-amber-500/10 text-amber-600 border-amber-500/20"
-                                            }`}
-                                          >
-                                            {item.statusLabel}
-                                          </span>
-                                        </div>
-                                        <span className="truncate text-xs text-muted-foreground max-w-[280px]">
-                                          <span className="md:hidden font-medium text-foreground/70">Observações: </span>
-                                          {item.observacoes}
-                                        </span>
-                                        <span className="truncate text-xs text-muted-foreground/80">
-                                          <span className="md:hidden font-medium text-foreground/70">Data: </span>
-                                          {item.data}
-                                        </span>
-                                      </div>
-                                      <div className="absolute right-4 top-4 md:static md:flex md:w-full md:justify-end shrink-0">
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-7 text-xs gap-1 text-theme-primary bg-background/50 md:bg-transparent border border-border/40 md:border-transparent"
-                                          disabled={item.status !== "Anexado"}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                          }}
-                                        >
-                                          <span className="hidden lg:inline">Visualizar</span>
-                                          <ExternalLink className="h-3 w-3" />
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  ))}
+                          <div className="w-full flex flex-col max-h-[450px] overflow-y-auto custom-scrollbar divide-y divide-border/50">
+                            {dadosExames.map((item) => (
+                              <div
+                                key={item.id}
+                                className="flex flex-col md:grid md:grid-cols-[1.5fr_140px_2fr_130px_90px] items-start md:items-center gap-3 md:gap-4 px-5 py-4 transition-colors hover:bg-muted/20 relative group text-left w-full"
+                              >
+                                <div className="flex min-w-0 items-center gap-3 w-full md:w-auto">
+                                  <div className="h-8 w-8 shrink-0 rounded-lg bg-theme-primary/10 flex items-center justify-center border border-theme-primary/15 text-theme-primary">
+                                    <FileText className="h-4 w-4" />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <span className="block truncate text-sm font-semibold text-foreground/90">{item.exame}</span>
+                                  </div>
+                                </div>
+
+                                <div className="inline-flex md:w-auto">
+                                  <span
+                                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium border ${
+                                      item.status === "Anexado" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                                    }`}
+                                  >
+                                    {item.statusLabel}
+                                  </span>
+                                </div>
+
+                                <span className="text-xs text-muted-foreground max-w-full md:max-w-[280px] truncate">
+                                  <span className="md:hidden font-semibold text-foreground/70">Obs: </span>
+                                  {item.observacoes || "Sem observações"}
+                                </span>
+
+                                <span className="text-xs text-muted-foreground/80 whitespace-nowrap">
+                                  <span className="md:hidden font-semibold text-foreground/70">Data: </span>
+                                  {item.data}
+                                </span>
+
+                                <div className="absolute right-4 top-4 md:static md:flex md:w-full md:justify-end shrink-0">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 text-xs gap-1.5 text-theme-primary bg-theme-primary/5 hover:bg-theme-primary/10 md:bg-transparent border border-theme-primary/10 md:border-transparent cursor-pointer rounded-md"
+                                    disabled={item.status !== "Anexado"}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                    }}
+                                  >
+                                    <span className="inline md:hidden lg:inline">Ver</span>
+                                    <ExternalLink className="h-3 w-3" />
+                                  </Button>
                                 </div>
                               </div>
-                            </div>
+                            ))}
+                          </div>
 
-                            <div className="flex items-center gap-2 border-t border-border/60 bg-muted/10 px-5 py-3 text-xs text-muted-foreground/80">
-                              <Info className="h-3.5 w-3.5 text-theme-primary shrink-0" />
-                              <span>Clique na linha correspondente do exame ou utilize as ações laterais para abrir os documentos e anexos originais emitidos.</span>
-                            </div>
+                          <div className="flex items-center gap-2 border-t border-border/60 bg-muted/20 px-5 py-3 text-xs text-muted-foreground/80">
+                            <Info className="h-3.5 w-3.5 text-theme-primary shrink-0" />
+                            <span>Clique em visualizar ou use as linhas para abrir os documentos originais emitidos.</span>
                           </div>
                         </div>
                       </CardContent>
