@@ -49,7 +49,10 @@ export function TagsManager() {
   const [error, setError] = useState<string | null>(null);
 
   const sortedTags = useMemo(() => tags.slice().sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" })), [tags]);
-  const sectorTagIds = useMemo(() => new Set(sectors.flatMap((sector) => sector.tagIds)), [sectors]);
+  const sectorTagIds = useMemo(
+    () => new Set(sectors.flatMap((sector) => (Array.isArray(sector.tagIds) ? sector.tagIds : []))),
+    [sectors],
+  );
 
   async function loadTags() {
     setIsLoading(true);
@@ -339,7 +342,7 @@ export function TagsManager() {
 
                             <span className="text-xs font-bold tracking-wide truncate uppercase select-none">{tag.label || "Sem Nome"}</span>
                           </div>
-                          {!isWithoutSector ? (
+                          {isWithoutSector ? (
                             <Badge className="text-background flex flex-row items-center gap-1">
                               <Info className="w-3.25 h-3.25" />
                               Tag sem setor
