@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { getTodayDate, parseDateOnly } from "@/lib/date";
+import { parseDateOnly } from "@/lib/date";
 import { fetchChats, fetchMessages, type ChatRecord, type MessageRecord } from "@/lib/supabase-rest";
 import { fallbackTaskOptions, getTaskNoteAttachmentType, type StatusConfigMap, type Task, type TaskOptions, type TaskResolutionNote, type TaskStatus } from "@/lib/task";
 import { getDraTatianaResponsibleFilter, isDraTatianaUser } from "@/lib/user-access";
@@ -280,7 +280,7 @@ export function KanbanBoard() {
   const [createTaskError, setCreateTaskError] = useState("");
   const [taskType, setTaskType] = useState(fallbackTaskOptions.types[0]);
   const [taskStatus, setTaskStatus] = useState(fallbackTaskOptions.statuses[0]);
-  const [taskDueDate, setTaskDueDate] = useState(getTodayDate());
+  const [taskDueDate, setTaskDueDate] = useState("");
   const [taskPatientName, setTaskPatientName] = useState("");
   const [taskContactPhone, setTaskContactPhone] = useState("");
   const [taskContactChatId, setTaskContactChatId] = useState("");
@@ -503,7 +503,7 @@ export function KanbanBoard() {
   const resetCreateForm = () => {
     setTaskType(taskOptions.types[0] || fallbackTaskOptions.types[0]);
     setTaskStatus(taskOptions.statuses.find((status) => status.toLowerCase() === "aguardando") || taskOptions.statuses[0] || fallbackTaskOptions.statuses[0]);
-    setTaskDueDate(getTodayDate());
+    setTaskDueDate("");
     setTaskPatientName("");
     setTaskContactPhone("");
     setTaskContactChatId("");
@@ -558,6 +558,7 @@ export function KanbanBoard() {
           observations: taskObservations,
           creatorName: user.name,
           creatorUserId: user.id || "",
+          creatorEmail: user.email,
         }),
       });
       const data = (await response.json()) as { message?: string };
@@ -830,7 +831,7 @@ export function KanbanBoard() {
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Nova tarefa</DialogTitle>
-            <DialogDescription>Crie uma tarefa vinculada a um contato do Airtable.</DialogDescription>
+            <DialogDescription>Crie uma tarefa com ou sem contato vinculado.</DialogDescription>
           </DialogHeader>
 
           <form className="space-y-4" onSubmit={handleCreateTask}>
@@ -869,7 +870,7 @@ export function KanbanBoard() {
 
               <div className="space-y-1.5">
                 <FieldLabel>Prazo</FieldLabel>
-                <Input type="date" className="h-10" value={taskDueDate} onChange={(event) => setTaskDueDate(event.target.value)} required />
+                <Input type="date" className="h-10" value={taskDueDate} onChange={(event) => setTaskDueDate(event.target.value)} />
               </div>
 
               <div className="space-y-1.5">
@@ -902,7 +903,6 @@ export function KanbanBoard() {
                     className="h-10 pl-9"
                     value={taskPatientName}
                     placeholder="Digite o nome do contato"
-                    required
                     onBlur={() => {
                       window.setTimeout(() => setIsContactSearchOpen(false), 120);
                     }}
@@ -969,7 +969,7 @@ export function KanbanBoard() {
               <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isCreatingTask}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isCreatingTask || isLoadingTaskOptions || isCurrentUserLoading || !user || !taskResponsibleUserId || (!taskContactChatId && !taskContactPhone)}>
+              <Button type="submit" disabled={isCreatingTask || isLoadingTaskOptions || isCurrentUserLoading || !user || !taskResponsibleUserId}>
                 {isCreatingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 {isCreatingTask ? "Criando..." : "Criar tarefa"}
               </Button>

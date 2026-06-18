@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { FALLBACK_ADMIN_EMAILS, getDefaultUser, isFallbackAdminEmail, normalizeUserRole } from "@/lib/user-roles"
+import { FALLBACK_ADMIN_EMAILS, getDefaultUser, normalizeUserRole } from "@/lib/user-roles"
 
 const AIRTABLE_BASE_ID = "app03ti52QQD3W9L2"
 const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY
@@ -313,7 +313,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ users: await listActiveUsers() })
   }
 
-  if (isFallbackAdminEmail(email) || !AIRTABLE_TOKEN) {
+  if (!AIRTABLE_TOKEN) {
     return NextResponse.json(getDefaultUser(email))
   }
 

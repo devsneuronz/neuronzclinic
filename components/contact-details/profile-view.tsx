@@ -162,11 +162,6 @@ function getLocalDateTimeValue(date = new Date()) {
   return offsetDate.toISOString().slice(0, 16);
 }
 
-function getLocalDateValue(date = new Date()) {
-  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-  return offsetDate.toISOString().slice(0, 10);
-}
-
 function getReadableDateTime(value: string) {
   if (!value) return "";
 
@@ -644,6 +639,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
           observations: taskObservations,
           creatorName: user.name,
           creatorUserId: user.id || "",
+          creatorEmail: user.email,
         }),
       });
       const data = (await response.json()) as { id?: string; message?: string };
@@ -729,7 +725,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
     if (open) {
       setTaskPatientName(patientName);
       setTaskCreatedAt(getLocalDateTimeValue());
-      setTaskDueDate(getLocalDateValue());
+      setTaskDueDate("");
       setTaskFeedback(null);
       setTaskStatus((current) => current || taskOptions.statuses.find((status) => status.toLowerCase() === "aguardando") || taskOptions.statuses[0] || "");
     }
@@ -942,7 +938,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-foreground">Prazo da tarefa</label>
                     <div className="relative">
-                      <Input type="date" className="h-10 pr-10" value={taskDueDate} onChange={(event) => setTaskDueDate(event.target.value)} required />
+                      <Input type="date" className="h-10 pr-10" value={taskDueDate} onChange={(event) => setTaskDueDate(event.target.value)} />
                       <Calendar className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     </div>
                   </div>

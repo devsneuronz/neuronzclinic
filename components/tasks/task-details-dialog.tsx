@@ -1,5 +1,5 @@
 import { getAvatarInitials } from "@/lib/avatar-initials";
-import { formatDateTime, getDateInputValue, getTodayDate } from "@/lib/date";
+import { formatDateTime, getDateInputValue } from "@/lib/date";
 import { fallbackTaskOptions, getTaskNoteAttachmentType, isOverdue, ParsedTaskResolutionNote, StatusConfigMap, Task, TaskOptions, TaskResolutionNote } from "@/lib/task";
 import { cn } from "@/lib/utils";
 import { AlertCircle, ArrowRight, CalendarDays, ImageIcon, Loader2, Mic, Plus, Save, Square, Trash2, X } from "lucide-react";
@@ -66,7 +66,7 @@ export function TaskDetailsDialog({
 }: TaskDetailsDialogProps) {
   const [type, setType] = useState(task?.type || fallbackTaskOptions.types[0]);
   const [status, setStatus] = useState(task ? task.statusLabel || statusConfig[task.status].label : fallbackTaskOptions.statuses[0]);
-  const [dueDate, setDueDate] = useState(task ? getDateInputValue(task.dueDate) : getTodayDate());
+  const [dueDate, setDueDate] = useState(task ? getDateInputValue(task.dueDate) : "");
   const [responsibleUserId, setResponsibleUserId] = useState(task?.responsibleUserId || "");
   const [subject, setSubject] = useState(task?.subject || "");
   const [observations, setObservations] = useState(task?.description || "");
@@ -333,7 +333,7 @@ export function TaskDetailsDialog({
 
               <div className="space-y-1.5">
                 <FieldLabel>Prazo</FieldLabel>
-                <Input type="date" className="h-10" value={dueDate} onChange={(event) => setDueDate(event.target.value)} required />
+                <Input type="date" className="h-10" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
               </div>
 
               <div className="space-y-1.5">
