@@ -132,6 +132,7 @@ export interface Exame {
   processamentoStatus?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  dataRealizacao?: string | null;
 }
 
 type ExamAnalyteRow = {
@@ -140,6 +141,23 @@ type ExamAnalyteRow = {
   unidade: string;
   referencia: string;
   status: string;
+};
+
+type ExamTrendPoint = {
+  examId: string;
+  label: string;
+  value: number;
+  displayValue: string;
+  status: string;
+  reference: string;
+};
+
+type ExamTrendRow = {
+  parametro: string;
+  unidade: string;
+  points: ExamTrendPoint[];
+  trendLabel: string;
+  trendTone: "good" | "bad" | "neutral" | "warning";
 };
 
 function formatClinicalDateTime(value: string) {
@@ -242,6 +260,95 @@ function normalizeAnalyteRows(value: unknown): ExamAnalyteRow[] {
   return [];
 }
 
+function parseNumericValue(value: string) {
+  const decimalNormalized = value.includes(",") ? value.replace(/\./g, "").replace(",", ".") : value;
+  const normalized = decimalNormalized.match(/-?\d+(?:\.\d+)?/);
+  return normalized ? Number(normalized[0]) : null;
+}
+
+function parseReferenceRange(reference: string) {
+  const decimalNormalized = reference.includes(",") ? reference.replace(/\./g, "").replace(/,/g, ".") : reference;
+  const normalized = decimalNormalized.toLowerCase();
+  const numbers = normalized.match(/-?\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite) ?? [];
+
+  if (numbers.length >= 2) return { min: Math.min(numbers[0], numbers[1]), max: Math.max(numbers[0], numbers[1]) };
+  if (numbers.length === 1 && /<|até|menor/.test(normalized)) return { min: null, max: numbers[0] };
+  if (numbers.length === 1 && />|maior|acima/.test(normalized)) return { min: numbers[0], max: null };
+
+  return null;
+}
+
+function getDistanceFromReference(value: number, reference: ReturnType<typeof parseReferenceRange>) {
+  if (!reference) return null;
+  if (reference.min !== null && value < reference.min) return reference.min - value;
+  if (reference.max !== null && value > reference.max) return value - reference.max;
+  return 0;
+}
+
+function getTrendLabel(points: ExamTrendPoint[]) {
+  if (points.length < 2) return { trendLabel: "Histórico curto", trendTone: "neutral" as const };
+
+  const first = points[0];
+  const last = points[points.length - 1];
+  const reference = parseReferenceRange(last.reference || first.reference);
+  const firstDistance = getDistanceFromReference(first.value, reference);
+  const lastDistance = getDistanceFromReference(last.value, reference);
+
+  if (firstDistance !== null && lastDistance !== null) {
+    if (lastDistance < firstDistance) return { trendLabel: "Melhorou", trendTone: "good" as const };
+    if (lastDistance > firstDistance) return { trendLabel: "Piorou", trendTone: "bad" as const };
+    return { trendLabel: lastDistance === 0 ? "Dentro da referência" : "Estável", trendTone: lastDistance === 0 ? "good" as const : "neutral" as const };
+  }
+
+  const delta = last.value - first.value;
+  if (Math.abs(delta) < 0.001) return { trendLabel: "Estável", trendTone: "neutral" as const };
+  return { trendLabel: delta > 0 ? "Subiu" : "Desceu", trendTone: "warning" as const };
+}
+
+function getExamComparableTime(exam: Exame) {
+  return Date.parse(exam.dataRealizacao || exam.updatedAt || exam.createdAt || "") || 0;
+}
+
+function buildExamTrendRows(exams: Exame[], selectedExam: Exame | null): ExamTrendRow[] {
+  if (!selectedExam) return [];
+
+  const selectedParameters = new Set(normalizeAnalyteRows(selectedExam.analitos).map((row) => row.parametro.toLowerCase()));
+  if (!selectedParameters.size) return [];
+
+  const rowsByParameter = new Map<string, { parametro: string; unidade: string; points: ExamTrendPoint[] }>();
+  const comparableExams = exams
+    .filter((exam) => exam.id === selectedExam.id || exam.exame === selectedExam.exame || exam.tipoExame === selectedExam.tipoExame || exam.grupoComparacao === selectedExam.grupoComparacao)
+    .sort((a, b) => getExamComparableTime(a) - getExamComparableTime(b));
+
+  for (const exam of comparableExams) {
+    for (const analyte of normalizeAnalyteRows(exam.analitos)) {
+      const key = analyte.parametro.toLowerCase();
+      if (!selectedParameters.has(key)) continue;
+
+      const value = parseNumericValue(analyte.resultado);
+      if (value === null) continue;
+
+      const current = rowsByParameter.get(key) ?? { parametro: analyte.parametro, unidade: analyte.unidade, points: [] };
+      current.points.push({
+        examId: exam.id,
+        label: exam.data,
+        value,
+        displayValue: analyte.resultado,
+        status: analyte.status,
+        reference: analyte.referencia,
+      });
+      rowsByParameter.set(key, current);
+    }
+  }
+
+  return Array.from(rowsByParameter.values())
+    .filter((row) => row.points.length > 1)
+    .map((row) => ({
+      ...row,
+      ...getTrendLabel(row.points),
+    }));
+}
+
 function mapAppointmentToRecord(appointment: ContactAppointment): AtendimentoPassado {
   return {
     id: appointment.id,
@@ -284,6 +391,7 @@ function mapExamToRecord(exam: RawExamRecord): Exame {
     processamentoStatus: exam.processamento_status,
     createdAt: exam.created_at,
     updatedAt: exam.updated_at,
+    dataRealizacao: exam.data_realizacao,
   };
 }
 
@@ -460,6 +568,7 @@ export default function MedicalRecords() {
   const selectedAppointmentDetails = appointments.find((appointment) => appointment.id === selectedAppointment);
   const selectedAppointmentLabel = selectedAppointmentDetails?.data || selectedAppointment;
   const selectedExamAnalytes = useMemo(() => normalizeAnalyteRows(selectedExamDetails?.analitos), [selectedExamDetails]);
+  const selectedExamTrendRows = useMemo(() => buildExamTrendRows(exams, selectedExamDetails), [exams, selectedExamDetails]);
 
   const reloadExams = useCallback(async () => {
     if (!selectedContact) return;
@@ -1218,8 +1327,8 @@ export default function MedicalRecords() {
       </main>
 
       <Dialog open={Boolean(selectedExamDetails)} onOpenChange={(open) => !open && setSelectedExamDetails(null)}>
-        <DialogContent className="max-h-[86vh] overflow-hidden sm:max-w-4xl">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-5xl">
+          <DialogHeader className="shrink-0">
             <DialogTitle>{selectedExamDetails?.exame || "Detalhes do exame"}</DialogTitle>
             <DialogDescription>
               {selectedExamDetails?.pacienteNome || (selectedContact ? getDisplayName(selectedContact) : "Paciente")} • {selectedExamDetails?.data || "Data pendente"}
@@ -1227,86 +1336,182 @@ export default function MedicalRecords() {
           </DialogHeader>
 
           {selectedExamDetails ? (
-            <div className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
-              <div className="grid gap-3 rounded-lg border border-border bg-muted/20 p-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                <div>
-                  <p className="font-semibold uppercase tracking-wider text-muted-foreground">Status</p>
-                  <p className="mt-1 text-foreground">{selectedExamDetails.statusLabel}</p>
-                </div>
-                <div>
-                  <p className="font-semibold uppercase tracking-wider text-muted-foreground">Tipo</p>
-                  <p className="mt-1 text-foreground">{selectedExamDetails.tipoExame || selectedExamDetails.grupoComparacao || "-"}</p>
-                </div>
-                <div>
-                  <p className="font-semibold uppercase tracking-wider text-muted-foreground">Arquivo</p>
-                  <p className="mt-1 truncate text-foreground">{selectedExamDetails.nomeArquivo || "-"}</p>
-                </div>
-                <div>
-                  <p className="font-semibold uppercase tracking-wider text-muted-foreground">Código TUSS</p>
-                  <p className="mt-1 text-foreground">{selectedExamDetails.codigoTuss || "-"}</p>
-                </div>
-              </div>
+            <Tabs defaultValue="resumo" className="flex min-h-0 flex-1 flex-col gap-3">
+              <TabsList className="grid h-auto w-full shrink-0 grid-cols-4 rounded-lg bg-muted/50 p-1">
+                <TabsTrigger value="resumo" className="text-xs">Resumo</TabsTrigger>
+                <TabsTrigger value="evolucao" className="text-xs">Evolução</TabsTrigger>
+                <TabsTrigger value="analitos" className="text-xs">Analitos</TabsTrigger>
+                <TabsTrigger value="texto" className="text-xs">Texto</TabsTrigger>
+              </TabsList>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-3">
+              <TabsContent value="resumo" className="min-h-0 flex-1 overflow-y-auto pr-1">
+                <div className="grid gap-3 rounded-lg border border-border bg-muted/20 p-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <p className="font-semibold uppercase tracking-wider text-muted-foreground">Status</p>
+                    <p className="mt-1 text-foreground">{selectedExamDetails.statusLabel}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold uppercase tracking-wider text-muted-foreground">Tipo</p>
+                    <p className="mt-1 text-foreground">{selectedExamDetails.tipoExame || selectedExamDetails.grupoComparacao || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold uppercase tracking-wider text-muted-foreground">Arquivo</p>
+                    <p className="mt-1 truncate text-foreground">{selectedExamDetails.nomeArquivo || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold uppercase tracking-wider text-muted-foreground">Código TUSS</p>
+                    <p className="mt-1 text-foreground">{selectedExamDetails.codigoTuss || "-"}</p>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border border-border bg-background/60 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Analitos</p>
+                    <p className="mt-2 text-2xl font-semibold text-foreground">{selectedExamAnalytes.length}</p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background/60 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Comparáveis</p>
+                    <p className="mt-2 text-2xl font-semibold text-foreground">{selectedExamTrendRows.length}</p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background/60 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Arquivo original</p>
+                    <p className="mt-2 text-sm font-medium text-foreground">{selectedExamDetails.url ? "Disponível" : "Indisponível"}</p>
+                  </div>
+                </div>
+
+                {selectedExamDetails.observacoes ? (
+                  <p className="mt-3 rounded-lg border border-border bg-muted/20 p-3 text-sm leading-relaxed text-foreground/80">{selectedExamDetails.observacoes}</p>
+                ) : null}
+              </TabsContent>
+
+              <TabsContent value="evolucao" className="min-h-0 flex-1 overflow-y-auto pr-1">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-foreground/80">Evolução temporal</h3>
+                  <span className="text-xs text-muted-foreground">{selectedExamTrendRows.length ? `${selectedExamTrendRows.length} parâmetros comparáveis` : "Sem histórico comparável"}</span>
+                </div>
+
+                {selectedExamTrendRows.length > 0 ? (
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {selectedExamTrendRows.map((trend) => {
+                      const values = trend.points.map((point) => point.value);
+                      const min = Math.min(...values);
+                      const max = Math.max(...values);
+                      const range = max - min || 1;
+
+                      return (
+                        <div key={trend.parametro} className="rounded-lg border border-border bg-background/60 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-foreground">{trend.parametro}</p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">{trend.points.length} medições {trend.unidade !== "-" ? `• ${trend.unidade}` : ""}</p>
+                            </div>
+                            <span
+                              className={cn(
+                                "shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-medium",
+                                trend.trendTone === "good" && "border-emerald-500/20 bg-emerald-500/10 text-emerald-600",
+                                trend.trendTone === "bad" && "border-red-500/20 bg-red-500/10 text-red-600",
+                                trend.trendTone === "warning" && "border-amber-500/20 bg-amber-500/10 text-amber-600",
+                                trend.trendTone === "neutral" && "border-border bg-muted text-muted-foreground",
+                              )}
+                            >
+                              {trend.trendLabel}
+                            </span>
+                          </div>
+
+                          <div className="mt-4 flex h-24 items-end gap-2 border-b border-border/60 pb-2">
+                            {trend.points.map((point) => {
+                              const height = 18 + ((point.value - min) / range) * 62;
+
+                              return (
+                                <div key={`${trend.parametro}-${point.examId}`} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+                                  <div
+                                    className={cn(
+                                      "w-full max-w-9 rounded-t-md",
+                                      trend.trendTone === "good" && "bg-emerald-500/80",
+                                      trend.trendTone === "bad" && "bg-red-500/80",
+                                      trend.trendTone === "warning" && "bg-amber-500/80",
+                                      trend.trendTone === "neutral" && "bg-theme-primary/70",
+                                    )}
+                                    style={{ height }}
+                                    title={`${point.label}: ${point.displayValue}`}
+                                  />
+                                  <span className="max-w-full truncate text-[10px] text-muted-foreground">{point.displayValue}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+                            <span>Inicial: <strong className="text-foreground">{trend.points[0]?.displayValue}</strong></span>
+                            <span>Atual: <strong className="text-foreground">{trend.points.at(-1)?.displayValue}</strong></span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-border bg-muted/20 px-4 py-4 text-sm text-muted-foreground">
+                    Ainda não há medições numéricas repetidas deste exame para montar uma linha temporal.
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="analitos" className="min-h-0 flex-1 overflow-hidden">
+                <div className="mb-3 flex items-center justify-between gap-3">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-foreground/80">Analitos extraídos</h3>
                   <span className="text-xs text-muted-foreground">{selectedExamAnalytes.length ? `${selectedExamAnalytes.length} itens` : "Sem tabela estruturada"}</span>
                 </div>
 
                 {selectedExamAnalytes.length > 0 ? (
-                  <div className="overflow-hidden rounded-lg border border-border">
-                    <div className="max-h-[320px] overflow-auto">
-                      <table className="w-full min-w-[720px] text-left text-xs">
-                        <thead className="sticky top-0 bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
-                          <tr>
-                            <th className="px-3 py-2 font-bold">Parâmetro</th>
-                            <th className="px-3 py-2 font-bold">Resultado</th>
-                            <th className="px-3 py-2 font-bold">Unidade</th>
-                            <th className="px-3 py-2 font-bold">Referência</th>
-                            <th className="px-3 py-2 font-bold">Status</th>
+                  <div className="h-[54vh] overflow-auto rounded-lg border border-border">
+                    <table className="w-full min-w-[760px] text-left text-xs">
+                      <thead className="sticky top-0 z-10 bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2 font-bold">Parâmetro</th>
+                          <th className="px-3 py-2 font-bold">Resultado</th>
+                          <th className="px-3 py-2 font-bold">Unidade</th>
+                          <th className="px-3 py-2 font-bold">Referência</th>
+                          <th className="px-3 py-2 font-bold">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/60">
+                        {selectedExamAnalytes.map((row, index) => (
+                          <tr key={`${row.parametro}-${index}`} className="bg-background/60">
+                            <td className="px-3 py-2 font-medium text-foreground">{row.parametro}</td>
+                            <td className="px-3 py-2 text-foreground/90">{row.resultado}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{row.unidade}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{row.referencia}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{row.status}</td>
                           </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border/60">
-                          {selectedExamAnalytes.map((row, index) => (
-                            <tr key={`${row.parametro}-${index}`} className="bg-background/60">
-                              <td className="px-3 py-2 font-medium text-foreground">{row.parametro}</td>
-                              <td className="px-3 py-2 text-foreground/90">{row.resultado}</td>
-                              <td className="px-3 py-2 text-muted-foreground">{row.unidade}</td>
-                              <td className="px-3 py-2 text-muted-foreground">{row.referencia}</td>
-                              <td className="px-3 py-2 text-muted-foreground">{row.status}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 ) : (
                   <div className="rounded-lg border border-border bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
                     Nenhum analito estruturado foi encontrado para este exame.
                   </div>
                 )}
-              </div>
+              </TabsContent>
 
-              {selectedExamDetails.observacoes || selectedExamDetails.textoExtraido ? (
-                <>
-                  <Separator />
-                  <div className="space-y-2">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-foreground/80">Observações e texto extraído</h3>
-                    {selectedExamDetails.observacoes ? (
-                      <p className="rounded-lg border border-border bg-muted/20 p-3 text-sm leading-relaxed text-foreground/80">{selectedExamDetails.observacoes}</p>
-                    ) : null}
-                    {selectedExamDetails.textoExtraido ? (
-                      <pre className="max-h-52 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-background p-3 text-xs leading-relaxed text-muted-foreground">
-                        {selectedExamDetails.textoExtraido}
-                      </pre>
-                    ) : null}
+              <TabsContent value="texto" className="min-h-0 flex-1 overflow-y-auto pr-1">
+                {selectedExamDetails.observacoes ? (
+                  <p className="mb-3 rounded-lg border border-border bg-muted/20 p-3 text-sm leading-relaxed text-foreground/80">{selectedExamDetails.observacoes}</p>
+                ) : null}
+                {selectedExamDetails.textoExtraido ? (
+                  <pre className="max-h-[58vh] overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-background p-3 text-xs leading-relaxed text-muted-foreground">
+                    {selectedExamDetails.textoExtraido}
+                  </pre>
+                ) : (
+                  <div className="rounded-lg border border-border bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
+                    Nenhum texto extraído disponível para este exame.
                   </div>
-                </>
-              ) : null}
-            </div>
+                )}
+              </TabsContent>
+            </Tabs>
           ) : null}
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0 border-t border-border/60 pt-3">
             {selectedExamDetails?.url ? (
               <Button type="button" variant="outline" className="gap-2" onClick={() => window.open(selectedExamDetails.url, "_blank", "noopener,noreferrer")}>
                 Abrir original
