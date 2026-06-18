@@ -33,8 +33,8 @@ import { Group, Panel, Separator } from "react-resizable-panels";
 
 const CHAT_PAGE_SIZE = 50;
 const MESSAGE_PAGE_SIZE = 50;
-const CHAT_SYNC_INTERVAL_MS = 5000;
-const MESSAGE_SYNC_INTERVAL_MS = 2500;
+const CHAT_SYNC_INTERVAL_MS = 60000;
+const MESSAGE_SYNC_INTERVAL_MS = 30000;
 const CHAT_MESSAGE_TIMESTAMP_DRIFT_MS = 2 * 60 * 1000;
 const LAST_OPEN_CHAT_STORAGE_KEY = "neuronzclinic:last-open-chat-id";
 const MEDIA_PREVIEW_LABELS = new Set(["Foto", "Vídeo", "Áudio", "Figurinha", "Documento"]);
@@ -1301,7 +1301,11 @@ export default function ChatsPage() {
   }, [latestMessageStatuses, visibleChats]);
 
   useEffect(() => {
-    const chatIds = visibleChatRemoteIdsKey ? visibleChatRemoteIdsKey.split("\n") : [];
+    const chatIds = visibleChatRemoteIdsKey
+      ? visibleChats
+          .filter((chat) => chat.chat_id && (!chat.last_message_time || !chat.text_last_message))
+          .map((chat) => chat.chat_id)
+      : [];
 
     if (chatIds.length === 0) return;
 
@@ -1352,7 +1356,7 @@ export default function ChatsPage() {
     return () => {
       isMounted = false;
     };
-  }, [visibleChatRemoteIdsKey]);
+  }, [visibleChatRemoteIdsKey, visibleChats]);
 
   const restoreSelectedChat = useCallback(
     (previousChat: ChatRecord) => {

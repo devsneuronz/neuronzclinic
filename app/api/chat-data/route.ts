@@ -3,6 +3,38 @@ import { NextRequest, NextResponse } from "next/server"
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 const CHAT_ID_BATCH_SIZE = 40
+const CHAT_SELECT = [
+  "id",
+  "chat_id",
+  "nome_contato",
+  "pushname",
+  "phone_contact",
+  "cidade_residencia",
+  "cidade_desejada",
+  "email_contato",
+  "url_foto_perfil",
+  "text_last_message",
+  "last_message_time",
+  "last_time_formatado",
+  "unread_count",
+  "pinned",
+  "archived",
+  "finalizada",
+  "ia_responde",
+  "last_message_fromMe",
+  "Status_chat",
+  "hex_status",
+  "json_tags",
+  "json_tags_parsed",
+  "tag_chat_array",
+  "json_interesses",
+  "dono",
+  "setor",
+  "grupo",
+  "draft",
+  "lid_id",
+  "updated_at",
+].join(",")
 const MESSAGE_SELECT = [
   "id",
   "message_id",
@@ -150,7 +182,7 @@ async function fetchLatestMessageStatuses(chatIds: string[]): Promise<Record<str
 
   const select = ["chat_id", "status", "timestamp_msg"].join(",")
   const encodedIds = chatIds.map((chatId) => encodeURIComponent(chatId)).join(",")
-  const limit = Math.max(chatIds.length * 20, 1000)
+  const limit = Math.min(Math.max(chatIds.length * 10, 100), 400)
   const messages = await supabaseGet<LatestMessageStatusRecord[]>(
     `messages?select=${select}&chat_id=in.(${encodedIds})&from_me=is.true&order=timestamp_msg.desc.nullslast&limit=${limit}`,
   )
@@ -181,7 +213,7 @@ async function fetchLatestMessagesForChats(chatIds: string[]): Promise<Record<st
 
   const select = ["chat_id", "content", "message_type", "media_mime_type", "timestamp_msg", "from_me", "status"].join(",")
   const encodedIds = chatIds.map((chatId) => encodeURIComponent(chatId)).join(",")
-  const limit = Math.max(chatIds.length * 20, 1000)
+  const limit = Math.min(Math.max(chatIds.length * 10, 100), 400)
   const messages = await supabaseGet<LatestChatMessage[]>(
     `messages?select=${select}&chat_id=in.(${encodedIds})&order=timestamp_msg.desc.nullslast&limit=${limit}`,
   )
@@ -206,7 +238,7 @@ export async function GET(request: NextRequest) {
       const search = getString(request.nextUrl.searchParams.get("search"))
       const searchFilter = search ? buildChatSearchFilter(search) : ""
       const chats = await supabaseGet<Record<string, unknown>[]>(
-        `chats?select=*&archived=is.false${searchFilter}&order=last_message_time.desc.nullslast&limit=${limit}&offset=${offset}`,
+        `chats?select=${CHAT_SELECT}&archived=is.false${searchFilter}&order=last_message_time.desc.nullslast&limit=${limit}&offset=${offset}`,
       )
 
       return NextResponse.json({ chats })
