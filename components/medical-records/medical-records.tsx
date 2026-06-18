@@ -82,14 +82,21 @@ type RawExamRecord = {
   id: string;
   paciente_nome?: string | null;
   codigo_tuss?: string | null;
+  analitos?: unknown;
+  historico_analitos?: unknown;
   data_realizacao?: string | null;
   status?: string | null;
   observacoes?: string | null;
   arquivo_url?: string | null;
   nome_arquivo?: string | null;
   processamento_status?: string | null;
+  texto_extraido?: string | null;
   tipo_exame?: string | null;
   grupo_comparacao?: string | null;
+  mime_type?: string | null;
+  storage_path?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
   "ida-contato"?: string | null;
   "ida-agendamento"?: string | null;
 };
@@ -112,7 +119,28 @@ export interface Exame {
   observacoes: string;
   data: string;
   url?: string;
+  pacienteNome?: string | null;
+  codigoTuss?: string | null;
+  analitos?: unknown;
+  historicoAnalitos?: unknown;
+  textoExtraido?: string | null;
+  tipoExame?: string | null;
+  grupoComparacao?: string | null;
+  nomeArquivo?: string | null;
+  mimeType?: string | null;
+  storagePath?: string | null;
+  processamentoStatus?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
+
+type ExamAnalyteRow = {
+  parametro: string;
+  resultado: string;
+  unidade: string;
+  referencia: string;
+  status: string;
+};
 
 function formatClinicalDateTime(value: string) {
   return (
@@ -130,6 +158,88 @@ function formatClinicalDateTime(value: string) {
 function formatClinicalDate(value?: string | null) {
   if (!value) return "Pendente";
   return formatDateTime(value, { day: "2-digit", month: "long", year: "numeric" }) || "Pendente";
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function parseJsonValue(value: unknown) {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) return value;
+
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+function formatExamValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "string") return value;
+  return JSON.stringify(value);
+}
+
+function getRecordText(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (value !== null && value !== undefined && value !== "") return formatExamValue(value);
+  }
+
+  return "";
+}
+
+function mapAnalyteRecord(record: Record<string, unknown>, fallbackName = ""): ExamAnalyteRow {
+  return {
+    parametro: getRecordText(record, ["parametro", "analito", "nome", "name", "item", "exame", "test"]) || fallbackName || "Analito",
+    resultado: getRecordText(record, ["resultado", "valor", "value", "result", "medida"]) || "-",
+    unidade: getRecordText(record, ["unidade", "unit", "units"]) || "-",
+    referencia: getRecordText(record, ["referencia", "valor_referencia", "intervalo_referencia", "reference", "ref"]) || "-",
+    status: getRecordText(record, ["status", "situacao", "flag", "interpretacao"]) || "-",
+  };
+}
+
+function normalizeAnalyteRows(value: unknown): ExamAnalyteRow[] {
+  const parsed = parseJsonValue(value);
+
+  if (Array.isArray(parsed)) {
+    return parsed
+      .map((item, index) => {
+        if (isPlainRecord(item)) return mapAnalyteRecord(item);
+        return {
+          parametro: `Item ${index + 1}`,
+          resultado: formatExamValue(item),
+          unidade: "-",
+          referencia: "-",
+          status: "-",
+        };
+      })
+      .filter((row) => row.parametro !== "-" || row.resultado !== "-");
+  }
+
+  if (isPlainRecord(parsed)) {
+    const nested = parsed.analitos || parsed.items || parsed.resultados || parsed.results || parsed.exames;
+    if (nested && nested !== parsed) {
+      const nestedRows = normalizeAnalyteRows(nested);
+      if (nestedRows.length) return nestedRows;
+    }
+
+    return Object.entries(parsed).map(([key, item]) => {
+      if (isPlainRecord(item)) return mapAnalyteRecord(item, key);
+      return {
+        parametro: key,
+        resultado: formatExamValue(item),
+        unidade: "-",
+        referencia: "-",
+        status: "-",
+      };
+    });
+  }
+
+  return [];
 }
 
 function mapAppointmentToRecord(appointment: ContactAppointment): AtendimentoPassado {
@@ -161,6 +271,19 @@ function mapExamToRecord(exam: RawExamRecord): Exame {
     observacoes: exam.observacoes || exam.status || "Sem observações",
     data: formatClinicalDate(exam.data_realizacao),
     url: exam.arquivo_url || undefined,
+    pacienteNome: exam.paciente_nome,
+    codigoTuss: exam.codigo_tuss,
+    analitos: exam.analitos,
+    historicoAnalitos: exam.historico_analitos,
+    textoExtraido: exam.texto_extraido,
+    tipoExame: exam.tipo_exame,
+    grupoComparacao: exam.grupo_comparacao,
+    nomeArquivo: exam.nome_arquivo,
+    mimeType: exam.mime_type,
+    storagePath: exam.storage_path,
+    processamentoStatus: exam.processamento_status,
+    createdAt: exam.created_at,
+    updatedAt: exam.updated_at,
   };
 }
 
@@ -185,10 +308,14 @@ export default function MedicalRecords() {
   const [editorContentHtml, setEditorContentHtml] = useState("");
   const [editorContentJson, setEditorContentJson] = useState<unknown>(null);
   const [medicalRecordSaveStatus, setMedicalRecordSaveStatus] = useState<SaveStatus>("idle");
+  const [examUploadStatus, setExamUploadStatus] = useState<SaveStatus>("idle");
+  const [examUploadMessage, setExamUploadMessage] = useState("");
+  const [selectedExamDetails, setSelectedExamDetails] = useState<Exame | null>(null);
   const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = useState(false);
   const [isFinalizingMedicalRecord, setIsFinalizingMedicalRecord] = useState(false);
   const [currentOffset, setCurrentOffset] = useState(0);
   const [hasMorePatients, setHasMorePatients] = useState(true);
+  const examFileInputRef = useRef<HTMLInputElement | null>(null);
   const lastSavedHtmlRef = useRef("");
   const LIMIT_PER_PAGE = 100;
 
@@ -332,6 +459,23 @@ export default function MedicalRecords() {
   const dadosExames = selectedPatient ? exams : examesPlaceholder;
   const selectedAppointmentDetails = appointments.find((appointment) => appointment.id === selectedAppointment);
   const selectedAppointmentLabel = selectedAppointmentDetails?.data || selectedAppointment;
+  const selectedExamAnalytes = useMemo(() => normalizeAnalyteRows(selectedExamDetails?.analitos), [selectedExamDetails]);
+
+  const reloadExams = useCallback(async () => {
+    if (!selectedContact) return;
+
+    const examParams = new URLSearchParams();
+    if (selectedContact.ida_contato) examParams.set("idaContato", selectedContact.ida_contato);
+    if (selectedAppointment) examParams.set("idaAgendamento", selectedAppointment);
+    examParams.set("patientName", getDisplayName(selectedContact));
+
+    const response = await fetch(`/api/medical-records/exams?${examParams}`, { cache: "no-store" });
+    const data = (await response.json().catch(() => ({}))) as { exams?: RawExamRecord[]; message?: string };
+
+    if (!response.ok) throw new Error(data.message || "Não foi possível atualizar os exames.");
+
+    setExams((data.exams ?? []).map(mapExamToRecord));
+  }, [selectedAppointment, selectedContact]);
 
   useEffect(() => {
     if (!selectedContact || !selectedAppointment) {
@@ -493,6 +637,46 @@ export default function MedicalRecords() {
       setMedicalRecordSaveStatus("error");
     } finally {
       setIsFinalizingMedicalRecord(false);
+    }
+  };
+
+  const handleExamFileSelected = async (file?: File | null) => {
+    if (!file || !selectedContact || !selectedAppointment || examUploadStatus === "loading") return;
+
+    try {
+      setExamUploadStatus("loading");
+      setExamUploadMessage("");
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("paciente_nome", getDisplayName(selectedContact));
+      formData.append("status", "Recebido");
+      if (selectedContact.ida_contato) formData.append("ida-contato", selectedContact.ida_contato);
+      formData.append("chat_id", selectedContact.chat_id || "");
+      formData.append("contact_name", getDisplayName(selectedContact));
+      formData.append("contact_phone", getContactPhone(selectedContact));
+      formData.append("ida-agendamento", selectedAppointment);
+      formData.append("appointment_label", selectedAppointmentLabel);
+      if (medicalRecordId) formData.append("medical_record_id", medicalRecordId);
+      if (user?.email) formData.append("user_email", user.email);
+
+      const response = await fetch("/api/medical-records/exams/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = (await response.json().catch(() => ({}))) as { message?: string };
+
+      if (!response.ok) throw new Error(data.message || "Não foi possível enviar o exame.");
+
+      setExamUploadStatus("saved");
+      setExamUploadMessage("Exame enviado para processamento.");
+      await reloadExams().catch((error) => console.error("Error reloading exams:", error));
+    } catch (error) {
+      console.error("Error uploading exam:", error);
+      setExamUploadStatus("error");
+      setExamUploadMessage(error instanceof Error ? error.message : "Não foi possível enviar o exame.");
+    } finally {
+      if (examFileInputRef.current) examFileInputRef.current.value = "";
     }
   };
 
@@ -757,9 +941,36 @@ export default function MedicalRecords() {
                         <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                         Nova Prescrição
                       </Button>
-                      <Button disabled={!selectedAppointment} variant="outline" className="flex-1 xl:w-full xl:flex-initial justify-start gap-2.5 h-10 text-xs font-medium text-foreground/80 border-border min-w-[150px]">
-                        <FilePlus className="h-4 w-4 text-muted-foreground shrink-0" />+ Resultado/Exame
+                      <input
+                        ref={examFileInputRef}
+                        type="file"
+                        accept="application/pdf,image/*,.pdf"
+                        className="hidden"
+                        onChange={(event) => void handleExamFileSelected(event.target.files?.[0])}
+                      />
+                      <Button
+                        disabled={!selectedAppointment || examUploadStatus === "loading"}
+                        variant="outline"
+                        className="flex-1 xl:w-full xl:flex-initial justify-start gap-2.5 h-10 text-xs font-medium text-foreground/80 border-border min-w-[150px]"
+                        onClick={() => examFileInputRef.current?.click()}
+                      >
+                        {examUploadStatus === "loading" ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-theme-primary shrink-0" />
+                        ) : (
+                          <FilePlus className="h-4 w-4 text-muted-foreground shrink-0" />
+                        )}
+                        {examUploadStatus === "loading" ? "Enviando exame..." : "+ Resultado/Exame"}
                       </Button>
+                      {examUploadMessage ? (
+                        <p
+                          className={cn(
+                            "w-full px-1 text-[11px] leading-relaxed",
+                            examUploadStatus === "error" ? "text-red-600" : "text-emerald-600",
+                          )}
+                        >
+                          {examUploadMessage}
+                        </p>
+                      ) : null}
 
                       <Button
                         disabled={!selectedAppointment || isFinalizingMedicalRecord || medicalRecordSaveStatus === "loading"}
@@ -929,7 +1140,16 @@ export default function MedicalRecords() {
                               dadosExames.map((item) => (
                               <div
                                 key={item.id}
-                                className="flex flex-col md:grid md:grid-cols-[1.5fr_140px_2fr_130px_90px] items-start md:items-center gap-3 md:gap-4 px-5 py-4 transition-colors hover:bg-muted/20 relative group text-left w-full"
+                                role="button"
+                                tabIndex={0}
+                                className="flex flex-col md:grid md:grid-cols-[1.5fr_140px_2fr_130px_90px] items-start md:items-center gap-3 md:gap-4 px-5 py-4 transition-colors hover:bg-muted/20 relative group text-left w-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-primary/40"
+                                onClick={() => setSelectedExamDetails(item)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+                                    setSelectedExamDetails(item);
+                                  }
+                                }}
                               >
                                 <div className="flex min-w-0 items-center gap-3 w-full md:w-auto">
                                   <div className="h-8 w-8 shrink-0 rounded-lg bg-theme-primary/10 flex items-center justify-center border border-theme-primary/15 text-theme-primary">
@@ -984,7 +1204,7 @@ export default function MedicalRecords() {
 
                           <div className="flex items-center gap-2 border-t border-border/60 bg-muted/20 px-5 py-3 text-xs text-muted-foreground/80">
                             <Info className="h-3.5 w-3.5 text-theme-primary shrink-0" />
-                            <span>Clique em visualizar ou use as linhas para abrir os documentos originais emitidos.</span>
+                            <span>Clique em uma linha para ver os dados extraídos. Use Ver para abrir o documento original.</span>
                           </div>
                         </div>
                       </CardContent>
@@ -996,6 +1216,109 @@ export default function MedicalRecords() {
           </div>
         </div>
       </main>
+
+      <Dialog open={Boolean(selectedExamDetails)} onOpenChange={(open) => !open && setSelectedExamDetails(null)}>
+        <DialogContent className="max-h-[86vh] overflow-hidden sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{selectedExamDetails?.exame || "Detalhes do exame"}</DialogTitle>
+            <DialogDescription>
+              {selectedExamDetails?.pacienteNome || (selectedContact ? getDisplayName(selectedContact) : "Paciente")} • {selectedExamDetails?.data || "Data pendente"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedExamDetails ? (
+            <div className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
+              <div className="grid gap-3 rounded-lg border border-border bg-muted/20 p-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <p className="font-semibold uppercase tracking-wider text-muted-foreground">Status</p>
+                  <p className="mt-1 text-foreground">{selectedExamDetails.statusLabel}</p>
+                </div>
+                <div>
+                  <p className="font-semibold uppercase tracking-wider text-muted-foreground">Tipo</p>
+                  <p className="mt-1 text-foreground">{selectedExamDetails.tipoExame || selectedExamDetails.grupoComparacao || "-"}</p>
+                </div>
+                <div>
+                  <p className="font-semibold uppercase tracking-wider text-muted-foreground">Arquivo</p>
+                  <p className="mt-1 truncate text-foreground">{selectedExamDetails.nomeArquivo || "-"}</p>
+                </div>
+                <div>
+                  <p className="font-semibold uppercase tracking-wider text-muted-foreground">Código TUSS</p>
+                  <p className="mt-1 text-foreground">{selectedExamDetails.codigoTuss || "-"}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-foreground/80">Analitos extraídos</h3>
+                  <span className="text-xs text-muted-foreground">{selectedExamAnalytes.length ? `${selectedExamAnalytes.length} itens` : "Sem tabela estruturada"}</span>
+                </div>
+
+                {selectedExamAnalytes.length > 0 ? (
+                  <div className="overflow-hidden rounded-lg border border-border">
+                    <div className="max-h-[320px] overflow-auto">
+                      <table className="w-full min-w-[720px] text-left text-xs">
+                        <thead className="sticky top-0 bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
+                          <tr>
+                            <th className="px-3 py-2 font-bold">Parâmetro</th>
+                            <th className="px-3 py-2 font-bold">Resultado</th>
+                            <th className="px-3 py-2 font-bold">Unidade</th>
+                            <th className="px-3 py-2 font-bold">Referência</th>
+                            <th className="px-3 py-2 font-bold">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/60">
+                          {selectedExamAnalytes.map((row, index) => (
+                            <tr key={`${row.parametro}-${index}`} className="bg-background/60">
+                              <td className="px-3 py-2 font-medium text-foreground">{row.parametro}</td>
+                              <td className="px-3 py-2 text-foreground/90">{row.resultado}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{row.unidade}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{row.referencia}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{row.status}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-border bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
+                    Nenhum analito estruturado foi encontrado para este exame.
+                  </div>
+                )}
+              </div>
+
+              {selectedExamDetails.observacoes || selectedExamDetails.textoExtraido ? (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-foreground/80">Observações e texto extraído</h3>
+                    {selectedExamDetails.observacoes ? (
+                      <p className="rounded-lg border border-border bg-muted/20 p-3 text-sm leading-relaxed text-foreground/80">{selectedExamDetails.observacoes}</p>
+                    ) : null}
+                    {selectedExamDetails.textoExtraido ? (
+                      <pre className="max-h-52 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-background p-3 text-xs leading-relaxed text-muted-foreground">
+                        {selectedExamDetails.textoExtraido}
+                      </pre>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            {selectedExamDetails?.url ? (
+              <Button type="button" variant="outline" className="gap-2" onClick={() => window.open(selectedExamDetails.url, "_blank", "noopener,noreferrer")}>
+                Abrir original
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Button>
+            ) : null}
+            <Button type="button" onClick={() => setSelectedExamDetails(null)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isFinalizeDialogOpen} onOpenChange={setIsFinalizeDialogOpen}>
         <DialogContent className="max-w-md">
