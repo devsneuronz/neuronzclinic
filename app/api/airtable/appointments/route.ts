@@ -290,6 +290,23 @@ async function mapContactAppointments(records: AirtableRecord[]) {
   })
 }
 
+async function getAppointmentsForContact(contactId: string) {
+  const contact = await fetchAirtableRecord(CONTACTS_TABLE, contactId)
+  const appointmentIds = getLinkedRecordIds(contact?.fields?.Agendamentos)
+
+  if (appointmentIds.length === 0) {
+    return []
+  }
+
+  const filterByFormula = `OR(${appointmentIds.map((id) => `RECORD_ID()=${formulaString(id)}`).join(",")})`
+  const params = new URLSearchParams({
+    pageSize: "100",
+    filterByFormula,
+  })
+  const records = await fetchAirtableRecords(APPOINTMENT_TABLE, params)
+  return mapContactAppointments(records)
+}
+
 async function listCalendarAppointments(searchParams: URLSearchParams) {
   const start = getString(searchParams.get("start"))
   const end = getString(searchParams.get("end"))
@@ -413,8 +430,9 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const chatId = getString(searchParams.get("chatId"))
   const contactPhone = getString(searchParams.get("contactPhone"))
+  const contactIdParam = getString(searchParams.get("contactId"))
 
-  if (!chatId && !contactPhone) {
+  if (!chatId && !contactPhone && !contactIdParam) {
     try {
       return await listCalendarAppointments(searchParams)
     } catch (error) {
@@ -426,25 +444,21 @@ export async function GET(request: Request) {
   }
 
   try {
-    const contactId = await findContactId({ chatId, contactPhone })
-    if (!contactId) {
+    const fallbackContactId = await findContactId({ chatId, contactPhone })
+    const contactIds = Array.from(
+      new Set([isAirtableRecordId(contactIdParam) ? contactIdParam : "", fallbackContactId || ""].filter(Boolean)),
+    )
+
+    if (contactIds.length === 0) {
       return NextResponse.json({ appointments: [], latestAppointment: null })
     }
 
-    const contact = await fetchAirtableRecord(CONTACTS_TABLE, contactId)
-    const appointmentIds = getLinkedRecordIds(contact?.fields?.Agendamentos)
-
-    if (appointmentIds.length === 0) {
-      return NextResponse.json({ appointments: [], latestAppointment: null })
+    let appointments: ContactAppointment[] = []
+    for (const contactId of contactIds) {
+      appointments = await getAppointmentsForContact(contactId).catch(() => [])
+      if (appointments.length > 0) break
     }
 
-    const filterByFormula = `OR(${appointmentIds.map((id) => `RECORD_ID()=${formulaString(id)}`).join(",")})`
-    const params = new URLSearchParams({
-      pageSize: "100",
-      filterByFormula,
-    })
-    const records = await fetchAirtableRecords(APPOINTMENT_TABLE, params)
-    const appointments = await mapContactAppointments(records)
     const latest = appointments[0]
 
     if (!latest) {

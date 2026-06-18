@@ -1,10 +1,22 @@
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Editor } from "@tiptap/core";
-import { Bold, Grid, Image as ImageIcon, Italic, Link2, List, ListOrdered, Palette, Redo2, Strikethrough, Underline, Undo2 } from "lucide-react";
+import { Bold, Grid, Image as ImageIcon, Italic, Link2, List, ListOrdered, Palette, Redo2, Strikethrough, Underline, Undo2, Upload, X } from "lucide-react";
 import React from "react";
 
+type InsertDialog = "image" | "link" | null;
+
 export const OptionsMenu = ({ editor }: { editor: Editor | null }) => {
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [dialog, setDialog] = React.useState<InsertDialog>(null);
+  const [linkUrl, setLinkUrl] = React.useState("");
+  const [imageUrl, setImageUrl] = React.useState("");
+  const [selectedFileName, setSelectedFileName] = React.useState("");
+  const [selectedFileDataUrl, setSelectedFileDataUrl] = React.useState("");
   const [editorState, setEditorState] = React.useState({
     isParagraph: false,
     isBold: false,
@@ -60,22 +72,56 @@ export const OptionsMenu = ({ editor }: { editor: Editor | null }) => {
     return null;
   }
 
-  const setLink = () => {
-    const previousUrl = editor.getAttributes("link").url;
-    const url = window.prompt("URL do Link:", previousUrl);
-
-    if (url === null) return; // cancelado
-    if (url === "") {
-      editor.chain().focus().extendMarkRange("link").unsetLink().run();
-      return;
-    }
-    editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+  const openLinkDialog = () => {
+    setLinkUrl(editor.getAttributes("link").href || editor.getAttributes("link").url || "");
+    setDialog("link");
   };
 
-  const addImage = () => {
-    const url = window.prompt("URL da Imagem:");
-    if (url) {
-      editor.chain().focus().setImage({ src: url }).run();
+  const openImageDialog = () => {
+    setImageUrl("");
+    setSelectedFileName("");
+    setSelectedFileDataUrl("");
+    setDialog("image");
+  };
+
+  const closeDialog = () => setDialog(null);
+
+  const applyLink = () => {
+    const trimmedUrl = linkUrl.trim();
+    if (!trimmedUrl) return;
+
+    editor.chain().focus().extendMarkRange("link").setLink({ href: trimmedUrl }).run();
+    closeDialog();
+  };
+
+  const removeLink = () => {
+    editor.chain().focus().extendMarkRange("link").unsetLink().run();
+    closeDialog();
+  };
+
+  const applyImage = () => {
+    const source = selectedFileDataUrl || imageUrl.trim();
+    if (!source) return;
+
+    editor.chain().focus().setImage({ src: source }).run();
+    closeDialog();
+  };
+
+  const selectImageFile = async (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return;
+
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+
+    setSelectedFileName(file.name);
+    setSelectedFileDataUrl(dataUrl);
+    if (!imageUrl.trim()) {
+      setImageUrl("");
     }
   };
 
@@ -188,11 +234,11 @@ export const OptionsMenu = ({ editor }: { editor: Editor | null }) => {
 
       <div className="w-[1px] h-4 bg-border mx-1" />
 
-      <Button type="button" variant="ghost" size="icon" className={`h-7 w-7 ${editorState.isLink ? "bg-theme-primary/10 text-theme-primary" : "text-muted-foreground hover:text-foreground"}`} onClick={setLink}>
+      <Button type="button" variant="ghost" size="icon" className={`h-7 w-7 ${editorState.isLink ? "bg-theme-primary/10 text-theme-primary" : "text-muted-foreground hover:text-foreground"}`} onClick={openLinkDialog}>
         <Link2 className="h-3.5 w-3.5" />
       </Button>
 
-      <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={addImage}>
+      <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={openImageDialog}>
         <ImageIcon className="h-3.5 w-3.5" />
       </Button>
 
@@ -205,7 +251,110 @@ export const OptionsMenu = ({ editor }: { editor: Editor | null }) => {
       <Button type="button" variant="ghost" size="icon" disabled={!editorState.canRedo} className="h-7 w-7 text-muted-foreground hover:text-foreground disabled:opacity-40" onClick={() => editor.chain().focus().redo().run()}>
         <Redo2 className="h-3.5 w-3.5" />
       </Button>
+
+      <Dialog open={dialog === "link"} onOpenChange={(open) => setDialog(open ? "link" : null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Adicionar link</DialogTitle>
+            <DialogDescription>Cole a URL que será vinculada ao texto selecionado.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="medical-record-link-url">URL</Label>
+            <Input
+              id="medical-record-link-url"
+              autoFocus
+              placeholder="https://..."
+              value={linkUrl}
+              onChange={(event) => setLinkUrl(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") applyLink();
+              }}
+            />
+          </div>
+
+          <DialogFooter>
+            {editorState.isLink && (
+              <Button type="button" variant="outline" className="mr-auto gap-2" onClick={removeLink}>
+                <X className="h-4 w-4" />
+                Remover
+              </Button>
+            )}
+            <Button type="button" variant="outline" onClick={closeDialog}>
+              Cancelar
+            </Button>
+            <Button type="button" disabled={!linkUrl.trim()} onClick={applyLink}>
+              Aplicar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dialog === "image"} onOpenChange={(open) => setDialog(open ? "image" : null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Adicionar imagem</DialogTitle>
+            <DialogDescription>Escolha uma imagem do dispositivo ou cole uma URL pública.</DialogDescription>
+          </DialogHeader>
+
+          <Tabs defaultValue="device" className="gap-4">
+            <TabsList className="w-full">
+              <TabsTrigger value="device">Dispositivo</TabsTrigger>
+              <TabsTrigger value="url">Link</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="device" className="space-y-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => void selectImageFile(event.target.files?.[0])}
+              />
+
+              <button
+                type="button"
+                className="flex min-h-32 w-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-muted/20 px-4 py-6 text-center transition-colors hover:bg-muted/35"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <span className="flex h-10 w-10 items-center justify-center rounded-md bg-theme-primary/10 text-theme-primary">
+                  <Upload className="h-5 w-5" />
+                </span>
+                <span className="text-sm font-medium text-foreground">{selectedFileName || "Selecionar imagem"}</span>
+                <span className="text-xs text-muted-foreground">PNG, JPG, WEBP ou outro formato de imagem do seu dispositivo.</span>
+              </button>
+            </TabsContent>
+
+            <TabsContent value="url" className="space-y-2">
+              <Label htmlFor="medical-record-image-url">URL da imagem</Label>
+              <Input
+                id="medical-record-image-url"
+                placeholder="https://..."
+                value={imageUrl}
+                onChange={(event) => {
+                  setImageUrl(event.target.value);
+                  if (event.target.value.trim()) {
+                    setSelectedFileName("");
+                    setSelectedFileDataUrl("");
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") applyImage();
+                }}
+              />
+            </TabsContent>
+          </Tabs>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeDialog}>
+              Cancelar
+            </Button>
+            <Button type="button" disabled={!selectedFileDataUrl && !imageUrl.trim()} onClick={applyImage}>
+              Inserir imagem
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
-

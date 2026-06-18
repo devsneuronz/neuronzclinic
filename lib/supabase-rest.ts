@@ -15,6 +15,7 @@ export interface ChatRecord {
   cidade_residencia: string | null
   cidade_desejada: string | null
   email_contato: string | null
+  ida_contato?: string | null
   url_foto_perfil: string | null
   text_last_message: string | null
   last_message_time: string | null

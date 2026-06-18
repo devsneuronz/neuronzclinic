@@ -1,11 +1,11 @@
 "use client";
 
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { getChatStatusColor, getChatStatusLabel } from "@/lib/chat-status";
+import { formatDateTime } from "@/lib/date";
 import { ChatRecord, fetchChats } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
-import { useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
 import {
   Calendar,
   CalendarClock,
@@ -28,11 +28,12 @@ import {
   Stethoscope,
   UserX,
 } from "lucide-react";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
@@ -55,13 +56,53 @@ interface AtendimentoPassado {
   id: string;
   data: string;
   medico: string;
+  medicoId?: string;
   paciente: string;
   procedimento: string;
   tipo: string;
+  status?: string;
   anotacoes: string;
   resumoIA: string;
   prescricoes: string;
 }
+
+type ContactAppointment = {
+  id: string;
+  status: string;
+  type: string;
+  attendanceMode: string;
+  startDateTime: string;
+  endDateTime: string;
+  professionalId: string;
+  professional: string;
+  observations: string;
+};
+
+type RawExamRecord = {
+  id: string;
+  paciente_nome?: string | null;
+  codigo_tuss?: string | null;
+  data_realizacao?: string | null;
+  status?: string | null;
+  observacoes?: string | null;
+  arquivo_url?: string | null;
+  nome_arquivo?: string | null;
+  processamento_status?: string | null;
+  tipo_exame?: string | null;
+  grupo_comparacao?: string | null;
+  "ida-contato"?: string | null;
+  "ida-agendamento"?: string | null;
+};
+
+type MedicalRecord = {
+  id: string;
+  status: string | null;
+  content_html: string | null;
+  content_json: unknown;
+  updated_at: string;
+};
+
+type SaveStatus = "idle" | "loading" | "unsaved" | "saving" | "saved" | "error";
 
 export interface Exame {
   id: string;
@@ -70,9 +111,61 @@ export interface Exame {
   statusLabel: string;
   observacoes: string;
   data: string;
+  url?: string;
+}
+
+function formatClinicalDateTime(value: string) {
+  return (
+    formatDateTime(value, {
+      weekday: "long",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }) || "Data não informada"
+  );
+}
+
+function formatClinicalDate(value?: string | null) {
+  if (!value) return "Pendente";
+  return formatDateTime(value, { day: "2-digit", month: "long", year: "numeric" }) || "Pendente";
+}
+
+function mapAppointmentToRecord(appointment: ContactAppointment): AtendimentoPassado {
+  return {
+    id: appointment.id,
+    data: formatClinicalDateTime(appointment.startDateTime),
+    medico: appointment.professional || "Sem profissional",
+    medicoId: appointment.professionalId,
+    paciente: "",
+    procedimento: appointment.type || "Atendimento",
+    tipo: appointment.attendanceMode || appointment.status || "Sem formato",
+    status: appointment.status,
+    anotacoes: appointment.observations || "Nenhuma anotação clínica registrada neste agendamento.",
+    resumoIA: "Resumo clínico ainda não registrado para este atendimento.",
+    prescricoes: "Nenhuma prescrição vinculada nesta visão.",
+  };
+}
+
+function mapExamToRecord(exam: RawExamRecord): Exame {
+  const hasAttachment = Boolean(exam.arquivo_url);
+  const status = hasAttachment ? "Anexado" : "Aguardando";
+  const title = exam.tipo_exame || exam.grupo_comparacao || exam.nome_arquivo || exam.codigo_tuss || "Exame sem nome";
+
+  return {
+    id: exam.id,
+    exame: title,
+    status,
+    statusLabel: hasAttachment ? "Anexado no Prontuário" : exam.processamento_status || exam.status || "Aguardando",
+    observacoes: exam.observacoes || exam.status || "Sem observações",
+    data: formatClinicalDate(exam.data_realizacao),
+    url: exam.arquivo_url || undefined,
+  };
 }
 
 export default function MedicalRecords() {
+  const { user } = useCurrentUser();
   const [selectedPatient, setSelectedPatient] = React.useState<string>("");
   const [selectedAppointment, setSelectedAppointment] = React.useState<string>("");
 
@@ -84,8 +177,19 @@ export default function MedicalRecords() {
   const [patients, setPatients] = useState<ChatRecord[]>([]);
   const [selectedContact, setSelectedContact] = useState<ChatRecord | null>(null);
   const [isLoadingPatients, setIsLoadingPatients] = useState(true);
+  const [appointments, setAppointments] = useState<AtendimentoPassado[]>([]);
+  const [exams, setExams] = useState<Exame[]>([]);
+  const [isLoadingClinicalData, setIsLoadingClinicalData] = useState(false);
+  const [medicalRecordId, setMedicalRecordId] = useState("");
+  const [medicalRecordStatus, setMedicalRecordStatus] = useState("draft");
+  const [editorContentHtml, setEditorContentHtml] = useState("");
+  const [editorContentJson, setEditorContentJson] = useState<unknown>(null);
+  const [medicalRecordSaveStatus, setMedicalRecordSaveStatus] = useState<SaveStatus>("idle");
+  const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = useState(false);
+  const [isFinalizingMedicalRecord, setIsFinalizingMedicalRecord] = useState(false);
   const [currentOffset, setCurrentOffset] = useState(0);
   const [hasMorePatients, setHasMorePatients] = useState(true);
+  const lastSavedHtmlRef = useRef("");
   const LIMIT_PER_PAGE = 100;
 
   const debouncedSearch = useDebouncedValue(appointmentPatientSearch.trim(), 300);
@@ -135,101 +239,71 @@ export default function MedicalRecords() {
   const handleSelectPatient = (patient: ChatRecord) => {
     setSelectedPatient(patient.id);
     setSelectedContact(patient);
+    setSelectedAppointment("");
     setAppointmentPatientSearch("");
     setIsPatientSearchOpen(false);
   };
 
-  const editor = useEditor({
-    extensions: [StarterKit],
-    content: "",
-    editorProps: {
-      attributes: {
-        class: "focus:outline-none text-sm leading-relaxed text-foreground min-h-[120px] prose prose-sm dark:prose-invert max-w-none",
-      },
-    },
-  });
+  useEffect(() => {
+    if (!selectedContact) {
+      setAppointments([]);
+      setExams([]);
+      return;
+    }
 
-  const historicoConsultas: AtendimentoPassado[] = [
-    {
-      id: "1",
-      data: "Quarta-Feira, 20 de Maio de 2026 às 11:45",
-      medico: "Dra. Tatiana",
-      paciente: "Víctor",
-      procedimento: "Tratamento Capilar",
-      tipo: "Presencial",
-      anotacoes: "Apenas Teste. Paciente relata melhora significativa na densidade capilar após o início do ciclo de tratamento.",
-      resumoIA: "Paciente em evolução favorável no tratamento capilar. Sem queixas de efeitos colaterais.",
-      prescricoes: "Minoxidil 5% — Aplicar 1ml no couro cabeludo à noite.",
-    },
-    {
-      id: "2",
-      data: "Segunda-Feira, 06 de Abril de 2026 às 14:00",
-      medico: "Dra. Tatiana",
-      paciente: "Víctor",
-      procedimento: "Consulta Inicial",
-      tipo: "Presencial",
-      anotacoes: "Avaliação de alopecia androgênica inicial identificada na região da coroa.",
-      resumoIA: "Primeira consulta para mapeamento de perda capilar estável.",
-      prescricoes: "Shampoo Cetoconazol 2% — Uso 3x por semana.",
-    },
-  ];
+    const contact = selectedContact;
+    let ignore = false;
 
-  const listaExames: Exame[] = [
-    {
-      id: "ex-01",
-      exame: "Perfil Férrico Completo",
-      status: "Anexado",
-      statusLabel: "Anexado no Prontuário",
-      observacoes: "Ferritina dentro dos limites normais, porém limítrofe para crescimento folicular ideal.",
-      data: "12 de Maio de 2026",
-    },
-    {
-      id: "ex-02",
-      exame: "Dosagem de Cortisol Sérico",
-      status: "Aguardando",
-      statusLabel: "Aguardando Laboratório",
-      observacoes: "Solicitado para triagem de eflúvio telógeno associado a estresse crônico.",
-      data: "Pendente",
-    },
-    {
-      id: "ex-03",
-      exame: "Trichogramma Digital / Fototricograma",
-      status: "Anexado",
-      statusLabel: "Anexado no Prontuário",
-      observacoes: "Aumento perceptível na proporção de fios anágenos na região da coroa após o início do tratamento minoxidil.",
-      data: "05 de Maio de 2026",
-    },
-    {
-      id: "ex-04",
-      exame: "Hemograma Completo com Frações",
-      status: "Anexado",
-      statusLabel: "Anexado no Prontuário",
-      observacoes: "Ausência de processos infecciosos ativos. Série branca e vermelha totalmente estabilizadas.",
-      data: "28 de Abril de 2026",
-    },
-    {
-      id: "ex-05",
-      exame: "Dosagem de Vitamina D (25-hidroxivitamina D)",
-      status: "Aguardando",
-      statusLabel: "Aguardando Laboratório",
-      observacoes: "Avaliação necessária para manutenção da barreira cutânea e síntese proteica do folículo.",
-      data: "Pendente",
-    },
-    {
-      id: "ex-5",
-      exame: "Dosagem de Vitamina D (25-hidroxivitamina D)",
-      status: "Aguardando",
-      statusLabel: "Aguardando Laboratório",
-      observacoes: "Avaliação necessária para manutenção da barreira cutânea e síntese proteica do folículo.",
-      data: "Pendente",
-    },
-  ];
+    async function loadClinicalData() {
+      setIsLoadingClinicalData(true);
+      try {
+        const appointmentParams = new URLSearchParams();
+        if (contact.ida_contato) appointmentParams.set("contactId", contact.ida_contato);
+        appointmentParams.set("chatId", contact.chat_id || "");
+        appointmentParams.set("contactPhone", getContactPhone(contact));
 
-  const agendamentosPlaceholder = [
+        const examParams = new URLSearchParams();
+        if (contact.ida_contato) examParams.set("idaContato", contact.ida_contato);
+        examParams.set("patientName", getDisplayName(contact));
+
+        const [appointmentResponse, examResponse] = await Promise.all([
+          fetch(`/api/airtable/appointments?${appointmentParams}`, { cache: "no-store" }),
+          fetch(`/api/medical-records/exams?${examParams}`, { cache: "no-store" }),
+        ]);
+
+        const appointmentData = (await appointmentResponse.json().catch(() => ({}))) as { appointments?: ContactAppointment[] };
+        const examData = (await examResponse.json().catch(() => ({}))) as { exams?: RawExamRecord[] };
+
+        if (ignore) return;
+
+        const mappedAppointments = (appointmentData.appointments ?? []).map(mapAppointmentToRecord);
+        setAppointments(mappedAppointments);
+        setSelectedAppointment((current) => current || mappedAppointments[0]?.id || "");
+        setExams((examData.exams ?? []).map(mapExamToRecord));
+      } catch (error) {
+        if (!ignore) {
+          console.error("Error loading clinical data:", error);
+          setAppointments([]);
+          setExams([]);
+        }
+      } finally {
+        if (!ignore) setIsLoadingClinicalData(false);
+      }
+    }
+
+    void loadClinicalData();
+
+    return () => {
+      ignore = true;
+    };
+  }, [selectedContact]);
+
+  const agendamentosPlaceholder: AtendimentoPassado[] = [
     {
       id: "p1",
       data: "--/--/----",
       medico: "Médico Clinico",
+      paciente: "",
       procedimento: "Consulta de Rotina",
       tipo: "Presencial",
       anotacoes: "Nenhuma anotação disponível.",
@@ -240,6 +314,7 @@ export default function MedicalRecords() {
       id: "p2",
       data: "--/--/----",
       medico: "Médico Especialista",
+      paciente: "",
       procedimento: "Retorno",
       tipo: "Teleconsulta",
       anotacoes: "Nenhuma anotação disponível.",
@@ -248,17 +323,178 @@ export default function MedicalRecords() {
     },
   ];
 
-  const examesPlaceholder = [
-    { id: "e1", exame: "Exame Clínico Laboratorial", status: "Pendente", statusLabel: "Aguardando", observacoes: "Nenhuma observação disponível.", data: "--/--/----" },
-    { id: "e2", exame: "Exame de Imagem Diagnóstica", status: "Pendente", statusLabel: "Aguardando", observacoes: "Nenhuma observação disponível.", data: "--/--/----" },
+  const examesPlaceholder: Exame[] = [
+    { id: "e1", exame: "Exame Clínico Laboratorial", status: "Aguardando", statusLabel: "Aguardando", observacoes: "Nenhuma observação disponível.", data: "--/--/----" },
+    { id: "e2", exame: "Exame de Imagem Diagnóstica", status: "Aguardando", statusLabel: "Aguardando", observacoes: "Nenhuma observação disponível.", data: "--/--/----" },
   ];
 
-  const dadosAgendamentos = selectedPatient ? historicoConsultas : agendamentosPlaceholder;
-  const dadosExames = selectedPatient ? listaExames : examesPlaceholder;
+  const dadosAgendamentos = selectedPatient ? appointments : agendamentosPlaceholder;
+  const dadosExames = selectedPatient ? exams : examesPlaceholder;
+  const selectedAppointmentDetails = appointments.find((appointment) => appointment.id === selectedAppointment);
+  const selectedAppointmentLabel = selectedAppointmentDetails?.data || selectedAppointment;
 
-  if (!editor) {
-    return null;
-  }
+  useEffect(() => {
+    if (!selectedContact || !selectedAppointment) {
+      setMedicalRecordId("");
+      setMedicalRecordStatus("draft");
+      setEditorContentHtml("");
+      setEditorContentJson(null);
+      lastSavedHtmlRef.current = "";
+      setMedicalRecordSaveStatus("idle");
+      return;
+    }
+
+    let ignore = false;
+
+    async function loadMedicalRecord() {
+      setMedicalRecordSaveStatus("loading");
+      try {
+        const params = new URLSearchParams({ appointmentId: selectedAppointment });
+        const response = await fetch(`/api/medical-records?${params}`, { cache: "no-store" });
+        const data = (await response.json().catch(() => ({}))) as { record?: MedicalRecord | null; message?: string };
+
+        if (ignore) return;
+        if (!response.ok) throw new Error(data.message || "Não foi possível carregar o prontuário.");
+
+        const record = data.record;
+        const html = record?.content_html || "";
+
+        setMedicalRecordId(record?.id || "");
+        setMedicalRecordStatus(record?.status || "draft");
+        setEditorContentHtml(html);
+        setEditorContentJson(record?.content_json ?? null);
+        lastSavedHtmlRef.current = html;
+        setMedicalRecordSaveStatus(record ? "saved" : "idle");
+      } catch (error) {
+        if (!ignore) {
+          console.error("Error loading medical record:", error);
+          setMedicalRecordId("");
+          setMedicalRecordStatus("draft");
+          setEditorContentHtml("");
+          setEditorContentJson(null);
+          lastSavedHtmlRef.current = "";
+          setMedicalRecordSaveStatus("error");
+        }
+      }
+    }
+
+    void loadMedicalRecord();
+
+    return () => {
+      ignore = true;
+    };
+  }, [selectedAppointment, selectedContact]);
+
+  useEffect(() => {
+    if (!selectedContact || !selectedAppointment || medicalRecordSaveStatus === "loading" || medicalRecordSaveStatus === "saving") return;
+    if (editorContentHtml === lastSavedHtmlRef.current) return;
+
+    const timeout = window.setTimeout(async () => {
+      try {
+        setMedicalRecordSaveStatus("saving");
+        const response = await fetch("/api/medical-records", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: medicalRecordId || undefined,
+            contactChatId: selectedContact.chat_id,
+            contactAirtableId: selectedContact.ida_contato || null,
+            contactName: getDisplayName(selectedContact),
+            contactPhone: getContactPhone(selectedContact),
+            appointmentAirtableId: selectedAppointment,
+            professionalAirtableId: selectedAppointmentDetails?.medicoId || null,
+            professionalName: selectedAppointmentDetails?.medico || null,
+            title: selectedAppointmentLabel || "Prontuário clínico",
+            status: medicalRecordStatus,
+            contentHtml: editorContentHtml,
+            contentJson: editorContentJson,
+            metadata: {
+              appointmentLabel: selectedAppointmentLabel,
+              procedure: selectedAppointmentDetails?.procedimento || null,
+              attendanceMode: selectedAppointmentDetails?.tipo || null,
+            },
+            userEmail: user?.email || null,
+          }),
+        });
+        const data = (await response.json().catch(() => ({}))) as { record?: MedicalRecord; message?: string };
+
+        if (!response.ok) throw new Error(data.message || "Não foi possível salvar o prontuário.");
+
+        setMedicalRecordId(data.record?.id || medicalRecordId);
+        lastSavedHtmlRef.current = editorContentHtml;
+        setMedicalRecordSaveStatus("saved");
+      } catch (error) {
+        console.error("Error saving medical record:", error);
+        setMedicalRecordSaveStatus("error");
+      }
+    }, 900);
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    editorContentHtml,
+    editorContentJson,
+    medicalRecordId,
+    medicalRecordStatus,
+    medicalRecordSaveStatus,
+    selectedAppointment,
+    selectedAppointmentDetails,
+    selectedAppointmentLabel,
+    selectedContact,
+    user?.email,
+  ]);
+
+  const handleFinalizeMedicalRecord = async () => {
+    if (!selectedContact || !selectedAppointment || isFinalizingMedicalRecord) return;
+
+    try {
+      setIsFinalizingMedicalRecord(true);
+      setMedicalRecordSaveStatus("saving");
+
+      const response = await fetch("/api/medical-records", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: medicalRecordId || undefined,
+          contactChatId: selectedContact.chat_id,
+          contactAirtableId: selectedContact.ida_contato || null,
+          contactName: getDisplayName(selectedContact),
+          contactPhone: getContactPhone(selectedContact),
+          appointmentAirtableId: selectedAppointment,
+          professionalAirtableId: selectedAppointmentDetails?.medicoId || null,
+          professionalName: selectedAppointmentDetails?.medico || null,
+          title: selectedAppointmentLabel || "Prontuário clínico",
+          status: "finalized",
+          contentHtml: editorContentHtml,
+          contentJson: editorContentJson,
+          metadata: {
+            appointmentLabel: selectedAppointmentLabel,
+            procedure: selectedAppointmentDetails?.procedimento || null,
+            attendanceMode: selectedAppointmentDetails?.tipo || null,
+          },
+          userEmail: user?.email || null,
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { record?: MedicalRecord; message?: string };
+
+      if (!response.ok) throw new Error(data.message || "Não foi possível finalizar o prontuário.");
+
+      setMedicalRecordId(data.record?.id || medicalRecordId);
+      setMedicalRecordStatus("finalized");
+      setAppointments((current) =>
+        current.map((appointment) =>
+          appointment.id === selectedAppointment ? { ...appointment, status: "Finalizado" } : appointment,
+        ),
+      );
+      lastSavedHtmlRef.current = editorContentHtml;
+      setMedicalRecordSaveStatus("saved");
+      setIsFinalizeDialogOpen(false);
+    } catch (error) {
+      console.error("Error finalizing medical record:", error);
+      setMedicalRecordSaveStatus("error");
+    } finally {
+      setIsFinalizingMedicalRecord(false);
+    }
+  };
 
   return (
     <div className="flex h-screen w-full flex-col bg-background overflow-hidden">
@@ -332,7 +568,10 @@ export default function MedicalRecords() {
                                             "flex w-full items-center justify-between rounded-sm px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground transition-colors gap-2",
                                             selectedPatient === patient.id && "bg-accent text-accent-foreground",
                                           )}
-                                          onClick={() => handleSelectPatient(patient)}
+                                          onMouseDown={(event) => {
+                                            event.preventDefault();
+                                            handleSelectPatient(patient);
+                                          }}
                                         >
                                           <span className="truncate font-medium">{name}</span>
                                         </button>
@@ -400,12 +639,22 @@ export default function MedicalRecords() {
                           <Label className="text-xs font-semibold text-foreground">Agendamento</Label>
                           <Select value={selectedAppointment} onValueChange={setSelectedAppointment}>
                             <SelectTrigger className="w-full h-10 bg-background border-border text-sm">
-                              <SelectValue placeholder="Selecione o horário do atendimento..." />
+                              <SelectValue placeholder={isLoadingClinicalData ? "Carregando atendimentos..." : "Selecione o horário do atendimento..."} />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="Quarta-Feira, 20 de Maio de 2026 às 11:45 - Tratamento Capilar">
-                                <span className="text-xs block max-w-[280px] truncate">Quarta-Feira, 20 de Maio de 2026 às 11:45 - Tratamento Capilar</span>
-                              </SelectItem>
+                              {appointments.length > 0 ? (
+                                appointments.map((appointment) => (
+                                  <SelectItem key={appointment.id} value={appointment.id}>
+                                    <span className="text-xs block max-w-[280px] truncate">
+                                      {appointment.data} - {appointment.procedimento}
+                                    </span>
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <SelectItem value="no-appointments" disabled>
+                                  Nenhum atendimento encontrado
+                                </SelectItem>
+                              )}
                             </SelectContent>
                           </Select>
                         </div>
@@ -441,14 +690,36 @@ export default function MedicalRecords() {
                       <div className="flex h-7 w-7 items-center justify-center rounded-md bg-theme-primary/10 text-theme-primary shrink-0">
                         <FolderOpen className="h-4 w-4" />
                       </div>
-                      <span className="text-xs font-semibold text-foreground/90 leading-none truncate">{selectedAppointment ? selectedAppointment : "Prontuário Clínico"}</span>
+                      <span className="text-xs font-semibold text-foreground/90 leading-none truncate">{selectedAppointment ? selectedAppointmentLabel : "Prontuário Clínico"}</span>
                     </div>
 
                     {selectedAppointment && (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 border border-emerald-500/20 w-fit shrink-0 animate-in fade-in duration-300">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        Agendamento selecionado
-                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 border border-emerald-500/20 w-fit shrink-0 animate-in fade-in duration-300">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Agendamento selecionado
+                        </span>
+
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium w-fit shrink-0",
+                            medicalRecordSaveStatus === "error"
+                              ? "border-red-500/20 bg-red-500/10 text-red-600"
+                              : "border-border bg-background text-muted-foreground",
+                          )}
+                        >
+                          {(medicalRecordSaveStatus === "loading" || medicalRecordSaveStatus === "saving") && <Loader2 className="h-3 w-3 animate-spin" />}
+                          {medicalRecordSaveStatus === "loading"
+                            ? "Carregando prontuário"
+                            : medicalRecordSaveStatus === "saving"
+                              ? "Salvando"
+                              : medicalRecordSaveStatus === "saved"
+                                ? "Salvo"
+                                : medicalRecordSaveStatus === "error"
+                                  ? "Erro ao salvar"
+                                  : "Rascunho"}
+                        </span>
+                      </div>
                     )}
                   </div>
 
@@ -459,7 +730,17 @@ export default function MedicalRecords() {
                     )}
                   >
                     <div className="flex flex-col bg-background/50 overflow-y-auto min-h-[350px] xl:min-h-0">
-                      <Editor disabled={!selectedAppointment} />
+                      <Editor
+                        disabled={!selectedAppointment || medicalRecordSaveStatus === "loading"}
+                        content={editorContentHtml}
+                        onChange={({ html, json }) => {
+                          setEditorContentHtml(html);
+                          setEditorContentJson(json);
+                          if (html !== lastSavedHtmlRef.current) {
+                            setMedicalRecordSaveStatus("unsaved");
+                          }
+                        }}
+                      />
                     </div>
 
                     <div className="p-4 bg-muted/5 flex flex-col justify-start gap-2.5 overflow-y-auto shrink-0 xl:shrink flex-row xl:flex-col flex-wrap xl:flex-nowrap">
@@ -480,10 +761,23 @@ export default function MedicalRecords() {
                         <FilePlus className="h-4 w-4 text-muted-foreground shrink-0" />+ Resultado/Exame
                       </Button>
 
-                      <Button disabled={!selectedAppointment} className="w-full text-xs rounded-full font-bold mt-2 xl:mt-auto bg-emerald-600 text-white hover:bg-emerald-700 h-10 justify-start gap-2.5">
-                        <CheckCircle2 className="h-4 w-4 shrink-0" />
-                        Finalizar Consulta
+                      <Button
+                        disabled={!selectedAppointment || isFinalizingMedicalRecord || medicalRecordSaveStatus === "loading"}
+                        className={cn(
+                          "w-full text-xs rounded-full font-bold mt-2 xl:mt-auto text-white h-10 justify-start gap-2.5",
+                          medicalRecordStatus === "finalized"
+                            ? "bg-emerald-700 hover:bg-emerald-700"
+                            : "bg-emerald-600 hover:bg-emerald-700",
+                        )}
+                        onClick={() => setIsFinalizeDialogOpen(true)}
+                      >
+                        {isFinalizingMedicalRecord ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <CheckCircle2 className="h-4 w-4 shrink-0" />}
+                        {medicalRecordStatus === "finalized" ? "Consulta Finalizada" : isFinalizingMedicalRecord ? "Finalizando..." : "Finalizar Consulta"}
                       </Button>
+
+                      {medicalRecordStatus === "finalized" && (
+                        <p className="px-1 text-[11px] leading-relaxed text-emerald-600">Consulta finalizada</p>
+                      )}
                     </div>
                   </div>
 
@@ -542,7 +836,13 @@ export default function MedicalRecords() {
                       </CardHeader>
 
                       <CardContent className="flex flex-col">
-                        {dadosAgendamentos.map((item, index) => (
+                        {isLoadingClinicalData && selectedPatient ? (
+                          <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin text-theme-primary" />
+                            Carregando histórico de agendamentos...
+                          </div>
+                        ) : dadosAgendamentos.length > 0 ? (
+                          dadosAgendamentos.map((item, index) => (
                           <div key={item.id} className="relative flex gap-4 group">
                             <div className="flex flex-col items-center translate-y-6.5 shrink-0">
                               <div className="h-3.5 w-3.5 rounded-full border-2 border-theme-primary/50 bg-background z-10 shadow-xs group-hover:border-theme-primary transition-colors duration-300" />
@@ -559,7 +859,7 @@ export default function MedicalRecords() {
                                   <div className="w-fit md:w-full flex items-center md:justify-end gap-3 md:ml-auto sm:ml-0 pr-4">
                                     <Badge className="gap-2 text-[11px] text-muted-foreground bg-background border border-border/60 px-3 py-1 rounded-full shrink-0">
                                       <Stethoscope className="h-3 w-3" />
-                                      {item.medico} • {item.procedimento} • <span className="font-medium text-theme-primary">{item.tipo}</span>
+                                      {item.medico} • {item.procedimento} • <span className="font-medium text-theme-primary">{item.status || item.tipo}</span>
                                     </Badge>
                                   </div>
                                 </AccordionTrigger>
@@ -594,7 +894,10 @@ export default function MedicalRecords() {
                               </AccordionItem>
                             </Accordion>
                           </div>
-                        ))}
+                          ))
+                        ) : (
+                          <div className="rounded-lg border border-border/70 bg-muted/20 px-4 py-5 text-sm text-muted-foreground">Nenhum agendamento encontrado para este contato.</div>
+                        )}
                       </CardContent>
                     </Card>
                   </TabsContent>
@@ -617,7 +920,13 @@ export default function MedicalRecords() {
                           </div>
 
                           <div className="w-full flex flex-col max-h-[450px] overflow-y-auto custom-scrollbar divide-y divide-border/50">
-                            {dadosExames.map((item) => (
+                            {isLoadingClinicalData && selectedPatient ? (
+                              <div className="flex items-center gap-2 px-5 py-5 text-sm text-muted-foreground">
+                                <Loader2 className="h-4 w-4 animate-spin text-theme-primary" />
+                                Carregando exames...
+                              </div>
+                            ) : dadosExames.length > 0 ? (
+                              dadosExames.map((item) => (
                               <div
                                 key={item.id}
                                 className="flex flex-col md:grid md:grid-cols-[1.5fr_140px_2fr_130px_90px] items-start md:items-center gap-3 md:gap-4 px-5 py-4 transition-colors hover:bg-muted/20 relative group text-left w-full"
@@ -659,6 +968,7 @@ export default function MedicalRecords() {
                                     disabled={item.status !== "Anexado"}
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      if (item.url) window.open(item.url, "_blank", "noopener,noreferrer");
                                     }}
                                   >
                                     <span className="inline md:hidden lg:inline">Ver</span>
@@ -666,7 +976,10 @@ export default function MedicalRecords() {
                                   </Button>
                                 </div>
                               </div>
-                            ))}
+                              ))
+                            ) : (
+                              <div className="px-5 py-5 text-sm text-muted-foreground">Nenhum exame encontrado para este contato.</div>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-2 border-t border-border/60 bg-muted/20 px-5 py-3 text-xs text-muted-foreground/80">
@@ -683,6 +996,34 @@ export default function MedicalRecords() {
           </div>
         </div>
       </main>
+
+      <Dialog open={isFinalizeDialogOpen} onOpenChange={setIsFinalizeDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{medicalRecordStatus === "finalized" ? "Consulta já finalizada" : "Finalizar consulta"}</DialogTitle>
+            <DialogDescription>
+              {medicalRecordStatus === "finalized"
+                ? "Este prontuário já está marcado como finalizado. Você pode salvar novamente o estado atual."
+                : "O conteúdo atual do prontuário será salvo e marcado como finalizado."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
+            <p className="font-medium text-foreground">{selectedContact ? getDisplayName(selectedContact) : "Paciente"}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{selectedAppointmentLabel || "Agendamento selecionado"}</p>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsFinalizeDialogOpen(false)} disabled={isFinalizingMedicalRecord}>
+              Cancelar
+            </Button>
+            <Button type="button" className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700" onClick={handleFinalizeMedicalRecord} disabled={isFinalizingMedicalRecord}>
+              {isFinalizingMedicalRecord ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              {isFinalizingMedicalRecord ? "Finalizando..." : "Confirmar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
