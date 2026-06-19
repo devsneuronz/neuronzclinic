@@ -131,6 +131,30 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#039;");
 }
 
+function formatInlineSummaryHtml(value: string) {
+  const parts = value.split(/(\*\*[^*]+\*\*)/g);
+
+  return parts
+    .map((part) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return `<strong>${escapeHtml(part.slice(2, -2))}</strong>`;
+      }
+
+      return escapeHtml(part);
+    })
+    .join("");
+}
+
+function summaryToFormattedHtml(summary: string) {
+  return summary
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => `<p>${formatInlineSummaryHtml(paragraph).replace(/\n/g, "<br />")}</p>`)
+    .join("");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function summaryToHtml(summary: string) {
   return `<section><h2>Resumo gerado por IA</h2>${escapeHtml(summary)
     .split(/\n{2,}/)
@@ -451,8 +475,8 @@ export default function MedicalRecords() {
   const [isRecordingConsentDialogOpen, setIsRecordingConsentDialogOpen] = useState(false);
   const [isRecordingConsentConfirmed, setIsRecordingConsentConfirmed] = useState(false);
   const [aiSummary, setAiSummary] = useState("");
-  const [aiTranscription, setAiTranscription] = useState("");
   const [selectedExamDetails, setSelectedExamDetails] = useState<Exame | null>(null);
+  const [selectedAiSummaryDetails, setSelectedAiSummaryDetails] = useState<AtendimentoPassado | null>(null);
   const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = useState(false);
   const [isFinalizingMedicalRecord, setIsFinalizingMedicalRecord] = useState(false);
   const [currentOffset, setCurrentOffset] = useState(0);
@@ -646,6 +670,7 @@ export default function MedicalRecords() {
         status,
         contentHtml: editorContentHtml,
         contentJson: editorContentJson,
+        aiSummary,
         metadata: {
           appointmentLabel: selectedAppointmentLabel,
           procedure: selectedAppointmentDetails?.procedimento || null,
@@ -657,6 +682,7 @@ export default function MedicalRecords() {
     [
       editorContentHtml,
       editorContentJson,
+      aiSummary,
       medicalRecordId,
       medicalRecordStatus,
       selectedAppointment,
@@ -717,7 +743,6 @@ export default function MedicalRecords() {
       setEditorContentHtml("");
       setEditorContentJson(null);
       setAiSummary("");
-      setAiTranscription("");
       setRecordingStatus("idle");
       setRecordingMessage("");
       setRecordingSeconds(0);
@@ -748,9 +773,15 @@ export default function MedicalRecords() {
         setEditorContentHtml(html);
         setEditorContentJson(record?.content_json ?? null);
         setAiSummary(record?.ai_summary || "");
-        setAiTranscription(record?.ai_transcription || "");
+        setAppointments((current) =>
+          current.map((appointment) =>
+            appointment.id === selectedAppointment
+              ? { ...appointment, resumoIA: record?.ai_summary || "Resumo clínico ainda não registrado para este atendimento." }
+              : appointment,
+          ),
+        );
         setRecordingStatus(record?.ai_summary ? "processed" : "idle");
-        setRecordingMessage(record?.ai_summary ? "Resumo de IA disponível para revisão." : "");
+        setRecordingMessage(record?.ai_summary ? "Resumo de IA disponível na visão geral da consulta." : "");
         lastSavedHtmlRef.current = html;
         setMedicalRecordSaveStatus(record ? "saved" : "idle");
       } catch (error) {
@@ -761,7 +792,6 @@ export default function MedicalRecords() {
           setEditorContentHtml("");
           setEditorContentJson(null);
           setAiSummary("");
-          setAiTranscription("");
           lastSavedHtmlRef.current = "";
           setMedicalRecordSaveStatus("error");
         }
@@ -798,6 +828,7 @@ export default function MedicalRecords() {
             status: medicalRecordStatus,
             contentHtml: editorContentHtml,
             contentJson: editorContentJson,
+            aiSummary,
             metadata: {
               appointmentLabel: selectedAppointmentLabel,
               procedure: selectedAppointmentDetails?.procedimento || null,
@@ -823,6 +854,7 @@ export default function MedicalRecords() {
   }, [
     editorContentHtml,
     editorContentJson,
+    aiSummary,
     medicalRecordId,
     medicalRecordStatus,
     medicalRecordSaveStatus,
@@ -856,6 +888,7 @@ export default function MedicalRecords() {
           status: "finalized",
           contentHtml: editorContentHtml,
           contentJson: editorContentJson,
+          aiSummary,
           metadata: {
             appointmentLabel: selectedAppointmentLabel,
             procedure: selectedAppointmentDetails?.procedimento || null,
@@ -946,10 +979,17 @@ export default function MedicalRecords() {
           throw new Error(processData.message || "Não foi possível processar a gravação.");
         }
 
-        setAiTranscription(processData.transcription || "");
-        setAiSummary(processData.summary || "");
+        const processedSummary = processData.summary || "";
+        setAiSummary(processedSummary);
+        setAppointments((current) =>
+          current.map((appointment) =>
+            appointment.id === selectedAppointment
+              ? { ...appointment, resumoIA: processedSummary || "Resumo clínico ainda não registrado para este atendimento." }
+              : appointment,
+          ),
+        );
         setRecordingStatus("processed");
-        setRecordingMessage("Resumo gerado. Revise antes de inserir no prontuário.");
+        setRecordingMessage("Resumo de IA disponível na visão geral da consulta.");
       } catch (error) {
         console.error("Error processing consultation recording:", error);
         setRecordingStatus("error");
@@ -1029,15 +1069,6 @@ export default function MedicalRecords() {
 
     setIsRecordingConsentConfirmed(false);
     setIsRecordingConsentDialogOpen(true);
-  };
-
-  const applyAiSummaryToEditor = () => {
-    if (!aiSummary.trim()) return;
-
-    const appendedHtml = `${editorContentHtml || ""}${editorContentHtml ? "<hr />" : ""}${summaryToHtml(aiSummary)}`;
-    setEditorContentHtml(appendedHtml);
-    setEditorContentJson(null);
-    setMedicalRecordSaveStatus("unsaved");
   };
 
   const handleExamFileSelected = async (file?: File | null) => {
@@ -1377,29 +1408,6 @@ export default function MedicalRecords() {
                           {recordingMessage}
                         </p>
                       ) : null}
-                      {aiSummary ? (
-                        <div className="w-full rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 text-xs">
-                          <div className="mb-2 flex items-center gap-1.5 font-semibold text-foreground/90">
-                            <Sparkles className="h-3.5 w-3.5 text-blue-500" />
-                            Resumo da IA
-                          </div>
-                          <p className="line-clamp-6 whitespace-pre-line text-muted-foreground">{aiSummary}</p>
-                          <div className="mt-3 flex flex-col gap-2">
-                            <Button type="button" size="sm" className="h-8 gap-2 text-xs" onClick={applyAiSummaryToEditor}>
-                              <FileText className="h-3.5 w-3.5" />
-                              Inserir no prontuário
-                            </Button>
-                            {aiTranscription ? (
-                              <details className="rounded-md border border-border bg-background/70 p-2">
-                                <summary className="cursor-pointer text-[11px] font-medium text-muted-foreground">Ver transcrição</summary>
-                                <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">
-                                  {aiTranscription}
-                                </p>
-                              </details>
-                            ) : null}
-                          </div>
-                        </div>
-                      ) : null}
                       <Button disabled={!selectedAppointment} variant="outline" className="flex-1 xl:w-full xl:flex-initial justify-start gap-2.5 h-10 text-xs font-medium text-foreground/80 border-border min-w-[150px]">
                         <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                         Nova Prescrição
@@ -1549,7 +1557,16 @@ export default function MedicalRecords() {
                                       <h4 className="text-[10px] font-bold uppercase tracking-wider text-theme-primary mb-1 flex items-center gap-1">
                                         <span>✦</span> Resumo Inteligente IA
                                       </h4>
-                                      <p className="text-xs text-foreground/80 leading-relaxed bg-theme-primary/5 border border-theme-primary/10 rounded-lg p-2.5">{item.resumoIA}</p>
+                                      <button
+                                        type="button"
+                                        className="w-full rounded-lg border border-theme-primary/10 bg-theme-primary/5 p-2.5 text-left text-xs leading-relaxed text-foreground/80 transition-colors hover:border-theme-primary/30 hover:bg-theme-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-primary/40"
+                                        onClick={() => setSelectedAiSummaryDetails(item)}
+                                      >
+                                        <div
+                                          className="line-clamp-5 space-y-1.5 [&_strong]:font-semibold [&_strong]:text-foreground"
+                                          dangerouslySetInnerHTML={{ __html: summaryToFormattedHtml(item.resumoIA) }}
+                                        />
+                                      </button>
                                     </div>
 
                                     <div className="md:pl-4 relative group/btn min-h-[60px]">
@@ -1679,6 +1696,28 @@ export default function MedicalRecords() {
           </div>
         </div>
       </main>
+
+      <Dialog open={Boolean(selectedAiSummaryDetails)} onOpenChange={(open) => !open && setSelectedAiSummaryDetails(null)}>
+        <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
+          <DialogHeader className="shrink-0">
+            <DialogTitle>Resumo Inteligente IA</DialogTitle>
+            <DialogDescription>
+              {selectedAiSummaryDetails?.data || "Agendamento"} {selectedAiSummaryDetails?.medico ? `- ${selectedAiSummaryDetails.medico}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div
+            className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-theme-primary/10 bg-theme-primary/5 p-4 text-sm leading-relaxed text-foreground/85 [&_p+_p]:mt-3 [&_strong]:font-semibold [&_strong]:text-foreground"
+            dangerouslySetInnerHTML={{ __html: summaryToFormattedHtml(selectedAiSummaryDetails?.resumoIA || "") }}
+          />
+
+          <DialogFooter className="shrink-0 border-t border-border/60 pt-3">
+            <Button type="button" onClick={() => setSelectedAiSummaryDetails(null)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(selectedExamDetails)} onOpenChange={(open) => !open && setSelectedExamDetails(null)}>
         <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-5xl">

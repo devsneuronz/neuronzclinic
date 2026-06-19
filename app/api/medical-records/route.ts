@@ -67,7 +67,7 @@ async function updateAirtableAppointmentStatus(appointmentId: string, status: st
 }
 
 function buildRecordPayload(body: MedicalRecordPayload) {
-  return {
+  const payload: MedicalRecordPayload = {
     contact_chat_id: getNullableString(body.contactChatId),
     contact_airtable_id: getNullableString(body.contactAirtableId),
     contact_name: getNullableString(body.contactName),
@@ -82,6 +82,12 @@ function buildRecordPayload(body: MedicalRecordPayload) {
     metadata: getJsonObject(body.metadata) ?? {},
     updated_by: getNullableString(body.userEmail),
   }
+
+  if ("aiSummary" in body) {
+    payload.ai_summary = getNullableString(body.aiSummary)
+  }
+
+  return payload
 }
 
 export async function GET(request: NextRequest) {
