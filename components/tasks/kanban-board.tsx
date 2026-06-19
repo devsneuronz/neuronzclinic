@@ -8,20 +8,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { getTodayDate, parseDateOnly } from "@/lib/date";
-import { fetchChats, fetchMessages, type ChatRecord, type MessageRecord } from "@/lib/supabase-rest";
+import { fetchChats, type ChatRecord } from "@/lib/supabase-rest";
 import { fallbackTaskOptions, getTaskNoteAttachmentType, type StatusConfigMap, type Task, type TaskOptions, type TaskResolutionNote, type TaskStatus } from "@/lib/task";
 import { getDraTatianaResponsibleFilter, isDraTatianaUser } from "@/lib/user-access";
 import { cn } from "@/lib/utils";
 import { AlertCircle, CheckCircle2, Circle, CircleDashed, IdCardLanyard, Loader2, Plus, RefreshCw, Search, Shapes, Timer, User } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { FilterMenu } from "./filter-menu";
 import { KanbanColumn } from "./kanban-column";
+import { TaskChatDialog } from "./task-chat-dialog";
 import { TaskDetailsDialog } from "./task-details-dialog";
 import { TaskStatusGrid } from "./task-grid";
-import { TaskPatientMessagesDialog } from "./task-patient-messages-dialog";
 type TaskView = "todas" | TaskStatus;
 
 const statusOrder: TaskStatus[] = ["aguardando", "resolvendo", "finalizado"];
@@ -273,10 +273,7 @@ export function KanbanBoard() {
   const [deletingTaskResolutionNoteId, setDeletingTaskResolutionNoteId] = useState("");
   const [taskResolutionNoteError, setTaskResolutionNoteError] = useState("");
   const [taskActionError, setTaskActionError] = useState("");
-  const [patientMessagesTask, setPatientMessagesTask] = useState<Task | null>(null);
-  const [patientMessages, setPatientMessages] = useState<MessageRecord[]>([]);
-  const [isLoadingPatientMessages, setIsLoadingPatientMessages] = useState(false);
-  const [patientMessagesError, setPatientMessagesError] = useState("");
+  const [chatTask, setChatTask] = useState<Task | null>(null);
   const [createTaskError, setCreateTaskError] = useState("");
   const [taskType, setTaskType] = useState(fallbackTaskOptions.types[0]);
   const [taskStatus, setTaskStatus] = useState(fallbackTaskOptions.statuses[0]);
@@ -289,7 +286,6 @@ export function KanbanBoard() {
   const [taskSubject, setTaskSubject] = useState("");
   const [taskObservations, setTaskObservations] = useState("");
   const [hasAppliedInitialResponsibleFilter, setHasAppliedInitialResponsibleFilter] = useState(false);
-  const patientMessagesRequestIdRef = useRef(0);
 
   useEffect(() => {
     if (isCurrentUserLoading) return;
@@ -390,26 +386,7 @@ export function KanbanBoard() {
 
   const handleOpenPatientMessages = (task: Task) => {
     if (!task.patientChatId) return;
-
-    const requestId = patientMessagesRequestIdRef.current + 1;
-    patientMessagesRequestIdRef.current = requestId;
-    setPatientMessagesTask(task);
-    setPatientMessages([]);
-    setPatientMessagesError("");
-    setIsLoadingPatientMessages(true);
-
-    fetchMessages(task.patientChatId, { limit: 15 })
-      .then((messages) => {
-        if (patientMessagesRequestIdRef.current !== requestId) return;
-        setPatientMessages(messages);
-      })
-      .catch((error) => {
-        if (patientMessagesRequestIdRef.current !== requestId) return;
-        setPatientMessagesError(error instanceof Error ? error.message : "Não foi possível carregar as mensagens do paciente.");
-      })
-      .finally(() => {
-        if (patientMessagesRequestIdRef.current === requestId) setIsLoadingPatientMessages(false);
-      });
+    setChatTask(task);
   };
 
   const isSmallScreen = useIsMobile(640);
@@ -1012,22 +989,7 @@ export function KanbanBoard() {
         noteErrorMessage={taskResolutionNoteError}
         statusConfig={statusConfig}
       />
-      <TaskPatientMessagesDialog
-        task={patientMessagesTask}
-        open={Boolean(patientMessagesTask)}
-        onOpenChange={(open) => {
-          if (!open) {
-            patientMessagesRequestIdRef.current += 1;
-            setPatientMessagesTask(null);
-            setPatientMessages([]);
-            setPatientMessagesError("");
-            setIsLoadingPatientMessages(false);
-          }
-        }}
-        messages={patientMessages}
-        isLoading={isLoadingPatientMessages}
-        errorMessage={patientMessagesError}
-      />
+      <TaskChatDialog task={chatTask} open={Boolean(chatTask)} onOpenChange={(open) => !open && setChatTask(null)} forwardTargets={chats} />
     </div>
   );
 }
