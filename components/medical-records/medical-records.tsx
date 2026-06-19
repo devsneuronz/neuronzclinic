@@ -1,11 +1,11 @@
 "use client";
 
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { getChatStatusColor, getChatStatusLabel } from "@/lib/chat-status";
+import { formatDateTime } from "@/lib/date";
 import { ChatRecord, fetchChats } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
-import { useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
 import {
   Calendar,
   CalendarClock,
@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   ChevronRight,
   ClipboardX,
+  AlertCircle,
   ExternalLink,
   FilePlus,
   FileText,
@@ -25,14 +26,16 @@ import {
   Phone,
   Search,
   Sparkles,
+  Square,
   Stethoscope,
   UserX,
 } from "lucide-react";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
@@ -55,12 +58,84 @@ interface AtendimentoPassado {
   id: string;
   data: string;
   medico: string;
+  medicoId?: string;
   paciente: string;
   procedimento: string;
   tipo: string;
+  status?: string;
   anotacoes: string;
   resumoIA: string;
   prescricoes: string;
+}
+
+type ContactAppointment = {
+  id: string;
+  status: string;
+  type: string;
+  attendanceMode: string;
+  startDateTime: string;
+  endDateTime: string;
+  professionalId: string;
+  professional: string;
+  observations: string;
+};
+
+type RawExamRecord = {
+  id: string;
+  paciente_nome?: string | null;
+  codigo_tuss?: string | null;
+  analitos?: unknown;
+  historico_analitos?: unknown;
+  data_realizacao?: string | null;
+  status?: string | null;
+  observacoes?: string | null;
+  arquivo_url?: string | null;
+  nome_arquivo?: string | null;
+  processamento_status?: string | null;
+  texto_extraido?: string | null;
+  tipo_exame?: string | null;
+  grupo_comparacao?: string | null;
+  mime_type?: string | null;
+  storage_path?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  "ida-contato"?: string | null;
+  "ida-agendamento"?: string | null;
+};
+
+type MedicalRecord = {
+  id: string;
+  status: string | null;
+  content_html: string | null;
+  content_json: unknown;
+  ai_transcription?: string | null;
+  ai_summary?: string | null;
+  updated_at: string;
+};
+
+type SaveStatus = "idle" | "loading" | "unsaved" | "saving" | "saved" | "error";
+type RecordingStatus = "idle" | "recording" | "uploading" | "processing" | "processed" | "error";
+
+function formatRecordingTime(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function summaryToHtml(summary: string) {
+  return `<section><h2>Resumo gerado por IA</h2>${escapeHtml(summary)
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${paragraph.replace(/\n/g, "<br />")}</p>`)
+    .join("")}<p><em>Conteúdo gerado por IA e revisado pelo profissional responsável.</em></p></section>`;
 }
 
 export interface Exame {
@@ -70,9 +145,285 @@ export interface Exame {
   statusLabel: string;
   observacoes: string;
   data: string;
+  url?: string;
+  pacienteNome?: string | null;
+  codigoTuss?: string | null;
+  analitos?: unknown;
+  historicoAnalitos?: unknown;
+  textoExtraido?: string | null;
+  tipoExame?: string | null;
+  grupoComparacao?: string | null;
+  nomeArquivo?: string | null;
+  mimeType?: string | null;
+  storagePath?: string | null;
+  processamentoStatus?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  dataRealizacao?: string | null;
+}
+
+type ExamAnalyteRow = {
+  parametro: string;
+  resultado: string;
+  unidade: string;
+  referencia: string;
+  status: string;
+};
+
+type ExamTrendPoint = {
+  examId: string;
+  label: string;
+  value: number;
+  displayValue: string;
+  status: string;
+  reference: string;
+};
+
+type ExamTrendRow = {
+  parametro: string;
+  unidade: string;
+  points: ExamTrendPoint[];
+  trendLabel: string;
+  trendTone: "good" | "bad" | "neutral" | "warning";
+};
+
+function formatClinicalDateTime(value: string) {
+  return (
+    formatDateTime(value, {
+      weekday: "long",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }) || "Data não informada"
+  );
+}
+
+function formatClinicalDate(value?: string | null) {
+  if (!value) return "Pendente";
+  return formatDateTime(value, { day: "2-digit", month: "long", year: "numeric" }) || "Pendente";
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function parseJsonValue(value: unknown) {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) return value;
+
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+function formatExamValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "string") return value;
+  return JSON.stringify(value);
+}
+
+function getRecordText(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (value !== null && value !== undefined && value !== "") return formatExamValue(value);
+  }
+
+  return "";
+}
+
+function mapAnalyteRecord(record: Record<string, unknown>, fallbackName = ""): ExamAnalyteRow {
+  return {
+    parametro: getRecordText(record, ["parametro", "analito", "nome", "name", "item", "exame", "test"]) || fallbackName || "Analito",
+    resultado: getRecordText(record, ["resultado", "valor", "value", "result", "medida"]) || "-",
+    unidade: getRecordText(record, ["unidade", "unit", "units"]) || "-",
+    referencia: getRecordText(record, ["referencia", "valor_referencia", "intervalo_referencia", "reference", "ref"]) || "-",
+    status: getRecordText(record, ["status", "situacao", "flag", "interpretacao"]) || "-",
+  };
+}
+
+function normalizeAnalyteRows(value: unknown): ExamAnalyteRow[] {
+  const parsed = parseJsonValue(value);
+
+  if (Array.isArray(parsed)) {
+    return parsed
+      .map((item, index) => {
+        if (isPlainRecord(item)) return mapAnalyteRecord(item);
+        return {
+          parametro: `Item ${index + 1}`,
+          resultado: formatExamValue(item),
+          unidade: "-",
+          referencia: "-",
+          status: "-",
+        };
+      })
+      .filter((row) => row.parametro !== "-" || row.resultado !== "-");
+  }
+
+  if (isPlainRecord(parsed)) {
+    const nested = parsed.analitos || parsed.items || parsed.resultados || parsed.results || parsed.exames;
+    if (nested && nested !== parsed) {
+      const nestedRows = normalizeAnalyteRows(nested);
+      if (nestedRows.length) return nestedRows;
+    }
+
+    return Object.entries(parsed).map(([key, item]) => {
+      if (isPlainRecord(item)) return mapAnalyteRecord(item, key);
+      return {
+        parametro: key,
+        resultado: formatExamValue(item),
+        unidade: "-",
+        referencia: "-",
+        status: "-",
+      };
+    });
+  }
+
+  return [];
+}
+
+function parseNumericValue(value: string) {
+  const decimalNormalized = value.includes(",") ? value.replace(/\./g, "").replace(",", ".") : value;
+  const normalized = decimalNormalized.match(/-?\d+(?:\.\d+)?/);
+  return normalized ? Number(normalized[0]) : null;
+}
+
+function parseReferenceRange(reference: string) {
+  const decimalNormalized = reference.includes(",") ? reference.replace(/\./g, "").replace(/,/g, ".") : reference;
+  const normalized = decimalNormalized.toLowerCase();
+  const numbers = normalized.match(/-?\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite) ?? [];
+
+  if (numbers.length >= 2) return { min: Math.min(numbers[0], numbers[1]), max: Math.max(numbers[0], numbers[1]) };
+  if (numbers.length === 1 && /<|até|menor/.test(normalized)) return { min: null, max: numbers[0] };
+  if (numbers.length === 1 && />|maior|acima/.test(normalized)) return { min: numbers[0], max: null };
+
+  return null;
+}
+
+function getDistanceFromReference(value: number, reference: ReturnType<typeof parseReferenceRange>) {
+  if (!reference) return null;
+  if (reference.min !== null && value < reference.min) return reference.min - value;
+  if (reference.max !== null && value > reference.max) return value - reference.max;
+  return 0;
+}
+
+function getTrendLabel(points: ExamTrendPoint[]) {
+  if (points.length < 2) return { trendLabel: "Histórico curto", trendTone: "neutral" as const };
+
+  const first = points[0];
+  const last = points[points.length - 1];
+  const reference = parseReferenceRange(last.reference || first.reference);
+  const firstDistance = getDistanceFromReference(first.value, reference);
+  const lastDistance = getDistanceFromReference(last.value, reference);
+
+  if (firstDistance !== null && lastDistance !== null) {
+    if (lastDistance < firstDistance) return { trendLabel: "Melhorou", trendTone: "good" as const };
+    if (lastDistance > firstDistance) return { trendLabel: "Piorou", trendTone: "bad" as const };
+    return { trendLabel: lastDistance === 0 ? "Dentro da referência" : "Estável", trendTone: lastDistance === 0 ? "good" as const : "neutral" as const };
+  }
+
+  const delta = last.value - first.value;
+  if (Math.abs(delta) < 0.001) return { trendLabel: "Estável", trendTone: "neutral" as const };
+  return { trendLabel: delta > 0 ? "Subiu" : "Desceu", trendTone: "warning" as const };
+}
+
+function getExamComparableTime(exam: Exame) {
+  return Date.parse(exam.dataRealizacao || exam.updatedAt || exam.createdAt || "") || 0;
+}
+
+function buildExamTrendRows(exams: Exame[], selectedExam: Exame | null): ExamTrendRow[] {
+  if (!selectedExam) return [];
+
+  const selectedParameters = new Set(normalizeAnalyteRows(selectedExam.analitos).map((row) => row.parametro.toLowerCase()));
+  if (!selectedParameters.size) return [];
+
+  const rowsByParameter = new Map<string, { parametro: string; unidade: string; points: ExamTrendPoint[] }>();
+  const comparableExams = exams
+    .filter((exam) => exam.id === selectedExam.id || exam.exame === selectedExam.exame || exam.tipoExame === selectedExam.tipoExame || exam.grupoComparacao === selectedExam.grupoComparacao)
+    .sort((a, b) => getExamComparableTime(a) - getExamComparableTime(b));
+
+  for (const exam of comparableExams) {
+    for (const analyte of normalizeAnalyteRows(exam.analitos)) {
+      const key = analyte.parametro.toLowerCase();
+      if (!selectedParameters.has(key)) continue;
+
+      const value = parseNumericValue(analyte.resultado);
+      if (value === null) continue;
+
+      const current = rowsByParameter.get(key) ?? { parametro: analyte.parametro, unidade: analyte.unidade, points: [] };
+      current.points.push({
+        examId: exam.id,
+        label: exam.data,
+        value,
+        displayValue: analyte.resultado,
+        status: analyte.status,
+        reference: analyte.referencia,
+      });
+      rowsByParameter.set(key, current);
+    }
+  }
+
+  return Array.from(rowsByParameter.values())
+    .filter((row) => row.points.length > 1)
+    .map((row) => ({
+      ...row,
+      ...getTrendLabel(row.points),
+    }));
+}
+
+function mapAppointmentToRecord(appointment: ContactAppointment): AtendimentoPassado {
+  return {
+    id: appointment.id,
+    data: formatClinicalDateTime(appointment.startDateTime),
+    medico: appointment.professional || "Sem profissional",
+    medicoId: appointment.professionalId,
+    paciente: "",
+    procedimento: appointment.type || "Atendimento",
+    tipo: appointment.attendanceMode || appointment.status || "Sem formato",
+    status: appointment.status,
+    anotacoes: appointment.observations || "Nenhuma anotação clínica registrada neste agendamento.",
+    resumoIA: "Resumo clínico ainda não registrado para este atendimento.",
+    prescricoes: "Nenhuma prescrição vinculada nesta visão.",
+  };
+}
+
+function mapExamToRecord(exam: RawExamRecord): Exame {
+  const hasAttachment = Boolean(exam.arquivo_url);
+  const status = hasAttachment ? "Anexado" : "Aguardando";
+  const title = exam.tipo_exame || exam.grupo_comparacao || exam.nome_arquivo || exam.codigo_tuss || "Exame sem nome";
+
+  return {
+    id: exam.id,
+    exame: title,
+    status,
+    statusLabel: hasAttachment ? "Anexado no Prontuário" : exam.processamento_status || exam.status || "Aguardando",
+    observacoes: exam.observacoes || exam.status || "Sem observações",
+    data: formatClinicalDate(exam.data_realizacao),
+    url: exam.arquivo_url || undefined,
+    pacienteNome: exam.paciente_nome,
+    codigoTuss: exam.codigo_tuss,
+    analitos: exam.analitos,
+    historicoAnalitos: exam.historico_analitos,
+    textoExtraido: exam.texto_extraido,
+    tipoExame: exam.tipo_exame,
+    grupoComparacao: exam.grupo_comparacao,
+    nomeArquivo: exam.nome_arquivo,
+    mimeType: exam.mime_type,
+    storagePath: exam.storage_path,
+    processamentoStatus: exam.processamento_status,
+    createdAt: exam.created_at,
+    updatedAt: exam.updated_at,
+    dataRealizacao: exam.data_realizacao,
+  };
 }
 
 export default function MedicalRecords() {
+  const { user } = useCurrentUser();
   const [selectedPatient, setSelectedPatient] = React.useState<string>("");
   const [selectedAppointment, setSelectedAppointment] = React.useState<string>("");
 
@@ -84,8 +435,35 @@ export default function MedicalRecords() {
   const [patients, setPatients] = useState<ChatRecord[]>([]);
   const [selectedContact, setSelectedContact] = useState<ChatRecord | null>(null);
   const [isLoadingPatients, setIsLoadingPatients] = useState(true);
+  const [appointments, setAppointments] = useState<AtendimentoPassado[]>([]);
+  const [exams, setExams] = useState<Exame[]>([]);
+  const [isLoadingClinicalData, setIsLoadingClinicalData] = useState(false);
+  const [medicalRecordId, setMedicalRecordId] = useState("");
+  const [medicalRecordStatus, setMedicalRecordStatus] = useState("draft");
+  const [editorContentHtml, setEditorContentHtml] = useState("");
+  const [editorContentJson, setEditorContentJson] = useState<unknown>(null);
+  const [medicalRecordSaveStatus, setMedicalRecordSaveStatus] = useState<SaveStatus>("idle");
+  const [examUploadStatus, setExamUploadStatus] = useState<SaveStatus>("idle");
+  const [examUploadMessage, setExamUploadMessage] = useState("");
+  const [recordingStatus, setRecordingStatus] = useState<RecordingStatus>("idle");
+  const [recordingMessage, setRecordingMessage] = useState("");
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [isRecordingConsentDialogOpen, setIsRecordingConsentDialogOpen] = useState(false);
+  const [isRecordingConsentConfirmed, setIsRecordingConsentConfirmed] = useState(false);
+  const [aiSummary, setAiSummary] = useState("");
+  const [aiTranscription, setAiTranscription] = useState("");
+  const [selectedExamDetails, setSelectedExamDetails] = useState<Exame | null>(null);
+  const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = useState(false);
+  const [isFinalizingMedicalRecord, setIsFinalizingMedicalRecord] = useState(false);
   const [currentOffset, setCurrentOffset] = useState(0);
   const [hasMorePatients, setHasMorePatients] = useState(true);
+  const examFileInputRef = useRef<HTMLInputElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordingTimerRef = useRef<number | null>(null);
+  const recordingSecondsRef = useRef(0);
+  const lastSavedHtmlRef = useRef("");
   const LIMIT_PER_PAGE = 100;
 
   const debouncedSearch = useDebouncedValue(appointmentPatientSearch.trim(), 300);
@@ -135,101 +513,71 @@ export default function MedicalRecords() {
   const handleSelectPatient = (patient: ChatRecord) => {
     setSelectedPatient(patient.id);
     setSelectedContact(patient);
+    setSelectedAppointment("");
     setAppointmentPatientSearch("");
     setIsPatientSearchOpen(false);
   };
 
-  const editor = useEditor({
-    extensions: [StarterKit],
-    content: "",
-    editorProps: {
-      attributes: {
-        class: "focus:outline-none text-sm leading-relaxed text-foreground min-h-[120px] prose prose-sm dark:prose-invert max-w-none",
-      },
-    },
-  });
+  useEffect(() => {
+    if (!selectedContact) {
+      setAppointments([]);
+      setExams([]);
+      return;
+    }
 
-  const historicoConsultas: AtendimentoPassado[] = [
-    {
-      id: "1",
-      data: "Quarta-Feira, 20 de Maio de 2026 às 11:45",
-      medico: "Dra. Tatiana",
-      paciente: "Víctor",
-      procedimento: "Tratamento Capilar",
-      tipo: "Presencial",
-      anotacoes: "Apenas Teste. Paciente relata melhora significativa na densidade capilar após o início do ciclo de tratamento.",
-      resumoIA: "Paciente em evolução favorável no tratamento capilar. Sem queixas de efeitos colaterais.",
-      prescricoes: "Minoxidil 5% — Aplicar 1ml no couro cabeludo à noite.",
-    },
-    {
-      id: "2",
-      data: "Segunda-Feira, 06 de Abril de 2026 às 14:00",
-      medico: "Dra. Tatiana",
-      paciente: "Víctor",
-      procedimento: "Consulta Inicial",
-      tipo: "Presencial",
-      anotacoes: "Avaliação de alopecia androgênica inicial identificada na região da coroa.",
-      resumoIA: "Primeira consulta para mapeamento de perda capilar estável.",
-      prescricoes: "Shampoo Cetoconazol 2% — Uso 3x por semana.",
-    },
-  ];
+    const contact = selectedContact;
+    let ignore = false;
 
-  const listaExames: Exame[] = [
-    {
-      id: "ex-01",
-      exame: "Perfil Férrico Completo",
-      status: "Anexado",
-      statusLabel: "Anexado no Prontuário",
-      observacoes: "Ferritina dentro dos limites normais, porém limítrofe para crescimento folicular ideal.",
-      data: "12 de Maio de 2026",
-    },
-    {
-      id: "ex-02",
-      exame: "Dosagem de Cortisol Sérico",
-      status: "Aguardando",
-      statusLabel: "Aguardando Laboratório",
-      observacoes: "Solicitado para triagem de eflúvio telógeno associado a estresse crônico.",
-      data: "Pendente",
-    },
-    {
-      id: "ex-03",
-      exame: "Trichogramma Digital / Fototricograma",
-      status: "Anexado",
-      statusLabel: "Anexado no Prontuário",
-      observacoes: "Aumento perceptível na proporção de fios anágenos na região da coroa após o início do tratamento minoxidil.",
-      data: "05 de Maio de 2026",
-    },
-    {
-      id: "ex-04",
-      exame: "Hemograma Completo com Frações",
-      status: "Anexado",
-      statusLabel: "Anexado no Prontuário",
-      observacoes: "Ausência de processos infecciosos ativos. Série branca e vermelha totalmente estabilizadas.",
-      data: "28 de Abril de 2026",
-    },
-    {
-      id: "ex-05",
-      exame: "Dosagem de Vitamina D (25-hidroxivitamina D)",
-      status: "Aguardando",
-      statusLabel: "Aguardando Laboratório",
-      observacoes: "Avaliação necessária para manutenção da barreira cutânea e síntese proteica do folículo.",
-      data: "Pendente",
-    },
-    {
-      id: "ex-5",
-      exame: "Dosagem de Vitamina D (25-hidroxivitamina D)",
-      status: "Aguardando",
-      statusLabel: "Aguardando Laboratório",
-      observacoes: "Avaliação necessária para manutenção da barreira cutânea e síntese proteica do folículo.",
-      data: "Pendente",
-    },
-  ];
+    async function loadClinicalData() {
+      setIsLoadingClinicalData(true);
+      try {
+        const appointmentParams = new URLSearchParams();
+        if (contact.ida_contato) appointmentParams.set("contactId", contact.ida_contato);
+        appointmentParams.set("chatId", contact.chat_id || "");
+        appointmentParams.set("contactPhone", getContactPhone(contact));
 
-  const agendamentosPlaceholder = [
+        const examParams = new URLSearchParams();
+        if (contact.ida_contato) examParams.set("idaContato", contact.ida_contato);
+        examParams.set("patientName", getDisplayName(contact));
+
+        const [appointmentResponse, examResponse] = await Promise.all([
+          fetch(`/api/airtable/appointments?${appointmentParams}`, { cache: "no-store" }),
+          fetch(`/api/medical-records/exams?${examParams}`, { cache: "no-store" }),
+        ]);
+
+        const appointmentData = (await appointmentResponse.json().catch(() => ({}))) as { appointments?: ContactAppointment[] };
+        const examData = (await examResponse.json().catch(() => ({}))) as { exams?: RawExamRecord[] };
+
+        if (ignore) return;
+
+        const mappedAppointments = (appointmentData.appointments ?? []).map(mapAppointmentToRecord);
+        setAppointments(mappedAppointments);
+        setSelectedAppointment((current) => current || mappedAppointments[0]?.id || "");
+        setExams((examData.exams ?? []).map(mapExamToRecord));
+      } catch (error) {
+        if (!ignore) {
+          console.error("Error loading clinical data:", error);
+          setAppointments([]);
+          setExams([]);
+        }
+      } finally {
+        if (!ignore) setIsLoadingClinicalData(false);
+      }
+    }
+
+    void loadClinicalData();
+
+    return () => {
+      ignore = true;
+    };
+  }, [selectedContact]);
+
+  const agendamentosPlaceholder: AtendimentoPassado[] = [
     {
       id: "p1",
       data: "--/--/----",
       medico: "Médico Clinico",
+      paciente: "",
       procedimento: "Consulta de Rotina",
       tipo: "Presencial",
       anotacoes: "Nenhuma anotação disponível.",
@@ -240,6 +588,7 @@ export default function MedicalRecords() {
       id: "p2",
       data: "--/--/----",
       medico: "Médico Especialista",
+      paciente: "",
       procedimento: "Retorno",
       tipo: "Teleconsulta",
       anotacoes: "Nenhuma anotação disponível.",
@@ -248,17 +597,488 @@ export default function MedicalRecords() {
     },
   ];
 
-  const examesPlaceholder = [
-    { id: "e1", exame: "Exame Clínico Laboratorial", status: "Pendente", statusLabel: "Aguardando", observacoes: "Nenhuma observação disponível.", data: "--/--/----" },
-    { id: "e2", exame: "Exame de Imagem Diagnóstica", status: "Pendente", statusLabel: "Aguardando", observacoes: "Nenhuma observação disponível.", data: "--/--/----" },
+  const examesPlaceholder: Exame[] = [
+    { id: "e1", exame: "Exame Clínico Laboratorial", status: "Aguardando", statusLabel: "Aguardando", observacoes: "Nenhuma observação disponível.", data: "--/--/----" },
+    { id: "e2", exame: "Exame de Imagem Diagnóstica", status: "Aguardando", statusLabel: "Aguardando", observacoes: "Nenhuma observação disponível.", data: "--/--/----" },
   ];
 
-  const dadosAgendamentos = selectedPatient ? historicoConsultas : agendamentosPlaceholder;
-  const dadosExames = selectedPatient ? listaExames : examesPlaceholder;
+  const dadosAgendamentos = selectedPatient ? appointments : agendamentosPlaceholder;
+  const dadosExames = selectedPatient ? exams : examesPlaceholder;
+  const selectedAppointmentDetails = appointments.find((appointment) => appointment.id === selectedAppointment);
+  const selectedAppointmentLabel = selectedAppointmentDetails?.data || selectedAppointment;
+  const currentUserEmail = user?.email || "";
+  const selectedExamAnalytes = useMemo(() => normalizeAnalyteRows(selectedExamDetails?.analitos), [selectedExamDetails]);
+  const selectedExamTrendRows = useMemo(() => buildExamTrendRows(exams, selectedExamDetails), [exams, selectedExamDetails]);
 
-  if (!editor) {
-    return null;
-  }
+  const stopRecordingResources = useCallback(() => {
+    if (recordingTimerRef.current) {
+      window.clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recordingStreamRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      }
+      stopRecordingResources();
+    };
+  }, [stopRecordingResources]);
+
+  const buildMedicalRecordPayload = useCallback(
+    (status = medicalRecordStatus) => {
+      if (!selectedContact || !selectedAppointment) return null;
+
+      return {
+        id: medicalRecordId || undefined,
+        contactChatId: selectedContact.chat_id,
+        contactAirtableId: selectedContact.ida_contato || null,
+        contactName: getDisplayName(selectedContact),
+        contactPhone: getContactPhone(selectedContact),
+        appointmentAirtableId: selectedAppointment,
+        professionalAirtableId: selectedAppointmentDetails?.medicoId || null,
+        professionalName: selectedAppointmentDetails?.medico || null,
+        title: selectedAppointmentLabel || "Prontuário clínico",
+        status,
+        contentHtml: editorContentHtml,
+        contentJson: editorContentJson,
+        metadata: {
+          appointmentLabel: selectedAppointmentLabel,
+          procedure: selectedAppointmentDetails?.procedimento || null,
+          attendanceMode: selectedAppointmentDetails?.tipo || null,
+        },
+        userEmail: currentUserEmail || null,
+      };
+    },
+    [
+      editorContentHtml,
+      editorContentJson,
+      medicalRecordId,
+      medicalRecordStatus,
+      selectedAppointment,
+      selectedAppointmentDetails,
+      selectedAppointmentLabel,
+      selectedContact,
+      currentUserEmail,
+    ],
+  );
+
+  const saveMedicalRecordNow = useCallback(
+    async (status = medicalRecordStatus) => {
+      const payload = buildMedicalRecordPayload(status);
+      if (!payload) throw new Error("Selecione um paciente e um agendamento antes de salvar o prontuário.");
+
+      setMedicalRecordSaveStatus("saving");
+
+      const response = await fetch("/api/medical-records", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = (await response.json().catch(() => ({}))) as { record?: MedicalRecord; message?: string };
+
+      if (!response.ok) throw new Error(data.message || "Não foi possível salvar o prontuário.");
+
+      const savedId = data.record?.id || medicalRecordId;
+      setMedicalRecordId(savedId);
+      setMedicalRecordStatus(data.record?.status || status);
+      lastSavedHtmlRef.current = editorContentHtml;
+      setMedicalRecordSaveStatus("saved");
+
+      return savedId;
+    },
+    [buildMedicalRecordPayload, editorContentHtml, medicalRecordId, medicalRecordStatus],
+  );
+
+  const reloadExams = useCallback(async () => {
+    if (!selectedContact) return;
+
+    const examParams = new URLSearchParams();
+    if (selectedContact.ida_contato) examParams.set("idaContato", selectedContact.ida_contato);
+    if (selectedAppointment) examParams.set("idaAgendamento", selectedAppointment);
+    examParams.set("patientName", getDisplayName(selectedContact));
+
+    const response = await fetch(`/api/medical-records/exams?${examParams}`, { cache: "no-store" });
+    const data = (await response.json().catch(() => ({}))) as { exams?: RawExamRecord[]; message?: string };
+
+    if (!response.ok) throw new Error(data.message || "Não foi possível atualizar os exames.");
+
+    setExams((data.exams ?? []).map(mapExamToRecord));
+  }, [selectedAppointment, selectedContact]);
+
+  useEffect(() => {
+    if (!selectedContact || !selectedAppointment) {
+      setMedicalRecordId("");
+      setMedicalRecordStatus("draft");
+      setEditorContentHtml("");
+      setEditorContentJson(null);
+      setAiSummary("");
+      setAiTranscription("");
+      setRecordingStatus("idle");
+      setRecordingMessage("");
+      setRecordingSeconds(0);
+      recordingSecondsRef.current = 0;
+      stopRecordingResources();
+      lastSavedHtmlRef.current = "";
+      setMedicalRecordSaveStatus("idle");
+      return;
+    }
+
+    let ignore = false;
+
+    async function loadMedicalRecord() {
+      setMedicalRecordSaveStatus("loading");
+      try {
+        const params = new URLSearchParams({ appointmentId: selectedAppointment });
+        const response = await fetch(`/api/medical-records?${params}`, { cache: "no-store" });
+        const data = (await response.json().catch(() => ({}))) as { record?: MedicalRecord | null; message?: string };
+
+        if (ignore) return;
+        if (!response.ok) throw new Error(data.message || "Não foi possível carregar o prontuário.");
+
+        const record = data.record;
+        const html = record?.content_html || "";
+
+        setMedicalRecordId(record?.id || "");
+        setMedicalRecordStatus(record?.status || "draft");
+        setEditorContentHtml(html);
+        setEditorContentJson(record?.content_json ?? null);
+        setAiSummary(record?.ai_summary || "");
+        setAiTranscription(record?.ai_transcription || "");
+        setRecordingStatus(record?.ai_summary ? "processed" : "idle");
+        setRecordingMessage(record?.ai_summary ? "Resumo de IA disponível para revisão." : "");
+        lastSavedHtmlRef.current = html;
+        setMedicalRecordSaveStatus(record ? "saved" : "idle");
+      } catch (error) {
+        if (!ignore) {
+          console.error("Error loading medical record:", error);
+          setMedicalRecordId("");
+          setMedicalRecordStatus("draft");
+          setEditorContentHtml("");
+          setEditorContentJson(null);
+          setAiSummary("");
+          setAiTranscription("");
+          lastSavedHtmlRef.current = "";
+          setMedicalRecordSaveStatus("error");
+        }
+      }
+    }
+
+    void loadMedicalRecord();
+
+    return () => {
+      ignore = true;
+    };
+  }, [selectedAppointment, selectedContact, stopRecordingResources]);
+
+  useEffect(() => {
+    if (!selectedContact || !selectedAppointment || medicalRecordSaveStatus === "loading" || medicalRecordSaveStatus === "saving") return;
+    if (editorContentHtml === lastSavedHtmlRef.current) return;
+
+    const timeout = window.setTimeout(async () => {
+      try {
+        setMedicalRecordSaveStatus("saving");
+        const response = await fetch("/api/medical-records", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: medicalRecordId || undefined,
+            contactChatId: selectedContact.chat_id,
+            contactAirtableId: selectedContact.ida_contato || null,
+            contactName: getDisplayName(selectedContact),
+            contactPhone: getContactPhone(selectedContact),
+            appointmentAirtableId: selectedAppointment,
+            professionalAirtableId: selectedAppointmentDetails?.medicoId || null,
+            professionalName: selectedAppointmentDetails?.medico || null,
+            title: selectedAppointmentLabel || "Prontuário clínico",
+            status: medicalRecordStatus,
+            contentHtml: editorContentHtml,
+            contentJson: editorContentJson,
+            metadata: {
+              appointmentLabel: selectedAppointmentLabel,
+              procedure: selectedAppointmentDetails?.procedimento || null,
+              attendanceMode: selectedAppointmentDetails?.tipo || null,
+            },
+            userEmail: currentUserEmail || null,
+          }),
+        });
+        const data = (await response.json().catch(() => ({}))) as { record?: MedicalRecord; message?: string };
+
+        if (!response.ok) throw new Error(data.message || "Não foi possível salvar o prontuário.");
+
+        setMedicalRecordId(data.record?.id || medicalRecordId);
+        lastSavedHtmlRef.current = editorContentHtml;
+        setMedicalRecordSaveStatus("saved");
+      } catch (error) {
+        console.error("Error saving medical record:", error);
+        setMedicalRecordSaveStatus("error");
+      }
+    }, 900);
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    editorContentHtml,
+    editorContentJson,
+    medicalRecordId,
+    medicalRecordStatus,
+    medicalRecordSaveStatus,
+    selectedAppointment,
+    selectedAppointmentDetails,
+    selectedAppointmentLabel,
+    selectedContact,
+    currentUserEmail,
+  ]);
+
+  const handleFinalizeMedicalRecord = async () => {
+    if (!selectedContact || !selectedAppointment || isFinalizingMedicalRecord) return;
+
+    try {
+      setIsFinalizingMedicalRecord(true);
+      setMedicalRecordSaveStatus("saving");
+
+      const response = await fetch("/api/medical-records", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: medicalRecordId || undefined,
+          contactChatId: selectedContact.chat_id,
+          contactAirtableId: selectedContact.ida_contato || null,
+          contactName: getDisplayName(selectedContact),
+          contactPhone: getContactPhone(selectedContact),
+          appointmentAirtableId: selectedAppointment,
+          professionalAirtableId: selectedAppointmentDetails?.medicoId || null,
+          professionalName: selectedAppointmentDetails?.medico || null,
+          title: selectedAppointmentLabel || "Prontuário clínico",
+          status: "finalized",
+          contentHtml: editorContentHtml,
+          contentJson: editorContentJson,
+          metadata: {
+            appointmentLabel: selectedAppointmentLabel,
+            procedure: selectedAppointmentDetails?.procedimento || null,
+            attendanceMode: selectedAppointmentDetails?.tipo || null,
+          },
+          userEmail: currentUserEmail || null,
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { record?: MedicalRecord; message?: string };
+
+      if (!response.ok) throw new Error(data.message || "Não foi possível finalizar o prontuário.");
+
+      setMedicalRecordId(data.record?.id || medicalRecordId);
+      setMedicalRecordStatus("finalized");
+      setAppointments((current) =>
+        current.map((appointment) =>
+          appointment.id === selectedAppointment ? { ...appointment, status: "Finalizado" } : appointment,
+        ),
+      );
+      lastSavedHtmlRef.current = editorContentHtml;
+      setMedicalRecordSaveStatus("saved");
+      setIsFinalizeDialogOpen(false);
+    } catch (error) {
+      console.error("Error finalizing medical record:", error);
+      setMedicalRecordSaveStatus("error");
+    } finally {
+      setIsFinalizingMedicalRecord(false);
+    }
+  };
+
+  const handleRecordingComplete = useCallback(
+    async (blob: Blob) => {
+      stopRecordingResources();
+
+      if (!selectedContact || !selectedAppointment) {
+        setRecordingStatus("error");
+        setRecordingMessage("Selecione um paciente e um agendamento antes de processar a gravação.");
+        return;
+      }
+
+      if (!blob.size) {
+        setRecordingStatus("error");
+        setRecordingMessage("A gravação ficou vazia. Tente gravar novamente.");
+        return;
+      }
+
+      try {
+        setRecordingStatus("uploading");
+        setRecordingMessage("Salvando a gravação da consulta...");
+
+        const savedRecordId = await saveMedicalRecordNow();
+        const file = new File([blob], `consulta-${Date.now()}.webm`, { type: blob.type || "audio/webm" });
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("medical_record_id", savedRecordId);
+        formData.append("user_email", currentUserEmail);
+        formData.append("consent_confirmed", "true");
+        formData.append("duration_seconds", String(recordingSecondsRef.current));
+
+        const uploadResponse = await fetch("/api/medical-records/recordings/upload", {
+          method: "POST",
+          body: formData,
+        });
+        const uploadData = (await uploadResponse.json().catch(() => ({}))) as { attachmentId?: string; message?: string };
+
+        if (!uploadResponse.ok || !uploadData.attachmentId) {
+          throw new Error(uploadData.message || "Não foi possível enviar a gravação.");
+        }
+
+        setRecordingStatus("processing");
+        setRecordingMessage("Transcrevendo e gerando o resumo com IA...");
+
+        const processResponse = await fetch("/api/medical-records/recordings/process", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            medicalRecordId: savedRecordId,
+            attachmentId: uploadData.attachmentId,
+          }),
+        });
+        const processData = (await processResponse.json().catch(() => ({}))) as {
+          transcription?: string;
+          summary?: string;
+          message?: string;
+        };
+
+        if (!processResponse.ok) {
+          throw new Error(processData.message || "Não foi possível processar a gravação.");
+        }
+
+        setAiTranscription(processData.transcription || "");
+        setAiSummary(processData.summary || "");
+        setRecordingStatus("processed");
+        setRecordingMessage("Resumo gerado. Revise antes de inserir no prontuário.");
+      } catch (error) {
+        console.error("Error processing consultation recording:", error);
+        setRecordingStatus("error");
+        setRecordingMessage(error instanceof Error ? error.message : "Não foi possível processar a gravação.");
+      } finally {
+        setRecordingSeconds(0);
+        recordingChunksRef.current = [];
+        mediaRecorderRef.current = null;
+      }
+    },
+    [currentUserEmail, saveMedicalRecordNow, selectedAppointment, selectedContact, stopRecordingResources],
+  );
+
+  const startConsultationRecording = async () => {
+    if (!selectedContact || !selectedAppointment || recordingStatus === "recording") return;
+
+    if (!isRecordingConsentConfirmed) {
+      setRecordingMessage("Confirme o consentimento do paciente para iniciar a gravação.");
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setRecordingStatus("error");
+      setRecordingMessage("Este navegador não permite gravação de áudio.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+      const recorder = new MediaRecorder(stream, { mimeType });
+
+      recordingChunksRef.current = [];
+      recordingStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordingChunksRef.current.push(event.data);
+      };
+
+      recorder.onstop = () => {
+        const recordingBlob = new Blob(recordingChunksRef.current, { type: mimeType });
+        void handleRecordingComplete(recordingBlob);
+      };
+
+      recorder.start();
+      setRecordingSeconds(0);
+      recordingSecondsRef.current = 0;
+      setRecordingStatus("recording");
+      setRecordingMessage("Gravação em andamento.");
+      setIsRecordingConsentDialogOpen(false);
+      recordingTimerRef.current = window.setInterval(() => {
+        recordingSecondsRef.current += 1;
+        setRecordingSeconds(recordingSecondsRef.current);
+      }, 1000);
+    } catch (error) {
+      stopRecordingResources();
+      console.error("Error starting consultation recording:", error);
+      setRecordingStatus("error");
+      setRecordingMessage("Não foi possível acessar o microfone.");
+    }
+  };
+
+  const stopConsultationRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") return;
+
+    setRecordingMessage("Finalizando gravação...");
+    recorder.stop();
+  };
+
+  const handleRecordingButtonClick = () => {
+    if (recordingStatus === "recording") {
+      stopConsultationRecording();
+      return;
+    }
+
+    setIsRecordingConsentConfirmed(false);
+    setIsRecordingConsentDialogOpen(true);
+  };
+
+  const applyAiSummaryToEditor = () => {
+    if (!aiSummary.trim()) return;
+
+    const appendedHtml = `${editorContentHtml || ""}${editorContentHtml ? "<hr />" : ""}${summaryToHtml(aiSummary)}`;
+    setEditorContentHtml(appendedHtml);
+    setEditorContentJson(null);
+    setMedicalRecordSaveStatus("unsaved");
+  };
+
+  const handleExamFileSelected = async (file?: File | null) => {
+    if (!file || !selectedContact || !selectedAppointment || examUploadStatus === "loading") return;
+
+    try {
+      setExamUploadStatus("loading");
+      setExamUploadMessage("");
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("paciente_nome", getDisplayName(selectedContact));
+      formData.append("status", "Recebido");
+      if (selectedContact.ida_contato) formData.append("ida-contato", selectedContact.ida_contato);
+      formData.append("chat_id", selectedContact.chat_id || "");
+      formData.append("contact_name", getDisplayName(selectedContact));
+      formData.append("contact_phone", getContactPhone(selectedContact));
+      formData.append("ida-agendamento", selectedAppointment);
+      formData.append("appointment_label", selectedAppointmentLabel);
+      if (medicalRecordId) formData.append("medical_record_id", medicalRecordId);
+      if (currentUserEmail) formData.append("user_email", currentUserEmail);
+
+      const response = await fetch("/api/medical-records/exams/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = (await response.json().catch(() => ({}))) as { message?: string };
+
+      if (!response.ok) throw new Error(data.message || "Não foi possível enviar o exame.");
+
+      setExamUploadStatus("saved");
+      setExamUploadMessage("Exame enviado para processamento.");
+      await reloadExams().catch((error) => console.error("Error reloading exams:", error));
+    } catch (error) {
+      console.error("Error uploading exam:", error);
+      setExamUploadStatus("error");
+      setExamUploadMessage(error instanceof Error ? error.message : "Não foi possível enviar o exame.");
+    } finally {
+      if (examFileInputRef.current) examFileInputRef.current.value = "";
+    }
+  };
 
   return (
     <div className="flex h-screen w-full flex-col bg-background overflow-hidden">
@@ -332,7 +1152,10 @@ export default function MedicalRecords() {
                                             "flex w-full items-center justify-between rounded-sm px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground transition-colors gap-2",
                                             selectedPatient === patient.id && "bg-accent text-accent-foreground",
                                           )}
-                                          onClick={() => handleSelectPatient(patient)}
+                                          onMouseDown={(event) => {
+                                            event.preventDefault();
+                                            handleSelectPatient(patient);
+                                          }}
                                         >
                                           <span className="truncate font-medium">{name}</span>
                                         </button>
@@ -400,12 +1223,22 @@ export default function MedicalRecords() {
                           <Label className="text-xs font-semibold text-foreground">Agendamento</Label>
                           <Select value={selectedAppointment} onValueChange={setSelectedAppointment}>
                             <SelectTrigger className="w-full h-10 bg-background border-border text-sm">
-                              <SelectValue placeholder="Selecione o horário do atendimento..." />
+                              <SelectValue placeholder={isLoadingClinicalData ? "Carregando atendimentos..." : "Selecione o horário do atendimento..."} />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="Quarta-Feira, 20 de Maio de 2026 às 11:45 - Tratamento Capilar">
-                                <span className="text-xs block max-w-[280px] truncate">Quarta-Feira, 20 de Maio de 2026 às 11:45 - Tratamento Capilar</span>
-                              </SelectItem>
+                              {appointments.length > 0 ? (
+                                appointments.map((appointment) => (
+                                  <SelectItem key={appointment.id} value={appointment.id}>
+                                    <span className="text-xs block max-w-[280px] truncate">
+                                      {appointment.data} - {appointment.procedimento}
+                                    </span>
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <SelectItem value="no-appointments" disabled>
+                                  Nenhum atendimento encontrado
+                                </SelectItem>
+                              )}
                             </SelectContent>
                           </Select>
                         </div>
@@ -441,14 +1274,36 @@ export default function MedicalRecords() {
                       <div className="flex h-7 w-7 items-center justify-center rounded-md bg-theme-primary/10 text-theme-primary shrink-0">
                         <FolderOpen className="h-4 w-4" />
                       </div>
-                      <span className="text-xs font-semibold text-foreground/90 leading-none truncate">{selectedAppointment ? selectedAppointment : "Prontuário Clínico"}</span>
+                      <span className="text-xs font-semibold text-foreground/90 leading-none truncate">{selectedAppointment ? selectedAppointmentLabel : "Prontuário Clínico"}</span>
                     </div>
 
                     {selectedAppointment && (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 border border-emerald-500/20 w-fit shrink-0 animate-in fade-in duration-300">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        Agendamento selecionado
-                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 border border-emerald-500/20 w-fit shrink-0 animate-in fade-in duration-300">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Agendamento selecionado
+                        </span>
+
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium w-fit shrink-0",
+                            medicalRecordSaveStatus === "error"
+                              ? "border-red-500/20 bg-red-500/10 text-red-600"
+                              : "border-border bg-background text-muted-foreground",
+                          )}
+                        >
+                          {(medicalRecordSaveStatus === "loading" || medicalRecordSaveStatus === "saving") && <Loader2 className="h-3 w-3 animate-spin" />}
+                          {medicalRecordSaveStatus === "loading"
+                            ? "Carregando prontuário"
+                            : medicalRecordSaveStatus === "saving"
+                              ? "Salvando"
+                              : medicalRecordSaveStatus === "saved"
+                                ? "Salvo"
+                                : medicalRecordSaveStatus === "error"
+                                  ? "Erro ao salvar"
+                                  : "Rascunho"}
+                        </span>
+                      </div>
                     )}
                   </div>
 
@@ -459,7 +1314,17 @@ export default function MedicalRecords() {
                     )}
                   >
                     <div className="flex flex-col bg-background/50 overflow-y-auto min-h-[350px] xl:min-h-0">
-                      <Editor disabled={!selectedAppointment} />
+                      <Editor
+                        disabled={!selectedAppointment || medicalRecordSaveStatus === "loading"}
+                        content={editorContentHtml}
+                        onChange={({ html, json }) => {
+                          setEditorContentHtml(html);
+                          setEditorContentJson(json);
+                          if (html !== lastSavedHtmlRef.current) {
+                            setMedicalRecordSaveStatus("unsaved");
+                          }
+                        }}
+                      />
                     </div>
 
                     <div className="p-4 bg-muted/5 flex flex-col justify-start gap-2.5 overflow-y-auto shrink-0 xl:shrink flex-row xl:flex-col flex-wrap xl:flex-nowrap">
@@ -468,22 +1333,125 @@ export default function MedicalRecords() {
                         Ações Clínicas e IA
                       </div>
 
-                      <Button disabled={!selectedAppointment} variant="outline" className="flex-1 xl:w-full xl:flex-initial justify-start gap-2.5 h-10 text-xs font-medium text-foreground/80 border-border min-w-[150px]">
-                        <Mic className="h-4 w-4 shrink-0 text-blue-500" />
-                        Gravação com IA
+                      <Button
+                        disabled={
+                          !selectedAppointment ||
+                          recordingStatus === "uploading" ||
+                          recordingStatus === "processing" ||
+                          medicalRecordSaveStatus === "loading"
+                        }
+                        variant="outline"
+                        className={cn(
+                          "flex-1 xl:w-full xl:flex-initial justify-start gap-2.5 h-10 text-xs font-medium text-foreground/80 border-border min-w-[150px]",
+                          recordingStatus === "recording" && "border-red-500/30 bg-red-500/10 text-red-600",
+                        )}
+                        onClick={handleRecordingButtonClick}
+                      >
+                        {recordingStatus === "recording" ? (
+                          <Square className="h-4 w-4 shrink-0 fill-red-500 text-red-500" />
+                        ) : recordingStatus === "uploading" || recordingStatus === "processing" ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-500" />
+                        ) : (
+                          <Mic className="h-4 w-4 shrink-0 text-blue-500" />
+                        )}
+                        {recordingStatus === "recording"
+                          ? `Parar ${formatRecordingTime(recordingSeconds)}`
+                          : recordingStatus === "uploading"
+                            ? "Enviando gravação"
+                            : recordingStatus === "processing"
+                              ? "IA processando"
+                              : "Gravação com IA"}
                       </Button>
+                      {recordingMessage ? (
+                        <p
+                          className={cn(
+                            "w-full px-1 text-[11px] leading-relaxed",
+                            recordingStatus === "error"
+                              ? "text-red-600"
+                              : recordingStatus === "processed"
+                                ? "text-emerald-600"
+                                : "text-muted-foreground",
+                          )}
+                        >
+                          {recordingStatus === "error" && <AlertCircle className="mr-1 inline h-3 w-3" />}
+                          {recordingMessage}
+                        </p>
+                      ) : null}
+                      {aiSummary ? (
+                        <div className="w-full rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 text-xs">
+                          <div className="mb-2 flex items-center gap-1.5 font-semibold text-foreground/90">
+                            <Sparkles className="h-3.5 w-3.5 text-blue-500" />
+                            Resumo da IA
+                          </div>
+                          <p className="line-clamp-6 whitespace-pre-line text-muted-foreground">{aiSummary}</p>
+                          <div className="mt-3 flex flex-col gap-2">
+                            <Button type="button" size="sm" className="h-8 gap-2 text-xs" onClick={applyAiSummaryToEditor}>
+                              <FileText className="h-3.5 w-3.5" />
+                              Inserir no prontuário
+                            </Button>
+                            {aiTranscription ? (
+                              <details className="rounded-md border border-border bg-background/70 p-2">
+                                <summary className="cursor-pointer text-[11px] font-medium text-muted-foreground">Ver transcrição</summary>
+                                <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">
+                                  {aiTranscription}
+                                </p>
+                              </details>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
                       <Button disabled={!selectedAppointment} variant="outline" className="flex-1 xl:w-full xl:flex-initial justify-start gap-2.5 h-10 text-xs font-medium text-foreground/80 border-border min-w-[150px]">
                         <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                         Nova Prescrição
                       </Button>
-                      <Button disabled={!selectedAppointment} variant="outline" className="flex-1 xl:w-full xl:flex-initial justify-start gap-2.5 h-10 text-xs font-medium text-foreground/80 border-border min-w-[150px]">
-                        <FilePlus className="h-4 w-4 text-muted-foreground shrink-0" />+ Resultado/Exame
+                      <input
+                        ref={examFileInputRef}
+                        type="file"
+                        accept="application/pdf,image/*,.pdf"
+                        className="hidden"
+                        onChange={(event) => void handleExamFileSelected(event.target.files?.[0])}
+                      />
+                      <Button
+                        disabled={!selectedAppointment || examUploadStatus === "loading"}
+                        variant="outline"
+                        className="flex-1 xl:w-full xl:flex-initial justify-start gap-2.5 h-10 text-xs font-medium text-foreground/80 border-border min-w-[150px]"
+                        onClick={() => examFileInputRef.current?.click()}
+                      >
+                        {examUploadStatus === "loading" ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-theme-primary shrink-0" />
+                        ) : (
+                          <FilePlus className="h-4 w-4 text-muted-foreground shrink-0" />
+                        )}
+                        {examUploadStatus === "loading" ? "Enviando exame..." : "+ Resultado/Exame"}
+                      </Button>
+                      {examUploadMessage ? (
+                        <p
+                          className={cn(
+                            "w-full px-1 text-[11px] leading-relaxed",
+                            examUploadStatus === "error" ? "text-red-600" : "text-emerald-600",
+                          )}
+                        >
+                          {examUploadMessage}
+                        </p>
+                      ) : null}
+
+                      <Button
+                        disabled={!selectedAppointment || isFinalizingMedicalRecord || medicalRecordSaveStatus === "loading"}
+                        className={cn(
+                          "w-full text-xs rounded-full font-bold mt-2 xl:mt-auto text-white h-10 justify-start gap-2.5",
+                          medicalRecordStatus === "finalized"
+                            ? "bg-emerald-700 hover:bg-emerald-700"
+                            : "bg-emerald-600 hover:bg-emerald-700",
+                        )}
+                        onClick={() => setIsFinalizeDialogOpen(true)}
+                      >
+                        {isFinalizingMedicalRecord ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <CheckCircle2 className="h-4 w-4 shrink-0" />}
+                        {medicalRecordStatus === "finalized" ? "Consulta Finalizada" : isFinalizingMedicalRecord ? "Finalizando..." : "Finalizar Consulta"}
                       </Button>
 
-                      <Button disabled={!selectedAppointment} className="w-full text-xs rounded-full font-bold mt-2 xl:mt-auto bg-emerald-600 text-white hover:bg-emerald-700 h-10 justify-start gap-2.5">
-                        <CheckCircle2 className="h-4 w-4 shrink-0" />
-                        Finalizar Consulta
-                      </Button>
+                      {medicalRecordStatus === "finalized" && (
+                        <p className="px-1 text-[11px] leading-relaxed text-emerald-600">Consulta finalizada</p>
+                      )}
                     </div>
                   </div>
 
@@ -542,7 +1510,13 @@ export default function MedicalRecords() {
                       </CardHeader>
 
                       <CardContent className="flex flex-col">
-                        {dadosAgendamentos.map((item, index) => (
+                        {isLoadingClinicalData && selectedPatient ? (
+                          <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin text-theme-primary" />
+                            Carregando histórico de agendamentos...
+                          </div>
+                        ) : dadosAgendamentos.length > 0 ? (
+                          dadosAgendamentos.map((item, index) => (
                           <div key={item.id} className="relative flex gap-4 group">
                             <div className="flex flex-col items-center translate-y-6.5 shrink-0">
                               <div className="h-3.5 w-3.5 rounded-full border-2 border-theme-primary/50 bg-background z-10 shadow-xs group-hover:border-theme-primary transition-colors duration-300" />
@@ -559,7 +1533,7 @@ export default function MedicalRecords() {
                                   <div className="w-fit md:w-full flex items-center md:justify-end gap-3 md:ml-auto sm:ml-0 pr-4">
                                     <Badge className="gap-2 text-[11px] text-muted-foreground bg-background border border-border/60 px-3 py-1 rounded-full shrink-0">
                                       <Stethoscope className="h-3 w-3" />
-                                      {item.medico} • {item.procedimento} • <span className="font-medium text-theme-primary">{item.tipo}</span>
+                                      {item.medico} • {item.procedimento} • <span className="font-medium text-theme-primary">{item.status || item.tipo}</span>
                                     </Badge>
                                   </div>
                                 </AccordionTrigger>
@@ -594,7 +1568,10 @@ export default function MedicalRecords() {
                               </AccordionItem>
                             </Accordion>
                           </div>
-                        ))}
+                          ))
+                        ) : (
+                          <div className="rounded-lg border border-border/70 bg-muted/20 px-4 py-5 text-sm text-muted-foreground">Nenhum agendamento encontrado para este contato.</div>
+                        )}
                       </CardContent>
                     </Card>
                   </TabsContent>
@@ -617,10 +1594,25 @@ export default function MedicalRecords() {
                           </div>
 
                           <div className="w-full flex flex-col max-h-[450px] overflow-y-auto custom-scrollbar divide-y divide-border/50">
-                            {dadosExames.map((item) => (
+                            {isLoadingClinicalData && selectedPatient ? (
+                              <div className="flex items-center gap-2 px-5 py-5 text-sm text-muted-foreground">
+                                <Loader2 className="h-4 w-4 animate-spin text-theme-primary" />
+                                Carregando exames...
+                              </div>
+                            ) : dadosExames.length > 0 ? (
+                              dadosExames.map((item) => (
                               <div
                                 key={item.id}
-                                className="flex flex-col md:grid md:grid-cols-[1.5fr_140px_2fr_130px_90px] items-start md:items-center gap-3 md:gap-4 px-5 py-4 transition-colors hover:bg-muted/20 relative group text-left w-full"
+                                role="button"
+                                tabIndex={0}
+                                className="flex flex-col md:grid md:grid-cols-[1.5fr_140px_2fr_130px_90px] items-start md:items-center gap-3 md:gap-4 px-5 py-4 transition-colors hover:bg-muted/20 relative group text-left w-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-primary/40"
+                                onClick={() => setSelectedExamDetails(item)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+                                    setSelectedExamDetails(item);
+                                  }
+                                }}
                               >
                                 <div className="flex min-w-0 items-center gap-3 w-full md:w-auto">
                                   <div className="h-8 w-8 shrink-0 rounded-lg bg-theme-primary/10 flex items-center justify-center border border-theme-primary/15 text-theme-primary">
@@ -659,6 +1651,7 @@ export default function MedicalRecords() {
                                     disabled={item.status !== "Anexado"}
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      if (item.url) window.open(item.url, "_blank", "noopener,noreferrer");
                                     }}
                                   >
                                     <span className="inline md:hidden lg:inline">Ver</span>
@@ -666,12 +1659,15 @@ export default function MedicalRecords() {
                                   </Button>
                                 </div>
                               </div>
-                            ))}
+                              ))
+                            ) : (
+                              <div className="px-5 py-5 text-sm text-muted-foreground">Nenhum exame encontrado para este contato.</div>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-2 border-t border-border/60 bg-muted/20 px-5 py-3 text-xs text-muted-foreground/80">
                             <Info className="h-3.5 w-3.5 text-theme-primary shrink-0" />
-                            <span>Clique em visualizar ou use as linhas para abrir os documentos originais emitidos.</span>
+                            <span>Clique em uma linha para ver os dados extraídos. Use Ver para abrir o documento original.</span>
                           </div>
                         </div>
                       </CardContent>
@@ -683,6 +1679,272 @@ export default function MedicalRecords() {
           </div>
         </div>
       </main>
+
+      <Dialog open={Boolean(selectedExamDetails)} onOpenChange={(open) => !open && setSelectedExamDetails(null)}>
+        <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-5xl">
+          <DialogHeader className="shrink-0">
+            <DialogTitle>{selectedExamDetails?.exame || "Detalhes do exame"}</DialogTitle>
+            <DialogDescription>
+              {selectedExamDetails?.pacienteNome || (selectedContact ? getDisplayName(selectedContact) : "Paciente")} • {selectedExamDetails?.data || "Data pendente"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedExamDetails ? (
+            <Tabs defaultValue="resumo" className="flex min-h-0 flex-1 flex-col gap-3">
+              <TabsList className="grid h-auto w-full shrink-0 grid-cols-4 rounded-lg bg-muted/50 p-1">
+                <TabsTrigger value="resumo" className="text-xs">Resumo</TabsTrigger>
+                <TabsTrigger value="evolucao" className="text-xs">Evolução</TabsTrigger>
+                <TabsTrigger value="analitos" className="text-xs">Analitos</TabsTrigger>
+                <TabsTrigger value="texto" className="text-xs">Texto</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="resumo" className="min-h-0 flex-1 overflow-y-auto pr-1">
+                <div className="grid gap-3 rounded-lg border border-border bg-muted/20 p-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <p className="font-semibold uppercase tracking-wider text-muted-foreground">Status</p>
+                    <p className="mt-1 text-foreground">{selectedExamDetails.statusLabel}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold uppercase tracking-wider text-muted-foreground">Tipo</p>
+                    <p className="mt-1 text-foreground">{selectedExamDetails.tipoExame || selectedExamDetails.grupoComparacao || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold uppercase tracking-wider text-muted-foreground">Arquivo</p>
+                    <p className="mt-1 truncate text-foreground">{selectedExamDetails.nomeArquivo || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold uppercase tracking-wider text-muted-foreground">Código TUSS</p>
+                    <p className="mt-1 text-foreground">{selectedExamDetails.codigoTuss || "-"}</p>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border border-border bg-background/60 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Analitos</p>
+                    <p className="mt-2 text-2xl font-semibold text-foreground">{selectedExamAnalytes.length}</p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background/60 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Comparáveis</p>
+                    <p className="mt-2 text-2xl font-semibold text-foreground">{selectedExamTrendRows.length}</p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background/60 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Arquivo original</p>
+                    <p className="mt-2 text-sm font-medium text-foreground">{selectedExamDetails.url ? "Disponível" : "Indisponível"}</p>
+                  </div>
+                </div>
+
+                {selectedExamDetails.observacoes ? (
+                  <p className="mt-3 rounded-lg border border-border bg-muted/20 p-3 text-sm leading-relaxed text-foreground/80">{selectedExamDetails.observacoes}</p>
+                ) : null}
+              </TabsContent>
+
+              <TabsContent value="evolucao" className="min-h-0 flex-1 overflow-y-auto pr-1">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-foreground/80">Evolução temporal</h3>
+                  <span className="text-xs text-muted-foreground">{selectedExamTrendRows.length ? `${selectedExamTrendRows.length} parâmetros comparáveis` : "Sem histórico comparável"}</span>
+                </div>
+
+                {selectedExamTrendRows.length > 0 ? (
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {selectedExamTrendRows.map((trend) => {
+                      const values = trend.points.map((point) => point.value);
+                      const min = Math.min(...values);
+                      const max = Math.max(...values);
+                      const range = max - min || 1;
+
+                      return (
+                        <div key={trend.parametro} className="rounded-lg border border-border bg-background/60 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-foreground">{trend.parametro}</p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">{trend.points.length} medições {trend.unidade !== "-" ? `• ${trend.unidade}` : ""}</p>
+                            </div>
+                            <span
+                              className={cn(
+                                "shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-medium",
+                                trend.trendTone === "good" && "border-emerald-500/20 bg-emerald-500/10 text-emerald-600",
+                                trend.trendTone === "bad" && "border-red-500/20 bg-red-500/10 text-red-600",
+                                trend.trendTone === "warning" && "border-amber-500/20 bg-amber-500/10 text-amber-600",
+                                trend.trendTone === "neutral" && "border-border bg-muted text-muted-foreground",
+                              )}
+                            >
+                              {trend.trendLabel}
+                            </span>
+                          </div>
+
+                          <div className="mt-4 flex h-24 items-end gap-2 border-b border-border/60 pb-2">
+                            {trend.points.map((point) => {
+                              const height = 18 + ((point.value - min) / range) * 62;
+
+                              return (
+                                <div key={`${trend.parametro}-${point.examId}`} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+                                  <div
+                                    className={cn(
+                                      "w-full max-w-9 rounded-t-md",
+                                      trend.trendTone === "good" && "bg-emerald-500/80",
+                                      trend.trendTone === "bad" && "bg-red-500/80",
+                                      trend.trendTone === "warning" && "bg-amber-500/80",
+                                      trend.trendTone === "neutral" && "bg-theme-primary/70",
+                                    )}
+                                    style={{ height }}
+                                    title={`${point.label}: ${point.displayValue}`}
+                                  />
+                                  <span className="max-w-full truncate text-[10px] text-muted-foreground">{point.displayValue}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+                            <span>Inicial: <strong className="text-foreground">{trend.points[0]?.displayValue}</strong></span>
+                            <span>Atual: <strong className="text-foreground">{trend.points.at(-1)?.displayValue}</strong></span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-border bg-muted/20 px-4 py-4 text-sm text-muted-foreground">
+                    Ainda não há medições numéricas repetidas deste exame para montar uma linha temporal.
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="analitos" className="min-h-0 flex-1 overflow-hidden">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-foreground/80">Analitos extraídos</h3>
+                  <span className="text-xs text-muted-foreground">{selectedExamAnalytes.length ? `${selectedExamAnalytes.length} itens` : "Sem tabela estruturada"}</span>
+                </div>
+
+                {selectedExamAnalytes.length > 0 ? (
+                  <div className="h-[54vh] overflow-auto rounded-lg border border-border">
+                    <table className="w-full min-w-[760px] text-left text-xs">
+                      <thead className="sticky top-0 z-10 bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2 font-bold">Parâmetro</th>
+                          <th className="px-3 py-2 font-bold">Resultado</th>
+                          <th className="px-3 py-2 font-bold">Unidade</th>
+                          <th className="px-3 py-2 font-bold">Referência</th>
+                          <th className="px-3 py-2 font-bold">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/60">
+                        {selectedExamAnalytes.map((row, index) => (
+                          <tr key={`${row.parametro}-${index}`} className="bg-background/60">
+                            <td className="px-3 py-2 font-medium text-foreground">{row.parametro}</td>
+                            <td className="px-3 py-2 text-foreground/90">{row.resultado}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{row.unidade}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{row.referencia}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{row.status}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-border bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
+                    Nenhum analito estruturado foi encontrado para este exame.
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="texto" className="min-h-0 flex-1 overflow-y-auto pr-1">
+                {selectedExamDetails.observacoes ? (
+                  <p className="mb-3 rounded-lg border border-border bg-muted/20 p-3 text-sm leading-relaxed text-foreground/80">{selectedExamDetails.observacoes}</p>
+                ) : null}
+                {selectedExamDetails.textoExtraido ? (
+                  <pre className="max-h-[58vh] overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-background p-3 text-xs leading-relaxed text-muted-foreground">
+                    {selectedExamDetails.textoExtraido}
+                  </pre>
+                ) : (
+                  <div className="rounded-lg border border-border bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
+                    Nenhum texto extraído disponível para este exame.
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          ) : null}
+
+          <DialogFooter className="shrink-0 border-t border-border/60 pt-3">
+            {selectedExamDetails?.url ? (
+              <Button type="button" variant="outline" className="gap-2" onClick={() => window.open(selectedExamDetails.url, "_blank", "noopener,noreferrer")}>
+                Abrir original
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Button>
+            ) : null}
+            <Button type="button" onClick={() => setSelectedExamDetails(null)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isRecordingConsentDialogOpen} onOpenChange={setIsRecordingConsentDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Gravação com IA</DialogTitle>
+            <DialogDescription>
+              A conversa será gravada, enviada para transcrição e usada para gerar um resumo clínico que precisa ser revisado antes de entrar no prontuário.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-700">
+              Confirme verbalmente com o paciente antes de iniciar. A gravação ficará vinculada ao prontuário selecionado.
+            </div>
+
+            <label className="flex items-start gap-2 rounded-lg border border-border bg-muted/20 p-3 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-theme-primary"
+                checked={isRecordingConsentConfirmed}
+                onChange={(event) => setIsRecordingConsentConfirmed(event.target.checked)}
+              />
+              <span className="leading-relaxed text-foreground/80">
+                Confirmo que o paciente autorizou a gravação desta conversa para fins de documentação clínica.
+              </span>
+            </label>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsRecordingConsentDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" className="gap-2" onClick={startConsultationRecording} disabled={!isRecordingConsentConfirmed}>
+              <Mic className="h-4 w-4" />
+              Iniciar gravação
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isFinalizeDialogOpen} onOpenChange={setIsFinalizeDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{medicalRecordStatus === "finalized" ? "Consulta já finalizada" : "Finalizar consulta"}</DialogTitle>
+            <DialogDescription>
+              {medicalRecordStatus === "finalized"
+                ? "Este prontuário já está marcado como finalizado. Você pode salvar novamente o estado atual."
+                : "O conteúdo atual do prontuário será salvo e marcado como finalizado."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
+            <p className="font-medium text-foreground">{selectedContact ? getDisplayName(selectedContact) : "Paciente"}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{selectedAppointmentLabel || "Agendamento selecionado"}</p>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsFinalizeDialogOpen(false)} disabled={isFinalizingMedicalRecord}>
+              Cancelar
+            </Button>
+            <Button type="button" className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700" onClick={handleFinalizeMedicalRecord} disabled={isFinalizingMedicalRecord}>
+              {isFinalizingMedicalRecord ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              {isFinalizingMedicalRecord ? "Finalizando..." : "Confirmar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

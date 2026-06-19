@@ -19,6 +19,7 @@ type CreateTaskBody = {
   observations?: unknown
   creatorName?: unknown
   creatorUserId?: unknown
+  creatorEmail?: unknown
 }
 
 type UpdateTaskBody = {
@@ -222,6 +223,10 @@ function isAirtableRecordId(value: string) {
   return /^rec[a-zA-Z0-9]+$/.test(value)
 }
 
+function getEmailField(fields: Record<string, unknown>) {
+  return getStringField(fields, ["Email", "email", "E-mail", "e-mail", "Login", "login"])
+}
+
 function getBrazilPhoneVariants(value: string) {
   const digits = onlyDigits(value)
   const variants = new Set<string>()
@@ -308,6 +313,17 @@ async function fetchRecordsByIds(table: string, ids: string[]) {
   }
 
   return records
+}
+
+async function findUserIdByEmail(email: string) {
+  const normalizedEmail = email.trim().toLowerCase()
+  if (!normalizedEmail) return ""
+
+  const params = new URLSearchParams({ pageSize: "100" })
+  const records = await fetchAirtableRecords(USERS_TABLE, params)
+  const record = records.find((candidate) => getEmailField(candidate.fields ?? {}).toLowerCase() === normalizedEmail)
+
+  return record?.id ?? ""
 }
 
 function getLinkedTaskIdsFromContact(fields: Record<string, unknown>) {
@@ -500,7 +516,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ tasks: filterTasksForViewer(taskListCache.tasks, viewerUserId, viewerRole) })
     }
 
-    const contactId = chatId || contactPhone ? await findContactId({ chatId, contactPhone }) : ""
+    const contactId = chatId || contactPhone ? await findContactId({ chatId, contactPhone }).catch(() => "") : ""
     if ((chatId || contactPhone) && !contactId) {
       return NextResponse.json({ tasks: [] })
     }
@@ -584,16 +600,16 @@ export async function PATCH(request: Request) {
   const subject = getString(body.subject)
   const observations = getString(body.observations)
 
-  if (!type || !status || !dueDate || !responsibleUserId || !subject) {
-    return NextResponse.json({ message: "Preencha tipo, status, prazo, responsável e assunto." }, { status: 400 })
+  if (!type || !status || !responsibleUserId || !subject) {
+    return NextResponse.json({ message: "Preencha tipo, status, responsável e assunto." }, { status: 400 })
   }
 
   if (!isAirtableRecordId(responsibleUserId)) {
     return NextResponse.json({ message: "Usuário responsável inválido." }, { status: 400 })
   }
 
-  const dueDateValue = new Date(`${dueDate}T00:00:00`)
-  if (Number.isNaN(dueDateValue.getTime())) {
+  const dueDateValue = dueDate ? new Date(`${dueDate}T00:00:00`) : null
+  if (dueDateValue && Number.isNaN(dueDateValue.getTime())) {
     return NextResponse.json({ message: "Data invalida." }, { status: 400 })
   }
 
@@ -603,7 +619,7 @@ export async function PATCH(request: Request) {
     const record = await updateTask(id, {
       Tipo: type,
       Status: status,
-      Data_prazo: dueDate,
+      Data_prazo: dueDate || null,
       User: [responsibleUserId],
       Assunto: subject,
       Observações: observations,
@@ -638,9 +654,10 @@ export async function POST(request: Request) {
   const observations = getString(body.observations)
   const creatorName = getString(body.creatorName)
   const creatorUserId = getString(body.creatorUserId)
+  const creatorEmail = getString(body.creatorEmail)
 
-  if (!type || !status || !createdAt || !dueDate || !responsibleUserId || !subject || !creatorName || !creatorUserId) {
-    return NextResponse.json({ message: "Preencha tipo, status, prazo, responsável, criador e assunto." }, { status: 400 })
+  if (!type || !status || !createdAt || !responsibleUserId || !subject || !creatorName) {
+    return NextResponse.json({ message: "Preencha tipo, status, responsável, criador e assunto." }, { status: 400 })
   }
 
   if (!isAirtableRecordId(responsibleUserId)) {
@@ -652,30 +669,35 @@ export async function POST(request: Request) {
   }
 
   const createdAtDate = new Date(createdAt)
-  const dueDateValue = new Date(`${dueDate}T00:00:00`)
-  if (Number.isNaN(createdAtDate.getTime()) || Number.isNaN(dueDateValue.getTime())) {
+  const dueDateValue = dueDate ? new Date(`${dueDate}T00:00:00`) : null
+  if (Number.isNaN(createdAtDate.getTime()) || (dueDateValue && Number.isNaN(dueDateValue.getTime()))) {
     return NextResponse.json({ message: "Data invalida." }, { status: 400 })
   }
 
   try {
     taskListCache = null
 
-    const contactId = await findContactId({ chatId, contactPhone })
-    if (!contactId) {
-      return NextResponse.json({ message: "Contato não encontrado no Airtable para vincular ao aviso/tarefa." }, { status: 404 })
+    const resolvedCreatorUserId = creatorUserId || (creatorEmail ? await findUserIdByEmail(creatorEmail) : "")
+    if (!resolvedCreatorUserId) {
+      return NextResponse.json(
+        { message: "Usuário criador não encontrado no Airtable. Verifique se o usuário logado está cadastrado na tabela User." },
+        { status: 400 },
+      )
     }
+
+    const contactId = chatId || contactPhone ? await findContactId({ chatId, contactPhone }) : ""
 
     const fields: Record<string, unknown> = {
       Tipo: type,
       Status: status,
       "Data e Hora": createdAtDate.toISOString(),
-      Data_prazo: dueDate,
-      Contato: [contactId],
       User: [responsibleUserId],
-      User_criador: [creatorUserId],
+      User_criador: [resolvedCreatorUserId],
       Assunto: subject,
     }
 
+    if (dueDate) fields.Data_prazo = dueDate
+    if (contactId) fields.Contato = [contactId]
     if (observations) fields["Observações"] = observations
 
     const record = await createTask(fields)

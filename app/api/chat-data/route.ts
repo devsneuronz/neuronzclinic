@@ -12,6 +12,7 @@ const CHAT_SELECT = [
   "cidade_residencia",
   "cidade_desejada",
   "email_contato",
+  "ida_contato",
   "url_foto_perfil",
   "text_last_message",
   "last_message_time",
