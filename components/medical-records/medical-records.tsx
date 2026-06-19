@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   ChevronRight,
   ClipboardX,
+  AlertCircle,
   ExternalLink,
   FilePlus,
   FileText,
@@ -25,6 +26,7 @@ import {
   Phone,
   Search,
   Sparkles,
+  Square,
   Stethoscope,
   UserX,
 } from "lucide-react";
@@ -106,10 +108,35 @@ type MedicalRecord = {
   status: string | null;
   content_html: string | null;
   content_json: unknown;
+  ai_transcription?: string | null;
+  ai_summary?: string | null;
   updated_at: string;
 };
 
 type SaveStatus = "idle" | "loading" | "unsaved" | "saving" | "saved" | "error";
+type RecordingStatus = "idle" | "recording" | "uploading" | "processing" | "processed" | "error";
+
+function formatRecordingTime(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function summaryToHtml(summary: string) {
+  return `<section><h2>Resumo gerado por IA</h2>${escapeHtml(summary)
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${paragraph.replace(/\n/g, "<br />")}</p>`)
+    .join("")}<p><em>Conteúdo gerado por IA e revisado pelo profissional responsável.</em></p></section>`;
+}
 
 export interface Exame {
   id: string;
@@ -418,12 +445,24 @@ export default function MedicalRecords() {
   const [medicalRecordSaveStatus, setMedicalRecordSaveStatus] = useState<SaveStatus>("idle");
   const [examUploadStatus, setExamUploadStatus] = useState<SaveStatus>("idle");
   const [examUploadMessage, setExamUploadMessage] = useState("");
+  const [recordingStatus, setRecordingStatus] = useState<RecordingStatus>("idle");
+  const [recordingMessage, setRecordingMessage] = useState("");
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [isRecordingConsentDialogOpen, setIsRecordingConsentDialogOpen] = useState(false);
+  const [isRecordingConsentConfirmed, setIsRecordingConsentConfirmed] = useState(false);
+  const [aiSummary, setAiSummary] = useState("");
+  const [aiTranscription, setAiTranscription] = useState("");
   const [selectedExamDetails, setSelectedExamDetails] = useState<Exame | null>(null);
   const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = useState(false);
   const [isFinalizingMedicalRecord, setIsFinalizingMedicalRecord] = useState(false);
   const [currentOffset, setCurrentOffset] = useState(0);
   const [hasMorePatients, setHasMorePatients] = useState(true);
   const examFileInputRef = useRef<HTMLInputElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordingTimerRef = useRef<number | null>(null);
+  const recordingSecondsRef = useRef(0);
   const lastSavedHtmlRef = useRef("");
   const LIMIT_PER_PAGE = 100;
 
@@ -567,8 +606,93 @@ export default function MedicalRecords() {
   const dadosExames = selectedPatient ? exams : examesPlaceholder;
   const selectedAppointmentDetails = appointments.find((appointment) => appointment.id === selectedAppointment);
   const selectedAppointmentLabel = selectedAppointmentDetails?.data || selectedAppointment;
+  const currentUserEmail = user?.email || "";
   const selectedExamAnalytes = useMemo(() => normalizeAnalyteRows(selectedExamDetails?.analitos), [selectedExamDetails]);
   const selectedExamTrendRows = useMemo(() => buildExamTrendRows(exams, selectedExamDetails), [exams, selectedExamDetails]);
+
+  const stopRecordingResources = useCallback(() => {
+    if (recordingTimerRef.current) {
+      window.clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recordingStreamRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      }
+      stopRecordingResources();
+    };
+  }, [stopRecordingResources]);
+
+  const buildMedicalRecordPayload = useCallback(
+    (status = medicalRecordStatus) => {
+      if (!selectedContact || !selectedAppointment) return null;
+
+      return {
+        id: medicalRecordId || undefined,
+        contactChatId: selectedContact.chat_id,
+        contactAirtableId: selectedContact.ida_contato || null,
+        contactName: getDisplayName(selectedContact),
+        contactPhone: getContactPhone(selectedContact),
+        appointmentAirtableId: selectedAppointment,
+        professionalAirtableId: selectedAppointmentDetails?.medicoId || null,
+        professionalName: selectedAppointmentDetails?.medico || null,
+        title: selectedAppointmentLabel || "Prontuário clínico",
+        status,
+        contentHtml: editorContentHtml,
+        contentJson: editorContentJson,
+        metadata: {
+          appointmentLabel: selectedAppointmentLabel,
+          procedure: selectedAppointmentDetails?.procedimento || null,
+          attendanceMode: selectedAppointmentDetails?.tipo || null,
+        },
+        userEmail: currentUserEmail || null,
+      };
+    },
+    [
+      editorContentHtml,
+      editorContentJson,
+      medicalRecordId,
+      medicalRecordStatus,
+      selectedAppointment,
+      selectedAppointmentDetails,
+      selectedAppointmentLabel,
+      selectedContact,
+      currentUserEmail,
+    ],
+  );
+
+  const saveMedicalRecordNow = useCallback(
+    async (status = medicalRecordStatus) => {
+      const payload = buildMedicalRecordPayload(status);
+      if (!payload) throw new Error("Selecione um paciente e um agendamento antes de salvar o prontuário.");
+
+      setMedicalRecordSaveStatus("saving");
+
+      const response = await fetch("/api/medical-records", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = (await response.json().catch(() => ({}))) as { record?: MedicalRecord; message?: string };
+
+      if (!response.ok) throw new Error(data.message || "Não foi possível salvar o prontuário.");
+
+      const savedId = data.record?.id || medicalRecordId;
+      setMedicalRecordId(savedId);
+      setMedicalRecordStatus(data.record?.status || status);
+      lastSavedHtmlRef.current = editorContentHtml;
+      setMedicalRecordSaveStatus("saved");
+
+      return savedId;
+    },
+    [buildMedicalRecordPayload, editorContentHtml, medicalRecordId, medicalRecordStatus],
+  );
 
   const reloadExams = useCallback(async () => {
     if (!selectedContact) return;
@@ -592,6 +716,13 @@ export default function MedicalRecords() {
       setMedicalRecordStatus("draft");
       setEditorContentHtml("");
       setEditorContentJson(null);
+      setAiSummary("");
+      setAiTranscription("");
+      setRecordingStatus("idle");
+      setRecordingMessage("");
+      setRecordingSeconds(0);
+      recordingSecondsRef.current = 0;
+      stopRecordingResources();
       lastSavedHtmlRef.current = "";
       setMedicalRecordSaveStatus("idle");
       return;
@@ -616,6 +747,10 @@ export default function MedicalRecords() {
         setMedicalRecordStatus(record?.status || "draft");
         setEditorContentHtml(html);
         setEditorContentJson(record?.content_json ?? null);
+        setAiSummary(record?.ai_summary || "");
+        setAiTranscription(record?.ai_transcription || "");
+        setRecordingStatus(record?.ai_summary ? "processed" : "idle");
+        setRecordingMessage(record?.ai_summary ? "Resumo de IA disponível para revisão." : "");
         lastSavedHtmlRef.current = html;
         setMedicalRecordSaveStatus(record ? "saved" : "idle");
       } catch (error) {
@@ -625,6 +760,8 @@ export default function MedicalRecords() {
           setMedicalRecordStatus("draft");
           setEditorContentHtml("");
           setEditorContentJson(null);
+          setAiSummary("");
+          setAiTranscription("");
           lastSavedHtmlRef.current = "";
           setMedicalRecordSaveStatus("error");
         }
@@ -636,7 +773,7 @@ export default function MedicalRecords() {
     return () => {
       ignore = true;
     };
-  }, [selectedAppointment, selectedContact]);
+  }, [selectedAppointment, selectedContact, stopRecordingResources]);
 
   useEffect(() => {
     if (!selectedContact || !selectedAppointment || medicalRecordSaveStatus === "loading" || medicalRecordSaveStatus === "saving") return;
@@ -666,7 +803,7 @@ export default function MedicalRecords() {
               procedure: selectedAppointmentDetails?.procedimento || null,
               attendanceMode: selectedAppointmentDetails?.tipo || null,
             },
-            userEmail: user?.email || null,
+            userEmail: currentUserEmail || null,
           }),
         });
         const data = (await response.json().catch(() => ({}))) as { record?: MedicalRecord; message?: string };
@@ -693,7 +830,7 @@ export default function MedicalRecords() {
     selectedAppointmentDetails,
     selectedAppointmentLabel,
     selectedContact,
-    user?.email,
+    currentUserEmail,
   ]);
 
   const handleFinalizeMedicalRecord = async () => {
@@ -724,7 +861,7 @@ export default function MedicalRecords() {
             procedure: selectedAppointmentDetails?.procedimento || null,
             attendanceMode: selectedAppointmentDetails?.tipo || null,
           },
-          userEmail: user?.email || null,
+          userEmail: currentUserEmail || null,
         }),
       });
       const data = (await response.json().catch(() => ({}))) as { record?: MedicalRecord; message?: string };
@@ -749,6 +886,160 @@ export default function MedicalRecords() {
     }
   };
 
+  const handleRecordingComplete = useCallback(
+    async (blob: Blob) => {
+      stopRecordingResources();
+
+      if (!selectedContact || !selectedAppointment) {
+        setRecordingStatus("error");
+        setRecordingMessage("Selecione um paciente e um agendamento antes de processar a gravação.");
+        return;
+      }
+
+      if (!blob.size) {
+        setRecordingStatus("error");
+        setRecordingMessage("A gravação ficou vazia. Tente gravar novamente.");
+        return;
+      }
+
+      try {
+        setRecordingStatus("uploading");
+        setRecordingMessage("Salvando a gravação da consulta...");
+
+        const savedRecordId = await saveMedicalRecordNow();
+        const file = new File([blob], `consulta-${Date.now()}.webm`, { type: blob.type || "audio/webm" });
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("medical_record_id", savedRecordId);
+        formData.append("user_email", currentUserEmail);
+        formData.append("consent_confirmed", "true");
+        formData.append("duration_seconds", String(recordingSecondsRef.current));
+
+        const uploadResponse = await fetch("/api/medical-records/recordings/upload", {
+          method: "POST",
+          body: formData,
+        });
+        const uploadData = (await uploadResponse.json().catch(() => ({}))) as { attachmentId?: string; message?: string };
+
+        if (!uploadResponse.ok || !uploadData.attachmentId) {
+          throw new Error(uploadData.message || "Não foi possível enviar a gravação.");
+        }
+
+        setRecordingStatus("processing");
+        setRecordingMessage("Transcrevendo e gerando o resumo com IA...");
+
+        const processResponse = await fetch("/api/medical-records/recordings/process", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            medicalRecordId: savedRecordId,
+            attachmentId: uploadData.attachmentId,
+          }),
+        });
+        const processData = (await processResponse.json().catch(() => ({}))) as {
+          transcription?: string;
+          summary?: string;
+          message?: string;
+        };
+
+        if (!processResponse.ok) {
+          throw new Error(processData.message || "Não foi possível processar a gravação.");
+        }
+
+        setAiTranscription(processData.transcription || "");
+        setAiSummary(processData.summary || "");
+        setRecordingStatus("processed");
+        setRecordingMessage("Resumo gerado. Revise antes de inserir no prontuário.");
+      } catch (error) {
+        console.error("Error processing consultation recording:", error);
+        setRecordingStatus("error");
+        setRecordingMessage(error instanceof Error ? error.message : "Não foi possível processar a gravação.");
+      } finally {
+        setRecordingSeconds(0);
+        recordingChunksRef.current = [];
+        mediaRecorderRef.current = null;
+      }
+    },
+    [currentUserEmail, saveMedicalRecordNow, selectedAppointment, selectedContact, stopRecordingResources],
+  );
+
+  const startConsultationRecording = async () => {
+    if (!selectedContact || !selectedAppointment || recordingStatus === "recording") return;
+
+    if (!isRecordingConsentConfirmed) {
+      setRecordingMessage("Confirme o consentimento do paciente para iniciar a gravação.");
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setRecordingStatus("error");
+      setRecordingMessage("Este navegador não permite gravação de áudio.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+      const recorder = new MediaRecorder(stream, { mimeType });
+
+      recordingChunksRef.current = [];
+      recordingStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordingChunksRef.current.push(event.data);
+      };
+
+      recorder.onstop = () => {
+        const recordingBlob = new Blob(recordingChunksRef.current, { type: mimeType });
+        void handleRecordingComplete(recordingBlob);
+      };
+
+      recorder.start();
+      setRecordingSeconds(0);
+      recordingSecondsRef.current = 0;
+      setRecordingStatus("recording");
+      setRecordingMessage("Gravação em andamento.");
+      setIsRecordingConsentDialogOpen(false);
+      recordingTimerRef.current = window.setInterval(() => {
+        recordingSecondsRef.current += 1;
+        setRecordingSeconds(recordingSecondsRef.current);
+      }, 1000);
+    } catch (error) {
+      stopRecordingResources();
+      console.error("Error starting consultation recording:", error);
+      setRecordingStatus("error");
+      setRecordingMessage("Não foi possível acessar o microfone.");
+    }
+  };
+
+  const stopConsultationRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") return;
+
+    setRecordingMessage("Finalizando gravação...");
+    recorder.stop();
+  };
+
+  const handleRecordingButtonClick = () => {
+    if (recordingStatus === "recording") {
+      stopConsultationRecording();
+      return;
+    }
+
+    setIsRecordingConsentConfirmed(false);
+    setIsRecordingConsentDialogOpen(true);
+  };
+
+  const applyAiSummaryToEditor = () => {
+    if (!aiSummary.trim()) return;
+
+    const appendedHtml = `${editorContentHtml || ""}${editorContentHtml ? "<hr />" : ""}${summaryToHtml(aiSummary)}`;
+    setEditorContentHtml(appendedHtml);
+    setEditorContentJson(null);
+    setMedicalRecordSaveStatus("unsaved");
+  };
+
   const handleExamFileSelected = async (file?: File | null) => {
     if (!file || !selectedContact || !selectedAppointment || examUploadStatus === "loading") return;
 
@@ -767,7 +1058,7 @@ export default function MedicalRecords() {
       formData.append("ida-agendamento", selectedAppointment);
       formData.append("appointment_label", selectedAppointmentLabel);
       if (medicalRecordId) formData.append("medical_record_id", medicalRecordId);
-      if (user?.email) formData.append("user_email", user.email);
+      if (currentUserEmail) formData.append("user_email", currentUserEmail);
 
       const response = await fetch("/api/medical-records/exams/upload", {
         method: "POST",
@@ -1042,10 +1333,73 @@ export default function MedicalRecords() {
                         Ações Clínicas e IA
                       </div>
 
-                      <Button disabled={!selectedAppointment} variant="outline" className="flex-1 xl:w-full xl:flex-initial justify-start gap-2.5 h-10 text-xs font-medium text-foreground/80 border-border min-w-[150px]">
-                        <Mic className="h-4 w-4 shrink-0 text-blue-500" />
-                        Gravação com IA
+                      <Button
+                        disabled={
+                          !selectedAppointment ||
+                          recordingStatus === "uploading" ||
+                          recordingStatus === "processing" ||
+                          medicalRecordSaveStatus === "loading"
+                        }
+                        variant="outline"
+                        className={cn(
+                          "flex-1 xl:w-full xl:flex-initial justify-start gap-2.5 h-10 text-xs font-medium text-foreground/80 border-border min-w-[150px]",
+                          recordingStatus === "recording" && "border-red-500/30 bg-red-500/10 text-red-600",
+                        )}
+                        onClick={handleRecordingButtonClick}
+                      >
+                        {recordingStatus === "recording" ? (
+                          <Square className="h-4 w-4 shrink-0 fill-red-500 text-red-500" />
+                        ) : recordingStatus === "uploading" || recordingStatus === "processing" ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-500" />
+                        ) : (
+                          <Mic className="h-4 w-4 shrink-0 text-blue-500" />
+                        )}
+                        {recordingStatus === "recording"
+                          ? `Parar ${formatRecordingTime(recordingSeconds)}`
+                          : recordingStatus === "uploading"
+                            ? "Enviando gravação"
+                            : recordingStatus === "processing"
+                              ? "IA processando"
+                              : "Gravação com IA"}
                       </Button>
+                      {recordingMessage ? (
+                        <p
+                          className={cn(
+                            "w-full px-1 text-[11px] leading-relaxed",
+                            recordingStatus === "error"
+                              ? "text-red-600"
+                              : recordingStatus === "processed"
+                                ? "text-emerald-600"
+                                : "text-muted-foreground",
+                          )}
+                        >
+                          {recordingStatus === "error" && <AlertCircle className="mr-1 inline h-3 w-3" />}
+                          {recordingMessage}
+                        </p>
+                      ) : null}
+                      {aiSummary ? (
+                        <div className="w-full rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 text-xs">
+                          <div className="mb-2 flex items-center gap-1.5 font-semibold text-foreground/90">
+                            <Sparkles className="h-3.5 w-3.5 text-blue-500" />
+                            Resumo da IA
+                          </div>
+                          <p className="line-clamp-6 whitespace-pre-line text-muted-foreground">{aiSummary}</p>
+                          <div className="mt-3 flex flex-col gap-2">
+                            <Button type="button" size="sm" className="h-8 gap-2 text-xs" onClick={applyAiSummaryToEditor}>
+                              <FileText className="h-3.5 w-3.5" />
+                              Inserir no prontuário
+                            </Button>
+                            {aiTranscription ? (
+                              <details className="rounded-md border border-border bg-background/70 p-2">
+                                <summary className="cursor-pointer text-[11px] font-medium text-muted-foreground">Ver transcrição</summary>
+                                <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">
+                                  {aiTranscription}
+                                </p>
+                              </details>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
                       <Button disabled={!selectedAppointment} variant="outline" className="flex-1 xl:w-full xl:flex-initial justify-start gap-2.5 h-10 text-xs font-medium text-foreground/80 border-border min-w-[150px]">
                         <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                         Nova Prescrição
@@ -1520,6 +1874,45 @@ export default function MedicalRecords() {
             ) : null}
             <Button type="button" onClick={() => setSelectedExamDetails(null)}>
               Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isRecordingConsentDialogOpen} onOpenChange={setIsRecordingConsentDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Gravação com IA</DialogTitle>
+            <DialogDescription>
+              A conversa será gravada, enviada para transcrição e usada para gerar um resumo clínico que precisa ser revisado antes de entrar no prontuário.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-700">
+              Confirme verbalmente com o paciente antes de iniciar. A gravação ficará vinculada ao prontuário selecionado.
+            </div>
+
+            <label className="flex items-start gap-2 rounded-lg border border-border bg-muted/20 p-3 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-theme-primary"
+                checked={isRecordingConsentConfirmed}
+                onChange={(event) => setIsRecordingConsentConfirmed(event.target.checked)}
+              />
+              <span className="leading-relaxed text-foreground/80">
+                Confirmo que o paciente autorizou a gravação desta conversa para fins de documentação clínica.
+              </span>
+            </label>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsRecordingConsentDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" className="gap-2" onClick={startConsultationRecording} disabled={!isRecordingConsentConfirmed}>
+              <Mic className="h-4 w-4" />
+              Iniciar gravação
             </Button>
           </DialogFooter>
         </DialogContent>

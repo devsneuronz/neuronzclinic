@@ -139,12 +139,28 @@ export async function PUT(request: NextRequest) {
 
     const payload = buildRecordPayload(body)
     let existingId = id
+    let existingMetadata: Record<string, unknown> | null = null
+
+    if (existingId) {
+      const lookup = await supabaseRequest(`medical_records?select=id,metadata&id=eq.${encodeURIComponent(existingId)}&limit=1`)
+      if (!lookup.ok) return NextResponse.json({ message: await lookup.text() }, { status: lookup.status })
+      const records = (await lookup.json()) as Array<{ id?: string; metadata?: Record<string, unknown> | null }>
+      existingMetadata = records[0]?.metadata ?? null
+    }
 
     if (!existingId && appointmentId) {
-      const lookup = await supabaseRequest(`medical_records?select=id&appointment_airtable_id=eq.${encodeURIComponent(appointmentId)}&limit=1`)
+      const lookup = await supabaseRequest(`medical_records?select=id,metadata&appointment_airtable_id=eq.${encodeURIComponent(appointmentId)}&limit=1`)
       if (!lookup.ok) return NextResponse.json({ message: await lookup.text() }, { status: lookup.status })
-      const records = (await lookup.json()) as Array<{ id?: string }>
+      const records = (await lookup.json()) as Array<{ id?: string; metadata?: Record<string, unknown> | null }>
       existingId = getString(records[0]?.id)
+      existingMetadata = records[0]?.metadata ?? null
+    }
+
+    if (existingMetadata) {
+      payload.metadata = {
+        ...existingMetadata,
+        ...(payload.metadata && typeof payload.metadata === "object" && !Array.isArray(payload.metadata) ? payload.metadata : {}),
+      }
     }
 
     const response = existingId

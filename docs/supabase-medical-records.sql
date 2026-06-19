@@ -1,6 +1,15 @@
 -- Proposta de schema para persistir prontuários clínicos.
 -- Execute manualmente no Supabase quando decidir ativar a persistência.
 -- O app deve acessar essas tabelas pelo backend com SUPABASE_SERVICE_ROLE_KEY.
+--
+-- Para gravação com IA:
+-- 1. Crie um bucket privado no Supabase Storage chamado "medical-records"
+--    ou configure MEDICAL_RECORDINGS_STORAGE_BUCKET com outro nome.
+-- 2. Configure OPENAI_API_KEY no ambiente do backend.
+-- 3. Opcionalmente ajuste:
+--    OPENAI_TRANSCRIPTION_MODEL=gpt-4o-transcribe-diarize
+--    OPENAI_FALLBACK_TRANSCRIPTION_MODEL=gpt-4o-transcribe
+--    OPENAI_SUMMARY_MODEL=gpt-4.1-mini
 
 create table if not exists public.medical_records (
   id uuid primary key default gen_random_uuid(),
