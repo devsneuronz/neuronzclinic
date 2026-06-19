@@ -104,6 +104,49 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = (await request.json().catch(() => null)) as RawNote | null
+
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ message: "Payload inválido." }, { status: 400 })
+    }
+
+    const id = getString(body.id)
+    const content = getString(body.content)
+
+    if (!id || !content) {
+      return NextResponse.json({ message: "id e content são obrigatórios." }, { status: 400 })
+    }
+
+    const response = await supabaseRequest(`chat_notes?id=eq.${encodeURIComponent(id)}&select=*`, {
+      method: "PATCH",
+      headers: {
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({ content }),
+    })
+
+    if (!response.ok) {
+      return NextResponse.json({ message: await response.text() }, { status: response.status })
+    }
+
+    const data = (await response.json()) as RawNote[]
+    const note = data[0]
+
+    if (!note) {
+      return NextResponse.json({ message: "Anotação não encontrada." }, { status: 404 })
+    }
+
+    return NextResponse.json({ note })
+  } catch (error) {
+    return NextResponse.json(
+      { message: error instanceof Error ? error.message : "Não foi possível editar a anotação." },
+      { status: 500 },
+    )
+  }
+}
+
 export async function DELETE(request: NextRequest) {
   try {
     const id = getString(request.nextUrl.searchParams.get("id"))

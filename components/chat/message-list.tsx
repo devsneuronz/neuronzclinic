@@ -1,10 +1,12 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import type { ChatRecord, MessageRecord, ScheduledMessageRecord } from "@/lib/supabase-rest";
-import { ArrowDown, Pin, Trash2 } from "lucide-react";
-import type { RefObject, UIEvent } from "react";
+import { ArrowDown, Check, Loader2, Pencil, Pin, Trash2, X } from "lucide-react";
+import type { KeyboardEvent, RefObject, UIEvent } from "react";
+import { useState } from "react";
 import { MessageBubble } from "./message-bubble";
 import { getDisplayName, getTimeLabel } from "./message-utils";
 import { ScheduledMessagesStrip } from "./scheduled-messages-strip";
@@ -49,6 +51,7 @@ type MessageListProps = {
   onDelete: (message: MessageRecord) => void;
   onCreateNote: (message: MessageRecord) => void;
   onDeleteNote: (noteId: string) => void;
+  onUpdateNote: (noteId: string, content: string) => Promise<void>;
   onExpandImage: (url: string, alt: string) => void;
   onScrollToMessage: (id: string) => void;
 
@@ -58,8 +61,70 @@ type MessageListProps = {
   isInternalNoteOpen: boolean;
 };
 
-function InternalNoteBubble({ chat, note, onScrollToMessage, onDeleteNote }: { chat: ChatRecord; note: InternalNote; onScrollToMessage: (id: string) => void; onDeleteNote: (noteId: string) => void }) {
+function InternalNoteBubble({
+  chat,
+  note,
+  onScrollToMessage,
+  onDeleteNote,
+  onUpdateNote,
+}: {
+  chat: ChatRecord;
+  note: InternalNote;
+  onScrollToMessage: (id: string) => void;
+  onDeleteNote: (noteId: string) => void;
+  onUpdateNote: (noteId: string, content: string) => Promise<void>;
+}) {
   const { user } = useCurrentUser();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState(note.content);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const trimmedEditDraft = editDraft.trim();
+
+  function beginEdit() {
+    setEditDraft(note.content);
+    setEditError(null);
+    setIsEditing(true);
+  }
+
+  function cancelEdit() {
+    if (isSavingEdit) return;
+    setEditDraft(note.content);
+    setEditError(null);
+    setIsEditing(false);
+  }
+
+  async function saveEdit() {
+    if (!trimmedEditDraft || trimmedEditDraft === note.content.trim()) {
+      cancelEdit();
+      return;
+    }
+
+    setIsSavingEdit(true);
+    setEditError(null);
+
+    try {
+      await onUpdateNote(note.id, trimmedEditDraft);
+      setIsEditing(false);
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : "Nao foi possivel editar a anotacao.");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  }
+
+  function handleEditKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelEdit();
+      return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      void saveEdit();
+    }
+  }
 
   return (
     <div id={`note-${note.id}`} className="mb-2 flex justify-center px-4">
@@ -81,7 +146,11 @@ function InternalNoteBubble({ chat, note, onScrollToMessage, onDeleteNote }: { c
           <span className="font-semibold text-amber-600">{user?.name}</span>
           <span className="text-yellow-950/50">anotação interna</span>
 
-          <button type="button" className="ml-3 flex h-6 w-6 items-center justify-center rounded-full text-yellow-950/45 transition hover:bg-red-500/10 hover:text-red-600" onClick={() => onDeleteNote(note.id)} aria-label="Apagar anotação">
+          <button type="button" className="ml-auto flex h-6 w-6 items-center justify-center rounded-full text-yellow-950/45 transition hover:bg-amber-500/15 hover:text-amber-700" onClick={beginEdit} aria-label="Editar anotação">
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+
+          <button type="button" className="flex h-6 w-6 items-center justify-center rounded-full text-yellow-950/45 transition hover:bg-red-500/10 hover:text-red-600" onClick={() => onDeleteNote(note.id)} aria-label="Apagar anotação">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -98,7 +167,31 @@ function InternalNoteBubble({ chat, note, onScrollToMessage, onDeleteNote }: { c
             </button>
           )}
 
-          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed font-normal">{note.content}</p>
+          {isEditing ? (
+            <div className="space-y-2">
+              <Textarea
+                value={editDraft}
+                onChange={(event) => setEditDraft(event.target.value)}
+                onKeyDown={handleEditKeyDown}
+                disabled={isSavingEdit}
+                autoFocus
+                className="min-h-24 resize-none border-amber-300/70 bg-white/55 text-sm text-yellow-950 placeholder:text-yellow-950/40 focus-visible:border-amber-500 focus-visible:ring-amber-400/25 dark:bg-white/70"
+              />
+              {editError && <p className="text-xs font-medium text-red-600">{editError}</p>}
+              <div className="flex justify-end gap-1.5">
+                <Button type="button" variant="ghost" size="sm" className="h-8 px-2 text-yellow-950/65 hover:bg-yellow-950/10 hover:text-yellow-950" onClick={cancelEdit} disabled={isSavingEdit}>
+                  <X className="h-3.5 w-3.5" />
+                  Cancelar
+                </Button>
+                <Button type="button" size="sm" className="h-8 bg-amber-500 px-2 text-white hover:bg-amber-600" onClick={() => void saveEdit()} disabled={isSavingEdit || !trimmedEditDraft}>
+                  {isSavingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  Salvar
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed font-normal">{note.content}</p>
+          )}
 
           <div className="mt-2 flex justify-end text-[9px] font-medium text-yellow-950/45 select-none">
             <span>{getTimeLabel(note.createdAt)}</span>
@@ -132,6 +225,7 @@ export function MessageList({
   onDelete,
   onCreateNote,
   onDeleteNote,
+  onUpdateNote,
   onExpandImage,
   onScrollToMessage,
   messages,
@@ -178,7 +272,7 @@ export function MessageList({
 
                   {group.items.map((item) =>
                     item.kind === "note" ? (
-                      <InternalNoteBubble key={item.note.id} chat={chat} note={item.note} onScrollToMessage={onScrollToMessage} onDeleteNote={onDeleteNote} />
+                      <InternalNoteBubble key={item.note.id} chat={chat} note={item.note} onScrollToMessage={onScrollToMessage} onDeleteNote={onDeleteNote} onUpdateNote={onUpdateNote} />
                     ) : (
                       <MessageBubble
                         key={item.message.id}

@@ -199,6 +199,11 @@ export interface CreateChatNoteInput {
   linkedMessageFromMe?: boolean | null
 }
 
+export interface UpdateChatNoteInput {
+  id: string
+  content: string
+}
+
 export interface ContactNoteRecord {
   id: string
   chat_id: string
@@ -811,6 +816,28 @@ export async function createChatNote({
 
   const data = (await response.json()) as { note?: ChatNoteRecord }
   if (!data.note) throw new Error("A anotação foi salva, mas a API não retornou o registro.")
+  return data.note
+}
+
+export async function updateChatNote({ id, content }: UpdateChatNoteInput) {
+  const response = await fetch("/api/chat-notes", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      id,
+      content,
+    }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || `Não foi possível editar a anotação (${response.status}).`)
+  }
+
+  const data = (await response.json()) as { note?: ChatNoteRecord }
+  if (!data.note) throw new Error("A anotação foi editada, mas a API não retornou o registro.")
   return data.note
 }
 

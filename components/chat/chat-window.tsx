@@ -15,6 +15,7 @@ import {
   fetchSavedAttachments,
   fetchScheduledMessages,
   scheduleMessage,
+  updateChatNote,
   updateScheduledMessage,
   type ChatNoteRecord,
   type SavedAttachmentRecord,
@@ -25,7 +26,7 @@ import type { MentionableUser } from "@/lib/user-roles";
 import { Upload } from "lucide-react";
 import type { DragEvent, FormEvent, UIEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Group, Panel, Separator } from "react-resizable-panels";
+import { Group, Panel, Separator, type GroupImperativeHandle } from "react-resizable-panels";
 import { AttachmentPreviewModal } from "./attachment-preview-modal";
 import { getAttachmentType } from "./chat-attachment-utils";
 import { ChatComposer } from "./chat-composer";
@@ -37,6 +38,13 @@ import { MessageList, type InternalNote, type TimelineItem } from "./message-lis
 import { getDateLabel, getMediaKind, getMessagePreviewText, isDeletedMessage } from "./message-utils";
 
 const FORWARD_TARGET_PAGE_SIZE = 50;
+const MESSAGE_COMPOSER_MIN_SIZE = 65;
+const MESSAGE_COMPOSER_MAX_SIZE = 180;
+const NOTE_COMPOSER_MIN_SIZE = 270;
+const NOTE_COMPOSER_MAX_SIZE = 340;
+const MESSAGE_LIST_PANEL_ID = "messages-panel";
+const MESSAGE_COMPOSER_PANEL_ID = "message-panel";
+
 interface ChatWindowProps {
   chat?: ChatRecord;
   messages: MessageRecord[];
@@ -205,6 +213,8 @@ export function ChatWindow({
   const recordingPausedRef = useRef(false);
   const forwardSearchRequestIdRef = useRef(0);
   const dragAttachmentDepthRef = useRef(0);
+  const messageGroupRef = useRef<GroupImperativeHandle | null>(null);
+  const messageGroupElementRef = useRef<HTMLDivElement | null>(null);
   const normalizedForwardSearch = forwardSearch.trim();
   const debouncedForwardSearch = useDebouncedValue(normalizedForwardSearch, 250);
   const forwardSearchQuery = normalizedForwardSearch ? debouncedForwardSearch.trim() : "";
@@ -213,8 +223,8 @@ export function ChatWindow({
   const { user } = useCurrentUser();
   const userName = user?.name ?? "Usuário";
 
-  const composerMinSize = isInternalNoteOpen ? 270 : 65;
-  const composerMaxSize = isInternalNoteOpen ? 340 : 180;
+  const composerMinSize = isInternalNoteOpen ? NOTE_COMPOSER_MIN_SIZE : MESSAGE_COMPOSER_MIN_SIZE;
+  const composerMaxSize = isInternalNoteOpen ? NOTE_COMPOSER_MAX_SIZE : MESSAGE_COMPOSER_MAX_SIZE;
 
   const messagesRef = useRef(messages);
   const currentChatIdRef = useRef(chat?.chat_id ?? null);
@@ -225,6 +235,23 @@ export function ChatWindow({
   useEffect(() => {
     currentChatIdRef.current = chat?.chat_id ?? null;
   }, [chat?.chat_id]);
+
+  useEffect(() => {
+    const frameId = window.requestAnimationFrame(() => {
+      const groupHeight = messageGroupElementRef.current?.clientHeight ?? 0;
+      if (!groupHeight) return;
+
+      const composerSize = Math.min(Math.max(composerMinSize, 0), groupHeight);
+      const composerPercentage = (composerSize / groupHeight) * 100;
+
+      messageGroupRef.current?.setLayout({
+        [MESSAGE_LIST_PANEL_ID]: 100 - composerPercentage,
+        [MESSAGE_COMPOSER_PANEL_ID]: composerPercentage,
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [composerMinSize]);
 
   const handleScrollToMessage = useCallback(
     async (targetId: string) => {
@@ -879,6 +906,26 @@ export function ChatWindow({
     }
   }
 
+  async function updateInternalNote(noteId: string, content: string) {
+    const previousNotes = internalNotes;
+    const currentNote = previousNotes.find((note) => note.id === noteId);
+    const trimmedContent = content.trim();
+
+    if (!currentNote || !trimmedContent) return;
+
+    setInternalNotes((current) => current.map((note) => (note.id === noteId ? { ...note, content: trimmedContent } : note)));
+    setMessageActionError(null);
+
+    try {
+      const savedNote = await updateChatNote({ id: noteId, content: trimmedContent });
+      const nextNote = mapChatNoteRecord(savedNote);
+      setInternalNotes((current) => mergeInternalNotes(current.filter((note) => note.id !== noteId), [nextNote]));
+    } catch (error) {
+      setInternalNotes(previousNotes);
+      throw error;
+    }
+  }
+
   function clearSelectedMessages() {
     setSelectedMessageIds(new Set());
     setMessageActionError(null);
@@ -1194,8 +1241,8 @@ export function ChatWindow({
           onCloseChat={onCloseChat}
           onOpenIATraining={onOpenIATraining}
         />
-        <Group orientation="vertical">
-          <Panel>
+        <Group elementRef={messageGroupElementRef} groupRef={messageGroupRef} orientation="vertical">
+          <Panel id={MESSAGE_LIST_PANEL_ID}>
             <MessageList
               chat={chat}
               groupedMessages={groupedMessages}
@@ -1224,6 +1271,7 @@ export function ChatWindow({
               onDelete={beginDelete}
               onCreateNote={openInternalNote}
               onDeleteNote={deleteInternalNote}
+              onUpdateNote={updateInternalNote}
               onExpandImage={(url: string, alt: string) => setExpandedImage({ url, alt })}
               onScrollToMessage={handleScrollToMessage}
               messages={scheduledMessages}
@@ -1233,7 +1281,7 @@ export function ChatWindow({
             />
           </Panel>
           <Separator className="h-1.25 bg-(--chat-muted)/50 transition-colors hover:bg-theme-primary/50 border-t " />
-          <Panel id="message-panel" defaultSize={composerMinSize} minSize={composerMinSize} maxSize={composerMaxSize} className="bg-(--chat-card) overflow-visible!">
+          <Panel id={MESSAGE_COMPOSER_PANEL_ID} defaultSize={composerMinSize} minSize={composerMinSize} maxSize={composerMaxSize} className="bg-(--chat-card) overflow-visible!">
             <ChatComposer
               chat={chat}
               draft={draft}
