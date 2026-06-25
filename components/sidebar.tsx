@@ -22,7 +22,7 @@ export const navItems = [
   { icon: Users, label: "Contatos", href: "/contatos", roles: ["admin", "manager", "user"] },
   { icon: Workflow, label: "Automação", href: "/rotinas", roles: ["admin", "manager"] },
   { icon: ClipboardList, label: "Prontuários", href: "/prontuarios", roles: ["admin", "manager"] },
-  { icon: Settings, label: "Configurações", href: "/configuracoes", roles: ["admin"] },
+  { icon: Settings, label: "Configurações", href: "/configuracoes", roles: ["admin", "manager", "user"] },
 ] satisfies Array<{
   icon: ComponentType<{ className?: string }>;
   label: string;
