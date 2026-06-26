@@ -325,17 +325,75 @@ interface ChatQueryOptions extends PaginationOptions {
   search?: string
 }
 
-async function apiGet<T>(path: string): Promise<T> {
-  const response = await fetch(path, {
-    cache: "no-store",
-  })
+const API_GET_TIMEOUT_MS = 12000
+const API_GET_RETRY_DELAYS_MS = [350, 900]
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => null)
-    throw new Error(error?.message || `Nao foi possivel carregar os dados (${response.status}).`)
+function wait(ms: number) {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, ms))
+}
+
+function isTransientStatus(status: number) {
+  return status === 408 || status === 429 || status >= 500
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError"
+}
+
+function isNonRetryableError(error: unknown) {
+  return error instanceof Error && "nonRetryable" in error
+}
+
+function getFetchErrorMessage(error: unknown, fallback: string) {
+  if (isAbortError(error)) return "A conexão demorou para responder. Tente abrir o chat novamente."
+  if (error instanceof TypeError && /fetch/i.test(error.message)) return "Falha de conexão ao carregar os dados. Tente abrir o chat novamente."
+  return error instanceof Error ? error.message : fallback
+}
+
+async function apiGet<T>(path: string): Promise<T> {
+  let lastError: unknown
+
+  for (let attempt = 0; attempt <= API_GET_RETRY_DELAYS_MS.length; attempt += 1) {
+    const controller = new AbortController()
+    const timeoutId = globalThis.setTimeout(() => controller.abort(), API_GET_TIMEOUT_MS)
+
+    try {
+      const response = await fetch(path, {
+        cache: "no-store",
+        signal: controller.signal,
+      })
+
+      if (response.ok) {
+        return response.json() as Promise<T>
+      }
+
+      const error = await response.json().catch(() => null)
+      lastError = new Error(error?.message || `Nao foi possivel carregar os dados (${response.status}).`)
+
+      if (!isTransientStatus(response.status) || attempt === API_GET_RETRY_DELAYS_MS.length) {
+        if (!isTransientStatus(response.status)) {
+          Object.assign(lastError as Error, { nonRetryable: true })
+        }
+        throw lastError
+      }
+    } catch (error) {
+      lastError = error
+
+      if (isNonRetryableError(error)) {
+        throw error
+      }
+
+      if (attempt === API_GET_RETRY_DELAYS_MS.length) {
+        throw new Error(getFetchErrorMessage(error, "Nao foi possivel carregar os dados."))
+      }
+    } finally {
+      globalThis.clearTimeout(timeoutId)
+    }
+
+    await wait(API_GET_RETRY_DELAYS_MS[attempt])
   }
 
-  return response.json() as Promise<T>
+  throw new Error(getFetchErrorMessage(lastError, "Nao foi possivel carregar os dados."))
 }
 
 export async function fetchChats({ limit = 50, offset = 0, search }: ChatQueryOptions = {}) {

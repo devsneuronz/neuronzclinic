@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server"
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 const CHAT_ID_BATCH_SIZE = 40
+const SUPABASE_TIMEOUT_MS = 12000
+const SUPABASE_RETRY_DELAYS_MS = [300, 800]
 const CHAT_SELECT = [
   "id",
   "chat_id",
@@ -151,25 +153,70 @@ function getChatIds(request: NextRequest) {
   )
 }
 
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isTransientStatus(status: number) {
+  return status === 408 || status === 429 || status >= 500
+}
+
+function isNonRetryableError(error: unknown) {
+  return error instanceof Error && "nonRetryable" in error
+}
+
 async function supabaseGet<T>(path: string): Promise<T> {
   if (!SUPABASE_REST_URL || !SUPABASE_KEY) {
     throw new Error("Missing Supabase REST configuration.")
   }
 
-  const response = await fetch(`${SUPABASE_REST_URL.replace(/\/$/, "")}/${path}`, {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-    },
-    cache: "no-store",
-  })
+  let lastError: unknown
 
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(error || `Supabase request failed with ${response.status}`)
+  for (let attempt = 0; attempt <= SUPABASE_RETRY_DELAYS_MS.length; attempt += 1) {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), SUPABASE_TIMEOUT_MS)
+
+    try {
+      const response = await fetch(`${SUPABASE_REST_URL.replace(/\/$/, "")}/${path}`, {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+        },
+        cache: "no-store",
+        signal: controller.signal,
+      })
+
+      if (response.ok) {
+        return response.json() as Promise<T>
+      }
+
+      const error = await response.text()
+      lastError = new Error(error || `Supabase request failed with ${response.status}`)
+
+      if (!isTransientStatus(response.status) || attempt === SUPABASE_RETRY_DELAYS_MS.length) {
+        if (!isTransientStatus(response.status)) {
+          Object.assign(lastError as Error, { nonRetryable: true })
+        }
+        throw lastError
+      }
+    } catch (error) {
+      lastError = error
+
+      if (isNonRetryableError(error)) {
+        throw error
+      }
+
+      if (attempt === SUPABASE_RETRY_DELAYS_MS.length) {
+        throw error
+      }
+    } finally {
+      clearTimeout(timeoutId)
+    }
+
+    await wait(SUPABASE_RETRY_DELAYS_MS[attempt])
   }
 
-  return response.json() as Promise<T>
+  throw lastError instanceof Error ? lastError : new Error("Supabase request failed")
 }
 
 async function fetchLatestMessageStatuses(chatIds: string[]): Promise<Record<string, LatestMessageStatus>> {

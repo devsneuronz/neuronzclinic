@@ -1223,7 +1223,13 @@ export default function ChatsPage() {
       })
       .catch((err) => {
         if (!isMounted) return;
-        replaceChatMessages(selectedChatRemoteId, []);
+        setMessagesByChatId((current) => {
+          if (selectedChatRemoteId in current) return current;
+          return {
+            ...current,
+            [selectedChatRemoteId]: [],
+          };
+        });
         setChatHasMoreMessages(selectedChatRemoteId, false);
         setError(err instanceof Error ? err.message : "Não foi possível carregar as mensagens.");
       });
@@ -1251,7 +1257,12 @@ export default function ChatsPage() {
         setChatHasMoreMessages(selectedChatRemoteId, data.length === MESSAGE_PAGE_SIZE);
       } catch (err) {
         if (!isMounted) return;
-        setError(err instanceof Error ? err.message : "Não foi possível sincronizar as mensagens.");
+        const hasVisibleMessages = (messagesByChatIdRef.current[selectedChatRemoteId] ?? []).length > 0;
+        if (!hasVisibleMessages) {
+          setError(err instanceof Error ? err.message : "Não foi possível sincronizar as mensagens.");
+        } else {
+          console.warn("Não foi possível sincronizar as mensagens do chat.", err);
+        }
       } finally {
         isRefreshing = false;
       }
