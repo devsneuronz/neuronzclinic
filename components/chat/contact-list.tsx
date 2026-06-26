@@ -17,7 +17,7 @@ import { getChatInterestTags, getChatTags, getReadableTextColor, resolveChatTags
 import { ChatRecord, LatestMessageStatus } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 import { formatBoldText } from "@/utils/utils";
-import { ChevronDown, ChevronUp, Feather, FilterX, HatGlasses, Loader2, Search, Send, SquarePlus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Feather, FilterX, HatGlasses, Loader2, Search, Send, SquarePlus } from "lucide-react";
 import type { FormEvent, UIEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
@@ -39,7 +39,6 @@ interface ContactListProps {
   onSelect?: (id: string) => void;
   onLoadMore?: () => void;
   onCreateContact?: (input: { name: string; phone: string; message: string }) => Promise<void>;
-  onDeleteChat?: (chat: ChatRecord) => Promise<void>;
 
   isSignatureMode: boolean;
   onToggleAssinatura: (checked: boolean) => void;
@@ -172,7 +171,6 @@ export function ContactList({
   onSelect,
   onLoadMore,
   onCreateContact,
-  onDeleteChat,
   isSignatureMode,
   onToggleAssinatura,
   isGhostMode,
@@ -197,9 +195,6 @@ export function ContactList({
   const [newContactError, setNewContactError] = useState("");
   const [isCreatingContact, setIsCreatingContact] = useState(false);
   const [expandedContactPhoto, setExpandedContactPhoto] = useState<{ url: string; alt: string } | null>(null);
-  const [pendingDeleteChat, setPendingDeleteChat] = useState<ChatRecord | null>(null);
-  const [isDeletingChat, setIsDeletingChat] = useState(false);
-  const [deleteChatError, setDeleteChatError] = useState("");
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const autoLoadKeyRef = useRef("");
 
@@ -435,22 +430,6 @@ export function ContactList({
     }
   }
 
-  async function handleDeleteChatConfirm() {
-    if (!pendingDeleteChat || !onDeleteChat) return;
-
-    setIsDeletingChat(true);
-    setDeleteChatError("");
-
-    try {
-      await onDeleteChat(pendingDeleteChat);
-      setPendingDeleteChat(null);
-    } catch (error) {
-      setDeleteChatError(error instanceof Error ? error.message : "Não foi possível apagar o chat.");
-    } finally {
-      setIsDeletingChat(false);
-    }
-  }
-
   function handleListScroll(event: UIEvent<HTMLDivElement>) {
     const target = event.currentTarget;
     const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
@@ -681,96 +660,79 @@ export function ContactList({
             const previewText = hasDraft ? draft : chat.text_last_message || "Sem mensagens recentes";
 
             return (
-              <div
+              <button
                 key={chat.id}
-                className={cn("group/chat-row flex w-full items-start gap-2 border-b border-border/50 p-3 text-left transition-colors hover:bg-theme-accent/30", selectedId === chat.id && "bg-theme-accent/10")}
+                onClick={() => onSelect?.(chat.id)}
+                className={cn("flex w-full items-start gap-3 border-b border-border/50 p-3 text-left transition-colors hover:bg-theme-accent/30", selectedId === chat.id && "bg-theme-accent/10")}
               >
-                <button type="button" onClick={() => onSelect?.(chat.id)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
+                <span
+                  className={cn("relative h-11 w-11 shrink-0 rounded-full", chat.url_foto_perfil && "cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2")}
+                  role={chat.url_foto_perfil ? "button" : undefined}
+                  tabIndex={chat.url_foto_perfil ? 0 : undefined}
+                  aria-label={chat.url_foto_perfil ? `Ampliar foto de ${name}` : undefined}
+                  onClick={(event) => {
+                    if (!chat.url_foto_perfil) return;
+                    event.stopPropagation();
+                    setExpandedContactPhoto({ url: chat.url_foto_perfil, alt: `Foto de ${name}` });
+                  }}
+                  onKeyDown={(event) => {
+                    if (!chat.url_foto_perfil || (event.key !== "Enter" && event.key !== " ")) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setExpandedContactPhoto({ url: chat.url_foto_perfil, alt: `Foto de ${name}` });
+                  }}
+                >
+                  <Avatar className="h-11 w-11">
+                    <AvatarImage src={chat.url_foto_perfil ?? undefined} alt={name} />
+                    <AvatarFallback className="bg-muted text-sm font-medium text-muted-foreground">{getAvatarInitials(name)}</AvatarFallback>
+                  </Avatar>
                   <span
-                    className={cn("relative h-11 w-11 shrink-0 rounded-full", chat.url_foto_perfil && "cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2")}
-                    role={chat.url_foto_perfil ? "button" : undefined}
-                    tabIndex={chat.url_foto_perfil ? 0 : undefined}
-                    aria-label={chat.url_foto_perfil ? `Ampliar foto de ${name}` : undefined}
-                    onClick={(event) => {
-                      if (!chat.url_foto_perfil) return;
-                      event.stopPropagation();
-                      setExpandedContactPhoto({ url: chat.url_foto_perfil, alt: `Foto de ${name}` });
-                    }}
-                    onKeyDown={(event) => {
-                      if (!chat.url_foto_perfil || (event.key !== "Enter" && event.key !== " ")) return;
-                      event.preventDefault();
-                      event.stopPropagation();
-                      setExpandedContactPhoto({ url: chat.url_foto_perfil, alt: `Foto de ${name}` });
-                    }}
-                  >
-                    <Avatar className="h-11 w-11">
-                      <AvatarImage src={chat.url_foto_perfil ?? undefined} alt={name} />
-                      <AvatarFallback className="bg-muted text-sm font-medium text-muted-foreground">{getAvatarInitials(name)}</AvatarFallback>
-                    </Avatar>
-                    <span
-                      className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card"
-                      style={{ backgroundColor: getChatStatusColor(chat) }}
-                      title={`Status: ${getChatStatusLabel(chat)}`}
-                      aria-label={`Status: ${getChatStatusLabel(chat)}`}
-                    />
-                  </span>
+                    className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card"
+                    style={{ backgroundColor: getChatStatusColor(chat) }}
+                    title={`Status: ${getChatStatusLabel(chat)}`}
+                    aria-label={`Status: ${getChatStatusLabel(chat)}`}
+                  />
+                </span>
 
-                  <span className="min-w-0 flex-1 overflow-hidden">
-                    <span className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium text-foreground">{name}</span>
-                      <span className="shrink-0 text-xs text-muted-foreground">{getTime(chat)}</span>
-                    </span>
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm font-medium text-foreground">{name}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{getTime(chat)}</span>
+                  </div>
 
-                    <span className="mt-0.5 flex items-center gap-1">
-                      {!hasDraft && chat.text_last_message && <MessageStatusIcon fromMe={chat.last_message_fromMe} status={latestStatus?.status} timestamp={latestStatus?.timestamp_msg ?? chat.last_message_time} />}
+                  <div className="mt-0.5 flex items-center gap-1">
+                    {!hasDraft && chat.text_last_message && <MessageStatusIcon fromMe={chat.last_message_fromMe} status={latestStatus?.status} timestamp={latestStatus?.timestamp_msg ?? chat.last_message_time} />}
 
-                      <span className="truncate text-sm text-muted-foreground">
-                        {hasDraft && <span className="font-medium text-theme-primary">Rascunho: </span>}
-                        {formatBoldText(previewText || chat.text_last_message || "Sem mensagens recentes")}
-                      </span>
+                    <p className="truncate text-sm text-muted-foreground">
+                      {hasDraft && <span className="font-medium text-theme-primary">Rascunho: </span>}
+                      {formatBoldText(previewText || chat.text_last_message || "Sem mensagens recentes")}
+                    </p>
 
-                      {!!chat.unread_count && <Badge className="ml-auto h-5 min-w-5 shrink-0 bg-green-500 px-1.5 text-[10px] font-medium text-white">{chat.unread_count <= 99 ? chat.unread_count : "+99"}</Badge>}
-                    </span>
+                    {!!chat.unread_count && <Badge className="ml-auto h-5 min-w-5 shrink-0 bg-green-500 px-1.5 text-[10px] font-medium text-white">{chat.unread_count <= 99 ? chat.unread_count : "+99"}</Badge>}
+                  </div>
 
-                    {tags.length > 0 && (
-                      <span className="mt-1.5 flex flex-wrap gap-1">
-                        {tags.map((tag) => (
-                          <Badge
-                            key={tag.id}
-                            className="h-4 border-0 bg-teal-600 px-1.5 text-[9px] font-medium leading-none text-white"
-                            style={
-                              tag.color
-                                ? {
-                                    backgroundColor: tag.color,
-                                    color: getReadableTextColor(tag.color),
-                                  }
-                                : undefined
-                            }
-                          >
-                            {tag.label}
-                          </Badge>
-                        ))}
-                      </span>
-                    )}
-                  </span>
-                </button>
-                {onDeleteChat && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="mt-1 h-8 w-8 shrink-0 text-muted-foreground opacity-100 hover:bg-destructive/10 hover:text-destructive sm:opacity-0 sm:group-hover/chat-row:opacity-100 sm:focus-visible:opacity-100"
-                    title="Apagar chat"
-                    aria-label={`Apagar chat de ${name}`}
-                    onClick={() => {
-                      setDeleteChatError("");
-                      setPendingDeleteChat(chat);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
+                  {tags.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {tags.map((tag) => (
+                        <Badge
+                          key={tag.id}
+                          className="h-4 border-0 bg-teal-600 px-1.5 text-[9px] font-medium leading-none text-white"
+                          style={
+                            tag.color
+                              ? {
+                                  backgroundColor: tag.color,
+                                  color: getReadableTextColor(tag.color),
+                                }
+                              : undefined
+                          }
+                        >
+                          {tag.label}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </button>
             );
           })
         )}
@@ -826,34 +788,6 @@ export function ContactList({
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={!!pendingDeleteChat}
-        onOpenChange={(open) => {
-          if (open || isDeletingChat) return;
-          setPendingDeleteChat(null);
-          setDeleteChatError("");
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Apagar chat</DialogTitle>
-            <DialogDescription>Este chat será removido da lista de conversas.</DialogDescription>
-          </DialogHeader>
-
-          <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm font-medium text-foreground">{pendingDeleteChat ? getDisplayName(pendingDeleteChat) : ""}</div>
-          {deleteChatError && <p className="text-sm text-destructive">{deleteChatError}</p>}
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setPendingDeleteChat(null)} disabled={isDeletingChat}>
-              Cancelar
-            </Button>
-            <Button type="button" variant="destructive" onClick={handleDeleteChatConfirm} disabled={isDeletingChat}>
-              {isDeletingChat ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-              Apagar
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
       {expandedContactPhoto && <ExpandedImageModal image={expandedContactPhoto} onClose={() => setExpandedContactPhoto(null)} />}

@@ -1865,7 +1865,6 @@ export default function ChatsPage() {
           }}
           onLoadMore={loadMoreChats}
           onCreateContact={handleCreateContact}
-          onDeleteChat={handleDeleteChat}
           isSignatureMode={effectiveSignatureMode}
           onToggleAssinatura={setIsAssinaturaMode}
           isGhostMode={effectiveGhostMode}
@@ -1892,6 +1891,8 @@ export default function ChatsPage() {
           onMarkAsUnread={handleMarkAsUnread}
           onReorderTags={handleReorderTags}
           onCommitTagOrder={handleCommitTagOrder}
+          onDeleteChat={handleDeleteChat}
+          canDeleteChat={canUseAdminChatModes}
           isMobile={true}
           trainingTrigger={trainingTrigger}
         />
@@ -1944,7 +1945,6 @@ export default function ChatsPage() {
         onSelect={handleSelectChat}
         onLoadMore={loadMoreChats}
         onCreateContact={handleCreateContact}
-        onDeleteChat={handleDeleteChat}
         isSignatureMode={effectiveSignatureMode}
         onToggleAssinatura={setIsAssinaturaMode}
         isGhostMode={effectiveGhostMode}
@@ -1997,6 +1997,8 @@ export default function ChatsPage() {
                 onMarkAsUnread={handleMarkAsUnread}
                 onReorderTags={handleReorderTags}
                 onCommitTagOrder={handleCommitTagOrder}
+                onDeleteChat={handleDeleteChat}
+                canDeleteChat={canUseAdminChatModes}
                 trainingTrigger={trainingTrigger}
               />
             </Panel>

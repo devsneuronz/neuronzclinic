@@ -1,12 +1,13 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { getChatStatusColor, type ChatStatusOption } from "@/lib/chat-status";
 import type { ChatTag } from "@/lib/chat-tags";
 import { ChatRecord } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
-import { Bot, Check, CheckCheck, ChevronDown, ChevronLeft, Copy, MessageSquareDashed, Pencil, Phone, X } from "lucide-react";
+import { Bot, Check, CheckCheck, ChevronDown, ChevronLeft, Copy, Loader2, MessageSquareDashed, Pencil, Phone, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ExpandedImageModal } from "../chat/expanded-image-modal";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
@@ -34,6 +35,8 @@ interface ContactDetailsProps {
   onMarkAsUnread?: () => void;
   onReorderTags?: (tags: ChatTag[]) => void;
   onCommitTagOrder?: (tags: ChatTag[]) => void;
+  onDeleteChat?: (chat: ChatRecord) => Promise<void>;
+  canDeleteChat?: boolean;
   isMobile?: boolean;
   trainingTrigger?: number;
 }
@@ -64,6 +67,8 @@ export function ContactDetails({
   onMarkAsUnread,
   onReorderTags,
   onCommitTagOrder,
+  onDeleteChat,
+  canDeleteChat = false,
   onChangeName,
   onChangeContactInfo,
   isMobile,
@@ -77,19 +82,23 @@ export function ContactDetails({
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
   const [expandedContactPhoto, setExpandedContactPhoto] = useState<{ url: string; alt: string } | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeletingChat, setIsDeletingChat] = useState(false);
+  const [deleteChatError, setDeleteChatError] = useState("");
   const hasContactPhoto = !!chat?.url_foto_perfil;
+  const canShowDeleteChat = canDeleteChat && !!chat && !!onDeleteChat;
 
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!chat?.ia_responde) {
-      setView("profile");
+      window.queueMicrotask(() => setView("profile"));
     }
   }, [chat?.ia_responde]);
 
   useEffect(() => {
     if (trainingTrigger! > 0) {
-      setView("training");
+      window.queueMicrotask(() => setView("training"));
     }
   }, [trainingTrigger]);
 
@@ -129,6 +138,22 @@ export function ContactDetails({
       console.error("Falha ao copiar o telefone: ", err);
     }
   };
+
+  async function handleDeleteChatConfirm() {
+    if (!chat || !onDeleteChat) return;
+
+    setIsDeletingChat(true);
+    setDeleteChatError("");
+
+    try {
+      await onDeleteChat(chat);
+      setIsDeleteDialogOpen(false);
+    } catch (error) {
+      setDeleteChatError(error instanceof Error ? error.message : "Não foi possível apagar o chat.");
+    } finally {
+      setIsDeletingChat(false);
+    }
+  }
 
   return (
     <div className="flex h-full w-full flex-col border-l border-border bg-card">
@@ -306,26 +331,72 @@ export function ContactDetails({
 
         <div className="flex-1 overflow-y-auto">
           {view === "profile" ? (
-            <ProfileView
-              key={chat?.id || "empty-contact"}
-              chat={chat}
-              contactPhone={contactPhone}
-              statusOptions={statusOptions}
-              tagOptions={tagOptions}
-              interestOptions={interestOptions}
-              onChangeStatus={onChangeStatus}
-              onToggleTag={onToggleTag}
-              onToggleInterest={onToggleInterest}
-              onChangeName={onChangeName}
-              onChangeContactInfo={onChangeContactInfo}
-              onReorderTags={onReorderTags}
-              onCommitTagOrder={onCommitTagOrder}
-            />
+            <>
+              <ProfileView
+                key={chat?.id || "empty-contact"}
+                chat={chat}
+                contactPhone={contactPhone}
+                statusOptions={statusOptions}
+                tagOptions={tagOptions}
+                interestOptions={interestOptions}
+                onChangeStatus={onChangeStatus}
+                onToggleTag={onToggleTag}
+                onToggleInterest={onToggleInterest}
+                onChangeName={onChangeName}
+                onChangeContactInfo={onChangeContactInfo}
+                onReorderTags={onReorderTags}
+                onCommitTagOrder={onCommitTagOrder}
+              />
+              {canShowDeleteChat && (
+                <div className="border-t border-border px-4 py-4">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="w-full justify-center"
+                    onClick={() => {
+                      setDeleteChatError("");
+                      setIsDeleteDialogOpen(true);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Apagar chat
+                  </Button>
+                </div>
+              )}
+            </>
           ) : (
             <IATrainingView chat={chat} contactPhone={contactPhone} />
           )}
         </div>
       </div>
+      <Dialog
+        open={isDeleteDialogOpen}
+        onOpenChange={(open) => {
+          if (isDeletingChat) return;
+          setIsDeleteDialogOpen(open);
+          if (!open) setDeleteChatError("");
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Apagar chat</DialogTitle>
+            <DialogDescription>Este chat será removido da lista de conversas.</DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm font-medium text-foreground">{getDisplayName(chat)}</div>
+          {deleteChatError && <p className="text-sm text-destructive">{deleteChatError}</p>}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsDeleteDialogOpen(false)} disabled={isDeletingChat}>
+              Cancelar
+            </Button>
+            <Button type="button" variant="destructive" onClick={handleDeleteChatConfirm} disabled={isDeletingChat}>
+              {isDeletingChat ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Apagar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {expandedContactPhoto && <ExpandedImageModal image={expandedContactPhoto} onClose={() => setExpandedContactPhoto(null)} />}
     </div>
   );
