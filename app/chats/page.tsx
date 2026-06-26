@@ -1074,6 +1074,59 @@ export default function ChatsPage() {
     [messagesByChatId, replaceChatMessages, selectedChatRemoteId, updateChatMessages],
   );
 
+  const handleDeleteChat = useCallback(
+    async (chatToDelete: ChatRecord) => {
+      const previousChats = chats;
+      const previousSearchChats = searchChats;
+      const previousMessagesByChatId = messagesByChatId;
+      const previousStoredTargetChatId = storedTargetChatId;
+      const wasSelected = selectedChatId === chatToDelete.id;
+
+      setChats((current) => current.filter((chat) => chat.id !== chatToDelete.id));
+      setSearchChats((current) => current.filter((chat) => chat.id !== chatToDelete.id));
+      setError(undefined);
+
+      if (wasSelected) {
+        setSelectedChatId(undefined);
+        setShowDetails(false);
+      }
+
+      if (chatToDelete.chat_id) {
+        setMessagesByChatId((current) => {
+          if (!(chatToDelete.chat_id in current)) return current;
+          const next = { ...current };
+          delete next[chatToDelete.chat_id];
+          return next;
+        });
+
+        if (storedTargetChatId === chatToDelete.chat_id) {
+          window.localStorage.removeItem(LAST_OPEN_CHAT_STORAGE_KEY);
+          setStoredTargetChatId("");
+        }
+      }
+
+      try {
+        await updateChatDetails({
+          id: chatToDelete.id,
+          archived: true,
+        });
+      } catch (err) {
+        setChats(previousChats);
+        setSearchChats(previousSearchChats);
+        setMessagesByChatId(previousMessagesByChatId);
+        if (wasSelected) setSelectedChatId(chatToDelete.id);
+        if (previousStoredTargetChatId) {
+          window.localStorage.setItem(LAST_OPEN_CHAT_STORAGE_KEY, previousStoredTargetChatId);
+        }
+        setStoredTargetChatId(previousStoredTargetChatId);
+        const message = err instanceof Error ? err.message : "Não foi possível apagar o chat.";
+        setError(message);
+        throw new Error(message);
+      }
+    },
+    [chats, messagesByChatId, searchChats, selectedChatId, storedTargetChatId],
+  );
+
   useEffect(() => {
     let isMounted = true;
 
@@ -1812,6 +1865,7 @@ export default function ChatsPage() {
           }}
           onLoadMore={loadMoreChats}
           onCreateContact={handleCreateContact}
+          onDeleteChat={handleDeleteChat}
           isSignatureMode={effectiveSignatureMode}
           onToggleAssinatura={setIsAssinaturaMode}
           isGhostMode={effectiveGhostMode}
@@ -1890,6 +1944,7 @@ export default function ChatsPage() {
         onSelect={handleSelectChat}
         onLoadMore={loadMoreChats}
         onCreateContact={handleCreateContact}
+        onDeleteChat={handleDeleteChat}
         isSignatureMode={effectiveSignatureMode}
         onToggleAssinatura={setIsAssinaturaMode}
         isGhostMode={effectiveGhostMode}

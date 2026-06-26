@@ -164,6 +164,10 @@ function buildPatch(body: RawChat, currentChat: RawChat) {
     patch.ia_responde = getBoolean(body.ia_responde)
   }
 
+  if ("archived" in body) {
+    patch.archived = getBoolean(body.archived)
+  }
+
   if ("unread_count" in body) {
     const unreadCount = getUnreadCount(body.unread_count)
 

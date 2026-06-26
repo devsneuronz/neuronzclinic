@@ -161,6 +161,7 @@ export interface UpdateChatDetailsInput {
   hex_status?: string | null
   finalizada?: boolean | null
   ia_responde?: boolean | null
+  archived?: boolean | null
   unread_count?: number | null
   tags?: Array<{ id: string; label: string; color?: string | null }>
   interestTags?: Array<{ id: string; label: string; color?: string | null }>
