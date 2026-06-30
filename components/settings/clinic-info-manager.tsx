@@ -7,9 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { getReadableTextColor } from "@/lib/chat-tags";
-import type { ClinicAssistantInfo, ClinicInfoPayload, ClinicProcedure } from "@/lib/clinic-info";
+import type { ClinicAssistantInfo, ClinicInfoPayload, ClinicProcedure, newClinicAssistantInfo } from "@/lib/clinic-info";
 import { Check, Loader2, Pencil, Plus, RefreshCw, Save, Stethoscope, Trash2, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { Separator } from "../ui/separator";
+import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
 type EditableProcedure = ClinicProcedure & {
@@ -25,6 +28,16 @@ const emptyAssistant: ClinicAssistantInfo = {
   name: "Lia",
   generalInfo: "",
   initialMessage: "",
+};
+
+const newEmptyAssistant: newClinicAssistantInfo = {
+  id: null,
+  name: "Lia",
+  generalInfo: "",
+  initialMessage: "",
+  gender: "ia",
+  style: "formal",
+  useEmojis: false,
 };
 
 const emptyProcedureForm = {
@@ -62,6 +75,8 @@ export function ClinicInfoManager() {
   const [deleteTarget, setDeleteTarget] = useState<EditableProcedure | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const [newAssistantDraft, setNewAssistantDraft] = useState<newClinicAssistantInfo>(newEmptyAssistant);
 
   const sortedProcedures = useMemo(() => procedures.slice().sort((a, b) => (a.interest || a.name).localeCompare(b.interest || b.name, "pt-BR", { sensitivity: "base" })), [procedures]);
 
@@ -286,6 +301,94 @@ export function ClinicInfoManager() {
               placeholder="Primeira mensagem enviada pela assistente ao iniciar um novo contato..."
               disabled={isSavingAssistant}
             />
+          </div>
+
+          {/* Divisor para separar a seção de dados da seção de comportamento */}
+          <Separator className="my-2 bg-border/60" />
+
+          {/* SEÇÃO: PERSONALIDADE E TOM DA IA */}
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Personalidade e Tom da IA</h3>
+              <p className="text-xs text-muted-foreground">Defina a identidade visual, gênero e comportamento linguístico da inteligência artificial.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Coluna 1: Identidade (Nome e Gênero) */}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="assistant-name" className="text-xs font-semibold text-foreground">
+                    Nome da IA
+                  </Label>
+                  <Input
+                    id="assistant-name"
+                    type="text"
+                    value={newAssistantDraft.name || ""}
+                    onChange={(event) => setNewAssistantDraft((current) => ({ ...current, name: event.target.value }))}
+                    placeholder="Ex: Lia, Dr. Robô, Amanda..."
+                    disabled={isSavingAssistant}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-foreground">Gênero de Tratamento</Label>
+                  <Tabs value={newAssistantDraft.gender || "ia"} onValueChange={(value) => setNewAssistantDraft((current) => ({ ...current, gender: value }))} className="w-full">
+                    <TabsList className="w-full gap-1.5 rounded-full h-9! bg-secondary/50 border border-border/40">
+                      <TabsTrigger value="female" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
+                        Mulher
+                      </TabsTrigger>
+                      <TabsTrigger value="male" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
+                        Homem
+                      </TabsTrigger>
+                      <TabsTrigger value="ia" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
+                        Neutro / IA
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="assistant-style" className="text-xs font-semibold text-foreground">
+                    Estilo de Conversa
+                  </Label>
+                  <Select value={newAssistantDraft.style || "informal"} onValueChange={(value) => setNewAssistantDraft((current) => ({ ...current, style: value }))} disabled={isSavingAssistant}>
+                    <SelectTrigger id="assistant-style" className="w-full">
+                      <SelectValue placeholder="Selecione o tom da conversa" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="formal">Formal (Uso de 'senhor/senhora', tom corporativo/médico clássico)</SelectItem>
+                      <SelectItem value="informal">Informal (Tom acolhedor, ágil, uso de 'você')</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div
+                  className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15"
+                  onClick={() => setNewAssistantDraft((current) => ({ ...current, useEmojis: !current.useEmojis }))}
+                >
+                  <div className="space-y-0.5">
+                    <Label htmlFor="assistant-emojis" className="text-xs font-semibold text-foreground">
+                      Permitir o uso de emojis
+                    </Label>
+                    <p className="text-[11px] text-muted-foreground leading-none">{newAssistantDraft.useEmojis ? "A IA usará reações visuais moderadas nas respostas." : "Respostas estritamente textuais e limpas."}</p>
+                  </div>
+                  <Switch
+                    id="assistant-emojis"
+                    checked={!!newAssistantDraft.useEmojis}
+                    onClick={(e) => {
+                      e.preventDefault();
+                    }}
+                    onCheckedChange={(checked) => {
+                      setNewAssistantDraft((current) => ({ ...current, useEmojis: checked }));
+                    }}
+                    disabled={isSavingAssistant}
+                    className="cursor-pointer"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
