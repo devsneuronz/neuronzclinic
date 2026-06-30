@@ -199,7 +199,7 @@ export function ContactList({
   const autoLoadKeyRef = useRef("");
 
   const statusOptions = useMemo(() => {
-    const catalogLabels = catalogStatusOptions.map((status) => status.label);
+    const catalogLabels = catalogStatusOptions.filter((status) => status.label && status.label !== "Aberta" && status.label !== "Finalizada").map((status) => status.label);
     return getUniqueOptions([...catalogLabels, ...chats.map(getChatStatusLabel)]);
   }, [catalogStatusOptions, chats]);
   const tagOptions = useMemo(() => getUniqueOptions(chats.flatMap((chat) => getChatTags(chat).map((tag) => tag.label))), [chats]);

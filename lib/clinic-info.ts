@@ -1,21 +1,31 @@
 export type ClinicAssistantInfo = {
-  id: string | null
-  name: string
-  generalInfo: string
-  initialMessage: string
-}
+  id: string | null;
+  name: string;
+  generalInfo: string;
+  initialMessage: string;
+};
+
+export type newClinicAssistantInfo = {
+  id: string | null;
+  name: string;
+  generalInfo: string;
+  initialMessage: string;
+  gender: string;
+  style: string;
+  useEmojis: boolean;
+};
 
 export type ClinicProcedure = {
-  id: string
-  name: string
-  interestId?: string
-  interest: string
-  interestColor?: string
-  description: string
-  active: boolean
-}
+  id: string;
+  name: string;
+  interestId?: string;
+  interest: string;
+  interestColor?: string;
+  description: string;
+  active: boolean;
+};
 
 export type ClinicInfoPayload = {
-  assistant: ClinicAssistantInfo
-  procedures: ClinicProcedure[]
-}
+  assistant: ClinicAssistantInfo;
+  procedures: ClinicProcedure[];
+};
