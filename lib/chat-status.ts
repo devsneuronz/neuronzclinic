@@ -33,7 +33,7 @@ export function normalizeStatusColor(value?: string | null) {
 }
 
 export function getChatStatusColor(chat?: Partial<ChatRecord>) {
-  return normalizeStatusColor(chat?.hex_status) || "#ff0000";
+  return normalizeStatusColor(chat?.hex_status) || "#db351f";
 }
 
 export function getChatStatusLabel(chat?: Partial<ChatRecord>) {

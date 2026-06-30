@@ -826,7 +826,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                     {status.label === "ADM" && <DropdownMenuSeparator />}
 
                     <DropdownMenuItem key={status.label} className={cn("cursor-pointer transition-colors", status.label === getChatStatusLabel(chat) && "bg-primary/10 text-primary font-semibold")} onClick={() => onChangeStatus?.(status)}>
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: status.color || "#ff0000" }} />
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: status.color || "#db351f" }} />
                       <span className="truncate">{status.label}</span>
                     </DropdownMenuItem>
                   </Fragment>

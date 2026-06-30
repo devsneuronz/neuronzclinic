@@ -12,7 +12,7 @@ import { fetchChats, type ChatRecord } from "@/lib/supabase-rest";
 import { fallbackTaskOptions, getTaskNoteAttachmentType, type StatusConfigMap, type Task, type TaskOptions, type TaskResolutionNote, type TaskStatus } from "@/lib/task";
 import { getDraTatianaResponsibleFilter, isDraTatianaUser } from "@/lib/user-access";
 import { cn } from "@/lib/utils";
-import { AlertCircle, CheckCircle2, Circle, CircleDashed, IdCardLanyard, Loader2, Plus, RefreshCw, Search, Shapes, Timer, User } from "lucide-react";
+import { AlertCircle, CheckCircle2, Circle, CircleDashed, IdCardLanyard, ListPlus, Loader2, Plus, RefreshCw, Search, Shapes, Timer, User } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -805,148 +805,153 @@ export function KanbanBoard() {
           if (!open) setCreateTaskError("");
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Nova tarefa</DialogTitle>
+        <DialogContent className="max-w-2xl max-h-[85dvh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-2 shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <ListPlus className="h-4 w-4 text-theme-primary" />
+              Nova tarefa
+            </DialogTitle>
             <DialogDescription>Crie uma tarefa com ou sem contato vinculado.</DialogDescription>
           </DialogHeader>
 
-          <form className="space-y-4" onSubmit={handleCreateTask}>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <FieldLabel>Tipo</FieldLabel>
-                <Select value={taskType} onValueChange={setTaskType} required>
-                  <SelectTrigger className="h-10 w-full">
-                    <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {taskOptions.types.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {type}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <FieldLabel>Status</FieldLabel>
-                <Select value={taskStatus} onValueChange={setTaskStatus} required>
-                  <SelectTrigger className="h-10 w-full">
-                    <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {taskOptions.statuses.map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {status}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <FieldLabel>Prazo</FieldLabel>
-                <Input type="date" className="h-10" value={taskDueDate} onChange={(event) => setTaskDueDate(event.target.value)} />
-              </div>
-
-              <div className="space-y-1.5">
-                <FieldLabel>Responsável</FieldLabel>
-                <Select value={taskResponsibleUserId} onValueChange={setTaskResponsibleUserId} required>
-                  <SelectTrigger className="h-10 w-full">
-                    <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {taskOptions.users.length > 0 ? (
-                      taskOptions.users.map((user) => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.label}
+          <form className="flex flex-1 flex-col overflow-hidden" onSubmit={handleCreateTask}>
+            <div className="flex-1 overflow-y-auto p-6 pt-2 space-y-4 min-h-0 custom-scrollbar">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">Tipo</label>
+                  <Select value={taskType} onValueChange={setTaskType} required>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {taskOptions.types.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {type}
                         </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="no-users" disabled>
-                        Nenhum usuário encontrado
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="space-y-1.5 sm:col-span-2">
-                <FieldLabel>Contato / Paciente</FieldLabel>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    className="h-10 pl-9"
-                    value={taskPatientName}
-                    placeholder="Digite o nome do contato"
-                    onBlur={() => {
-                      window.setTimeout(() => setIsContactSearchOpen(false), 120);
-                    }}
-                    onChange={(event) => {
-                      setTaskPatientName(event.target.value);
-                      setTaskContactPhone("");
-                      setTaskContactChatId("");
-                      setIsContactSearchOpen(true);
-                    }}
-                    onFocus={() => {
-                      if (taskPatientName.trim()) setIsContactSearchOpen(true);
-                    }}
-                  />
-                  {isContactSearchOpen && taskPatientName.trim() ? (
-                    <div className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md">
-                      {contactSearchResults.length > 0 ? (
-                        contactSearchResults.map((chat) => (
-                          <button
-                            key={chat.chat_id || chat.phone_contact || getChatDisplayName(chat)}
-                            type="button"
-                            className={cn(
-                              "flex w-full flex-col rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground",
-                              (taskContactChatId === chat.chat_id || taskContactPhone === chat.phone_contact) && "bg-accent text-accent-foreground",
-                            )}
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => {
-                              setTaskPatientName(getChatDisplayName(chat));
-                              setTaskContactPhone(chat.phone_contact || "");
-                              setTaskContactChatId(chat.chat_id || "");
-                              setIsContactSearchOpen(false);
-                            }}
-                          >
-                            <span className="truncate font-medium">{getChatDisplayName(chat)}</span>
-                            {chat.phone_contact || chat.chat_id ? <span className="truncate text-xs text-muted-foreground">{chat.phone_contact || chat.chat_id}</span> : null}
-                          </button>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">Status</label>
+                  <Select value={taskStatus} onValueChange={setTaskStatus} required>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {taskOptions.statuses.map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {status}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">Prazo</label>
+                  <Input type="date" value={taskDueDate} onChange={(event) => setTaskDueDate(event.target.value)} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">Responsável</label>
+                  <Select value={taskResponsibleUserId} onValueChange={setTaskResponsibleUserId} required>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {taskOptions.users.length > 0 ? (
+                        taskOptions.users.map((user) => (
+                          <SelectItem key={user.id} value={user.id}>
+                            {user.label}
+                          </SelectItem>
                         ))
                       ) : (
-                        <div className="px-2 py-2 text-sm text-muted-foreground">Nenhum contato encontrado</div>
+                        <SelectItem value="no-users" disabled>
+                          Nenhum usuário encontrado
+                        </SelectItem>
                       )}
-                    </div>
-                  ) : null}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2 sm:col-span-2">
+                  <label className="text-xs font-semibold text-foreground">Contato / Paciente</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      className="pl-9"
+                      value={taskPatientName}
+                      placeholder="Digite o nome do contato"
+                      onBlur={() => {
+                        window.setTimeout(() => setIsContactSearchOpen(false), 120);
+                      }}
+                      onChange={(event) => {
+                        setTaskPatientName(event.target.value);
+                        setTaskContactPhone("");
+                        setTaskContactChatId("");
+                        setIsContactSearchOpen(true);
+                      }}
+                      onFocus={() => {
+                        if (taskPatientName.trim()) setIsContactSearchOpen(true);
+                      }}
+                    />
+                    {isContactSearchOpen && taskPatientName.trim() ? (
+                      <div className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md custom-scrollbar">
+                        {contactSearchResults.length > 0 ? (
+                          contactSearchResults.map((chat) => (
+                            <button
+                              key={chat.chat_id || chat.phone_contact || getChatDisplayName(chat)}
+                              type="button"
+                              className={cn(
+                                "flex w-full flex-col rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground",
+                                (taskContactChatId === chat.chat_id || taskContactPhone === chat.phone_contact) && "bg-accent text-accent-foreground",
+                              )}
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => {
+                                setTaskPatientName(getChatDisplayName(chat));
+                                setTaskContactPhone(chat.phone_contact || "");
+                                setTaskContactChatId(chat.chat_id || "");
+                                setIsContactSearchOpen(false);
+                              }}
+                            >
+                              <span className="truncate font-medium">{getChatDisplayName(chat)}</span>
+                              {chat.phone_contact || chat.chat_id ? <span className="truncate text-xs text-muted-foreground">{chat.phone_contact || chat.chat_id}</span> : null}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-2 py-2 text-sm text-muted-foreground">Nenhum contato encontrado</div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="space-y-1.5">
-              <FieldLabel>Assunto</FieldLabel>
-              <Input className="h-10" value={taskSubject} onChange={(event) => setTaskSubject(event.target.value)} required />
-            </div>
-
-            <div className="space-y-1.5">
-              <FieldLabel>Observações</FieldLabel>
-              <Textarea className="min-h-24 resize-y" value={taskObservations} onChange={(event) => setTaskObservations(event.target.value)} />
-            </div>
-
-            {createTaskError ? (
-              <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                <AlertCircle className="h-4 w-4" />
-                {createTaskError}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground">Assunto</label>
+                <Input value={taskSubject} onChange={(event) => setTaskSubject(event.target.value)} required />
               </div>
-            ) : null}
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isCreatingTask}>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground">Observações</label>
+                <Textarea className="min-h-20 resize-none" value={taskObservations} onChange={(event) => setTaskObservations(event.target.value)} />
+              </div>
+
+              {createTaskError ? (
+                <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive animate-fade-in">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {createTaskError}
+                </div>
+              ) : null}
+            </div>
+
+            <DialogFooter className="p-6 pt-4 border-t border-border bg-muted/20 shrink-0">
+              <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isCreatingTask} className="gap-2 h-9 text-xs">
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isCreatingTask || isLoadingTaskOptions || isCurrentUserLoading || !user || !taskResponsibleUserId}>
+              <Button type="submit" disabled={isCreatingTask || isLoadingTaskOptions || isCurrentUserLoading || !user || !taskResponsibleUserId} className="gap-2 h-9 text-xs bg-theme-primary text-white hover:bg-theme-primary/90">
                 {isCreatingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 {isCreatingTask ? "Criando..." : "Criar tarefa"}
               </Button>

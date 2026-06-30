@@ -6,6 +6,8 @@ import { ContactDetails } from "@/components/contact-details/contact-details";
 import type { ContactInfoValues } from "@/components/contact-details/profile-view";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useChatOptions } from "@/hooks/use-chat-options";
+import { useSignatureMode } from "@/hooks/use-signature-mode";
 import { getChatStatusLabel, normalizeStatusColor, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
 import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, type ChatTag } from "@/lib/chat-tags";
 import { canUserAccessChat, filterChatsForUser } from "@/lib/user-access";
@@ -352,37 +354,6 @@ function getStatusFields(chat: ChatRecord, status: ChatStatusOption) {
     finalizada: normalizedStatus === "finalizada" ? true : normalizedStatus === "aberta" ? false : chat.finalizada,
   };
 }
-function getFallbackStatusOptions(chats: ChatRecord[]) {
-  const options = new Map<string, ChatStatusOption>();
-
-  for (const chat of chats) {
-    const label = getChatStatusLabel(chat);
-    if (!label) continue;
-
-    const key = label.toLowerCase();
-    const current = options.get(key);
-    options.set(key, {
-      label,
-      color: current?.color || normalizeStatusColor(chat.hex_status),
-    });
-  }
-
-  return sortStatusOptions(Array.from(options.values()));
-}
-
-function getFallbackTagOptions(chats: ChatRecord[]) {
-  const options = new Map<string, ChatTag>();
-
-  for (const chat of chats) {
-    for (const tag of getChatTags(chat)) {
-      const key = tag.id || tag.label;
-      if (!/^rec[a-zA-Z0-9]+$/.test(tag.id) || options.has(key)) continue;
-      options.set(key, tag);
-    }
-  }
-
-  return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }));
-}
 
 export default function ChatsPage() {
   const [showDetails, setShowDetails] = useState(false);
@@ -403,8 +374,6 @@ export default function ChatsPage() {
   const [hasMoreSearchChats, setHasMoreSearchChats] = useState(false);
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
   const [hasMoreMessagesByChatId, setHasMoreMessagesByChatId] = useState<Record<string, boolean>>({});
-  const [statusOptions, setStatusOptions] = useState<ChatStatusOption[]>([]);
-  const [tagOptions, setTagOptions] = useState<ChatTag[]>([]);
   const [error, setError] = useState<string>();
   const searchRequestIdRef = useRef(0);
   const [storedTargetChatId, setStoredTargetChatId] = useState(() => (typeof window === "undefined" ? "" : window.localStorage.getItem(LAST_OPEN_CHAT_STORAGE_KEY) || ""));
@@ -427,10 +396,12 @@ export default function ChatsPage() {
   }, [chats, isCurrentUserLoading, searchChats, user]);
   const knownChatsRef = useRef<ChatRecord[]>([]);
   const selectedChat = useMemo(() => knownChats.find((chat) => chat.id === selectedChatId), [knownChats, selectedChatId]);
-  const fallbackStatusOptions = useMemo(() => getFallbackStatusOptions(knownChats), [knownChats]);
-  const fallbackTagOptions = useMemo(() => getFallbackTagOptions(knownChats), [knownChats]);
-  const contactStatusOptions = statusOptions.length > 0 ? statusOptions : fallbackStatusOptions;
-  const contactTagOptions = tagOptions.length > 0 ? tagOptions : fallbackTagOptions;
+
+  const { statusOptions: contactStatusOptions, tagOptions: contactTagOptions, error: chatOptionsError } = useChatOptions(knownChats);
+
+  useEffect(() => {
+    if (chatOptionsError) setError(chatOptionsError);
+  }, [chatOptionsError]);
   const selectedChatRemoteId = selectedChat?.chat_id;
   const messages = selectedChatRemoteId ? (messagesByChatId[selectedChatRemoteId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES;
   const hasMoreMessages = selectedChatRemoteId ? (hasMoreMessagesByChatId[selectedChatRemoteId] ?? false) : false;
@@ -446,13 +417,7 @@ export default function ChatsPage() {
 
   const [trainingTrigger, setTrainingTrigger] = useState<number>(0);
 
-  const [isSignatureMode, setIsAssinaturaMode] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("neuronzclinic.chat.use-signature");
-      return saved === null ? true : saved === "true";
-    }
-    return true;
-  });
+  const { isSignatureMode: effectiveSignatureMode, rawSignatureMode: isSignatureMode, setSignatureMode: setIsAssinaturaMode, canUseAdminChatModes } = useSignatureMode();
 
   const [isGhostMode, setIsGhostMode] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
@@ -462,14 +427,8 @@ export default function ChatsPage() {
     return true;
   });
 
-  const canUseAdminChatModes = user?.role === "admin";
-  const effectiveSignatureMode = canUseAdminChatModes ? isSignatureMode : true;
   const effectiveGhostMode = isCurrentUserLoading ? true : canUseAdminChatModes ? isGhostMode : false;
   const isGhostModeRef = useRef(effectiveGhostMode);
-
-  useEffect(() => {
-    localStorage.setItem("neuronzclinic.chat.use-signature", String(isSignatureMode));
-  }, [isSignatureMode]);
 
   useEffect(() => {
     localStorage.setItem("neuronzclinic.chat.ghost-mode", String(isGhostMode));
@@ -1127,31 +1086,7 @@ export default function ChatsPage() {
     [chats, messagesByChatId, searchChats, selectedChatId, storedTargetChatId],
   );
 
-  useEffect(() => {
-    let isMounted = true;
 
-    fetch("/api/chat-options")
-      .then((response) => {
-        if (!response.ok) throw new Error(`Não foi possível carregar opções (${response.status}).`);
-        return response.json() as Promise<{ statuses?: ChatStatusOption[]; tags?: ChatTag[]; errors?: string[] }>;
-      })
-      .then((data) => {
-        if (!isMounted) return;
-        setStatusOptions(data.statuses ?? []);
-        setTagOptions(data.tags ?? []);
-        if (data.errors?.length) setError(data.errors.join(" | "));
-      })
-      .catch((err) => {
-        if (!isMounted) return;
-        setStatusOptions([]);
-        setTagOptions([]);
-        setError(err instanceof Error ? err.message : "Não foi possível carregar tags e status.");
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   useEffect(() => {
     let isMounted = true;

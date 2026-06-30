@@ -58,7 +58,7 @@ const fallbackRoutines: Routine[] = [
     trigger: "tag",
     targetId: "sample-indicacao",
     targetLabel: "Indicação",
-    targetColor: "#ff0000",
+    targetColor: "#db351f",
     birthdayEnabled: false,
     active: true,
     actions: [

@@ -9,12 +9,18 @@ import {
   deleteMessages,
   forwardMessages,
   sendMessage,
+  updateChatDetails,
   type ChatRecord,
   type MessageRecord,
 } from "@/lib/supabase-rest";
 import type { Task } from "@/lib/task";
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useChatOptions } from "@/hooks/use-chat-options";
+import { useSignatureMode } from "@/hooks/use-signature-mode";
+import { CHAT_INTEREST_FIELD_CANDIDATES, getChatTags, getChatInterestTags, type ChatTag } from "@/lib/chat-tags";
+import type { ChatStatusOption } from "@/lib/chat-status";
+import type { ContactInfoValues } from "@/components/contact-details/profile-view";
 
 const MESSAGE_PAGE_SIZE = 50;
 
@@ -97,6 +103,20 @@ function getOptimisticMessage(chatId: string, text: string, file: File | null, r
   return { message, localMediaUrl };
 }
 
+function getStatusFields(chat: ChatRecord, status: ChatStatusOption) {
+  const normalizedStatus = status.label.toLowerCase();
+
+  return {
+    Status_chat: status.label,
+    hex_status: status.color || chat.hex_status,
+    finalizada: normalizedStatus === "finalizada" ? true : normalizedStatus === "aberta" ? false : chat.finalizada,
+  };
+}
+
+function getTagKey(tag: ChatTag) {
+  return tag.id || tag.label;
+}
+
 export function TaskChatDialog({ task, open, onOpenChange, forwardTargets }: TaskChatDialogProps) {
   const [chat, setChat] = useState<ChatRecord | undefined>();
   const [messages, setMessages] = useState<MessageRecord[]>([]);
@@ -106,6 +126,13 @@ export function TaskChatDialog({ task, open, onOpenChange, forwardTargets }: Tas
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [showDetails, setShowDetails] = useState(true);
   const [error, setError] = useState<string>();
+
+  const { statusOptions, tagOptions, interestOptions, error: chatOptionsError } = useChatOptions(forwardTargets);
+  const { isSignatureMode: effectiveSignatureMode } = useSignatureMode();
+
+  useEffect(() => {
+    if (chatOptionsError) setError(chatOptionsError);
+  }, [chatOptionsError]);
 
   const chatId = task?.patientChatId || "";
 
@@ -227,6 +254,140 @@ export function TaskChatDialog({ task, open, onOpenChange, forwardTargets }: Tas
     }
   }, [chat, loadLatestMessages, messages]);
 
+  const handleToggleStatus = useCallback(async () => {
+    if (!chat) return;
+    const nextFinalizada = !chat.finalizada;
+    const previousChat = chat;
+    setChat((current) => current ? { ...current, finalizada: nextFinalizada } : current);
+    setError(undefined);
+    try {
+      await updateChatDetails({ id: chat.id, finalizada: nextFinalizada });
+    } catch (err) {
+      setChat(previousChat);
+      setError(err instanceof Error ? err.message : "Não foi possível alternar o status do chat.");
+    }
+  }, [chat]);
+
+  const handleToggleIA = useCallback(async () => {
+    if (!chat) return;
+    const nextIA = !chat.ia_responde;
+    const previousChat = chat;
+    setChat((current) => current ? { ...current, ia_responde: nextIA } : current);
+    setError(undefined);
+    try {
+      await updateChatDetails({ id: chat.id, ia_responde: nextIA });
+    } catch (err) {
+      setChat(previousChat);
+      setError(err instanceof Error ? err.message : "Não foi possível alternar a IA para este contato.");
+    }
+  }, [chat]);
+
+  const handleChangeStatus = useCallback(async (status: ChatStatusOption) => {
+    if (!chat) return;
+    const updatePatch = getStatusFields(chat, status);
+    const previousChat = chat;
+    setChat((current) => current ? { ...current, ...updatePatch } : current);
+    setError(undefined);
+    try {
+      await updateChatDetails({ id: chat.id, ...updatePatch });
+    } catch (err) {
+      setChat(previousChat);
+      setError(err instanceof Error ? err.message : "Não foi possível atualizar o status do contato.");
+    }
+  }, [chat]);
+
+  const handleToggleTag = useCallback(async (tag: ChatTag) => {
+    if (!chat) return;
+    const currentTags = getChatTags(chat);
+    const tagKey = getTagKey(tag);
+    const hasTag = currentTags.some((t) => getTagKey(t) === tagKey);
+    const nextTags = hasTag ? currentTags.filter((t) => getTagKey(t) !== tagKey) : [...currentTags, tag];
+    const previousChat = chat;
+    setChat((current) => current ? {
+      ...current,
+      json_tags: nextTags,
+      json_tags_parsed: nextTags,
+      tag_chat_array: nextTags,
+    } : current);
+    setError(undefined);
+    try {
+      await updateChatDetails({ id: chat.id, tags: nextTags });
+    } catch (err) {
+      setChat(previousChat);
+      setError(err instanceof Error ? err.message : "Não foi possível salvar as tags do contato.");
+    }
+  }, [chat]);
+
+  const handleToggleInterest = useCallback(async (interest: ChatTag) => {
+    if (!chat) return;
+    const currentInterests = getChatInterestTags(chat);
+    const interestKey = getTagKey(interest);
+    const hasInterest = currentInterests.some((i) => getTagKey(i) === interestKey);
+    const nextInterests = hasInterest ? currentInterests.filter((i) => getTagKey(i) !== interestKey) : [...currentInterests, interest];
+    const interestPatch = CHAT_INTEREST_FIELD_CANDIDATES.reduce<Record<string, ChatTag[]>>((patch, field) => {
+      patch[field] = nextInterests;
+      return patch;
+    }, {});
+    const previousChat = chat;
+    setChat((current) => current ? { ...current, ...interestPatch } : current);
+    setError(undefined);
+    try {
+      await updateChatDetails({ id: chat.id, interestTags: nextInterests });
+    } catch (err) {
+      setChat(previousChat);
+      setError(err instanceof Error ? err.message : "Não foi possível salvar os interesses do contato.");
+    }
+  }, [chat]);
+
+  const handleChangeName = useCallback(async (name: string) => {
+    if (!chat) return;
+    const nextName = name.trim();
+    const previousChat = chat;
+    setChat((current) => current ? { ...current, nome_contato: nextName } : current);
+    setError(undefined);
+    try {
+      await updateChatDetails({ id: chat.id, nome_contato: nextName });
+    } catch (err) {
+      setChat(previousChat);
+      setError(err instanceof Error ? err.message : "Não foi possível salvar o nome do contato.");
+    }
+  }, [chat]);
+
+  const handleChangeContactInfo = useCallback(async (info: ContactInfoValues) => {
+    if (!chat) return;
+    const previousChat = chat;
+    setChat((current) => current ? { ...current, ...info } : current);
+    setError(undefined);
+    try {
+      await updateChatDetails({ id: chat.id, ...info });
+    } catch (err) {
+      setChat(previousChat);
+      setError(err instanceof Error ? err.message : "Não foi possível salvar os detalhes do contato.");
+    }
+  }, [chat]);
+
+  const handleReorderTags = useCallback((tags: ChatTag[]) => {
+    if (!chat) return;
+    setChat((current) => current ? {
+      ...current,
+      json_tags: tags,
+      json_tags_parsed: tags,
+      tag_chat_array: tags,
+    } : current);
+  }, [chat]);
+
+  const handleCommitTagOrder = useCallback(async (tags: ChatTag[]) => {
+    if (!chat) return;
+    const previousChat = chat;
+    setError(undefined);
+    try {
+      await updateChatDetails({ id: chat.id, tags });
+    } catch (err) {
+      setChat(previousChat);
+      setError(err instanceof Error ? err.message : "Não foi possível salvar a ordem das tags.");
+    }
+  }, [chat]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="h-[92vh] max-h-[92vh] w-[min(1280px,96vw)] max-w-none overflow-hidden p-0">
@@ -257,8 +418,8 @@ export function TaskChatDialog({ task, open, onOpenChange, forwardTargets }: Tas
                 error={error}
                 onToggleDetails={() => setShowDetails((current) => !current)}
                 isDetailsOpen={showDetails}
-                onToggleStatus={() => {}}
-                isSignatureMode={true}
+                onToggleStatus={handleToggleStatus}
+                isSignatureMode={effectiveSignatureMode}
                 onOpenIATraining={() => setShowDetails(true)}
               />
             </div>
@@ -268,8 +429,18 @@ export function TaskChatDialog({ task, open, onOpenChange, forwardTargets }: Tas
                 <ContactDetails
                   chat={chat}
                   onClose={() => setShowDetails(false)}
-                  onToggleStatus={() => {}}
-                  onToggleIA={() => setChat((current) => (current ? { ...current, ia_responde: !current.ia_responde } : current))}
+                  onToggleStatus={handleToggleStatus}
+                  onToggleIA={handleToggleIA}
+                  statusOptions={statusOptions}
+                  tagOptions={tagOptions}
+                  interestOptions={interestOptions}
+                  onChangeStatus={handleChangeStatus}
+                  onToggleTag={handleToggleTag}
+                  onToggleInterest={handleToggleInterest}
+                  onChangeName={handleChangeName}
+                  onChangeContactInfo={handleChangeContactInfo}
+                  onReorderTags={handleReorderTags}
+                  onCommitTagOrder={handleCommitTagOrder}
                 />
               </aside>
             ) : null}

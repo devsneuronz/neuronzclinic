@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useChatOptions } from "@/hooks/use-chat-options";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { getChatStatusColor, getChatStatusLabel, normalizeStatusColor, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
 import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, getReadableTextColor, type ChatTag } from "@/lib/chat-tags";
@@ -59,51 +60,7 @@ function uniqueSorted(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
 }
 
-function getFallbackStatusOptions(chats: ChatRecord[]) {
-  const options = new Map<string, ChatStatusOption>();
 
-  for (const chat of chats) {
-    const label = getChatStatusLabel(chat);
-    if (!label) continue;
-
-    const key = label.toLowerCase();
-    const current = options.get(key);
-    options.set(key, {
-      label,
-      color: current?.color || normalizeStatusColor(chat.hex_status),
-    });
-  }
-
-  return sortStatusOptions(Array.from(options.values()));
-}
-
-function getFallbackTagOptions(chats: ChatRecord[]) {
-  const options = new Map<string, ChatTag>();
-
-  for (const chat of chats) {
-    for (const tag of getChatTags(chat)) {
-      const key = tag.id || tag.label;
-      if (!/^rec[a-zA-Z0-9]+$/.test(tag.id) || options.has(key)) continue;
-      options.set(key, tag);
-    }
-  }
-
-  return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }));
-}
-
-function getFallbackInterestOptions(chats: ChatRecord[]) {
-  const options = new Map<string, ChatTag>();
-
-  for (const chat of chats) {
-    for (const interest of getChatInterestTags(chat)) {
-      const key = interest.id || interest.label;
-      if (options.has(key)) continue;
-      options.set(key, interest);
-    }
-  }
-
-  return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }));
-}
 
 function getTagKey(tag: ChatTag) {
   return tag.id || tag.label;
@@ -134,8 +91,6 @@ export default function ContatosPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string>();
-  const [statusOptions, setStatusOptions] = useState<ChatStatusOption[]>([]);
-  const [tagOptions, setTagOptions] = useState<ChatTag[]>([]);
   const loadRequestIdRef = useRef(0);
   const setContactsState = useCallback((updater: ChatRecord[] | ((current: ChatRecord[]) => ChatRecord[])) => {
     const nextContacts = typeof updater === "function" ? updater(contactsRef.current) : updater;
@@ -145,12 +100,11 @@ export default function ContatosPage() {
 
   const accessibleContacts = useMemo(() => (isCurrentUserLoading ? [] : filterChatsForUser(user, contacts)), [contacts, isCurrentUserLoading, user]);
   const selectedContact = accessibleContacts.find((contact) => contact.id === selectedContactId);
-  const fallbackStatusOptions = useMemo(() => getFallbackStatusOptions(contacts), [contacts]);
-  const fallbackTagOptions = useMemo(() => getFallbackTagOptions(contacts), [contacts]);
-  const fallbackInterestOptions = useMemo(() => getFallbackInterestOptions(contacts), [contacts]);
-  const contactStatusOptions = statusOptions.length > 0 ? statusOptions : fallbackStatusOptions;
-  const contactTagOptions = tagOptions.length > 0 ? tagOptions : fallbackTagOptions;
-  const contactInterestOptions = fallbackInterestOptions;
+  const { statusOptions: contactStatusOptions, tagOptions: contactTagOptions, interestOptions: contactInterestOptions, error: chatOptionsError } = useChatOptions(contacts);
+
+  useEffect(() => {
+    if (chatOptionsError) setError(chatOptionsError);
+  }, [chatOptionsError]);
   const cityOptions = useMemo(() => uniqueSorted(contacts.map(getContactCity)), [contacts]);
   const debouncedSearch = useDebouncedValue(search.trim(), 300);
   const hasSearch = debouncedSearch.length > 0;
@@ -204,26 +158,7 @@ export default function ContatosPage() {
     window.queueMicrotask(() => void loadContacts({ refresh: true, searchTerm: debouncedSearch }));
   }, [debouncedSearch, loadContacts]);
 
-  useEffect(() => {
-    let isMounted = true;
 
-    fetch("/api/chat-options")
-      .then((response) => response.json() as Promise<{ statuses?: ChatStatusOption[]; tags?: ChatTag[] }>)
-      .then((data) => {
-        if (!isMounted) return;
-        setStatusOptions(data.statuses ?? []);
-        setTagOptions(data.tags ?? []);
-      })
-      .catch(() => {
-        if (!isMounted) return;
-        setStatusOptions([]);
-        setTagOptions([]);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   function loadMore() {
     if (isLoadingMore || !hasMore) return;
