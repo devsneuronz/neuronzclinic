@@ -4,13 +4,12 @@ import { ChatWindow } from "@/components/chat/chat-window";
 import { ContactList } from "@/components/chat/contact-list";
 import { ContactDetails } from "@/components/contact-details/contact-details";
 import type { ContactInfoValues } from "@/components/contact-details/profile-view";
+import { useChatOptions } from "@/hooks/use-chat-options";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { useChatOptions } from "@/hooks/use-chat-options";
 import { useSignatureMode } from "@/hooks/use-signature-mode";
-import { getChatStatusLabel, normalizeStatusColor, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
+import { type ChatStatusOption } from "@/lib/chat-status";
 import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, type ChatTag } from "@/lib/chat-tags";
-import { canUserAccessChat, filterChatsForUser } from "@/lib/user-access";
 import { createSupabaseRealtimeSubscription, type SupabasePostgresChangePayload } from "@/lib/supabase-realtime";
 import {
   ChatRecord,
@@ -29,6 +28,7 @@ import {
   sendMessage,
   updateChatDetails,
 } from "@/lib/supabase-rest";
+import { canUserAccessChat, filterChatsForUser } from "@/lib/user-access";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
@@ -269,10 +269,7 @@ function getLatestChatMessagePreviewText(message: Pick<LatestChatMessage, "conte
 }
 
 function updateChatPreview(chat: ChatRecord, message: ChatPreviewMessage) {
-  if (
-    !message.timestamp_msg ||
-    (getTimestampValue(message.timestamp_msg) < getTimestampValue(chat.last_message_time) && !hasMatchingPreviewWithinTimestampDrift(chat, message))
-  ) {
+  if (!message.timestamp_msg || (getTimestampValue(message.timestamp_msg) < getTimestampValue(chat.last_message_time) && !hasMatchingPreviewWithinTimestampDrift(chat, message))) {
     return chat;
   }
 
@@ -383,10 +380,7 @@ export default function ChatsPage() {
   const searchQuery = normalizedSearch ? debouncedSearch.trim() : "";
   const isSearching = !!searchQuery;
   const isSearchingChats = !!normalizedSearch && (normalizedSearch !== searchQuery || searchChatsTerm !== searchQuery);
-  const visibleChats = useMemo(
-    () => isCurrentUserLoading ? [] : filterChatsForUser(user, isSearching ? searchChats : chats),
-    [chats, isCurrentUserLoading, isSearching, searchChats, user],
-  );
+  const visibleChats = useMemo(() => (isCurrentUserLoading ? [] : filterChatsForUser(user, isSearching ? searchChats : chats)), [chats, isCurrentUserLoading, isSearching, searchChats, user]);
   const visibleChatRemoteIds = useMemo(() => Array.from(new Set(visibleChats.map((chat) => chat.chat_id).filter(Boolean))), [visibleChats]);
   const visibleChatRemoteIdsKey = useMemo(() => visibleChatRemoteIds.join("\n"), [visibleChatRemoteIds]);
   const knownChats = useMemo(() => {
@@ -497,6 +491,19 @@ export default function ChatsPage() {
       setIsLoadingMoreChats(false);
     }
   }, [chats.length, hasMoreChats, hasMoreSearchChats, isLoadingMoreChats, isLoadingMoreSearchChats, isSearching, searchChats.length, searchQuery]);
+
+  const handleResetChats = useCallback(async () => {
+    setIsLoadingChats(true);
+    try {
+      const data = await fetchChats({ limit: CHAT_PAGE_SIZE, offset: 0 });
+      setChats(data);
+      setHasMoreChats(data.length === CHAT_PAGE_SIZE);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível recarregar os chats.");
+    } finally {
+      setIsLoadingChats(false);
+    }
+  }, []);
 
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
@@ -1086,8 +1093,6 @@ export default function ChatsPage() {
     [chats, messagesByChatId, searchChats, selectedChatId, storedTargetChatId],
   );
 
-
-
   useEffect(() => {
     let isMounted = true;
 
@@ -1300,11 +1305,7 @@ export default function ChatsPage() {
   }, [latestMessageStatuses, visibleChats]);
 
   useEffect(() => {
-    const chatIds = visibleChatRemoteIdsKey
-      ? visibleChats
-          .filter((chat) => chat.chat_id && (!chat.last_message_time || !chat.text_last_message))
-          .map((chat) => chat.chat_id)
-      : [];
+    const chatIds = visibleChatRemoteIdsKey ? visibleChats.filter((chat) => chat.chat_id && (!chat.last_message_time || !chat.text_last_message)).map((chat) => chat.chat_id) : [];
 
     if (chatIds.length === 0) return;
 
@@ -1806,6 +1807,7 @@ export default function ChatsPage() {
           onToggleGhost={setIsGhostMode}
           canUseAdminChatModes={canUseAdminChatModes}
           isMobile={isMobile}
+          onResetChats={handleResetChats}
         />
       );
     }
@@ -1885,6 +1887,7 @@ export default function ChatsPage() {
         isGhostMode={effectiveGhostMode}
         onToggleGhost={setIsGhostMode}
         canUseAdminChatModes={canUseAdminChatModes}
+        onResetChats={handleResetChats}
       />
       <Group orientation="horizontal">
         <Panel>

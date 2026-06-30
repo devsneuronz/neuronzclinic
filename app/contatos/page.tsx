@@ -9,11 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useChatOptions } from "@/hooks/use-chat-options";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { useChatOptions } from "@/hooks/use-chat-options";
 import { getAvatarInitials } from "@/lib/avatar-initials";
-import { getChatStatusColor, getChatStatusLabel, normalizeStatusColor, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
+import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
 import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, getReadableTextColor, type ChatTag } from "@/lib/chat-tags";
 import { ChatRecord, fetchChats, updateChatDetails } from "@/lib/supabase-rest";
 import { filterChatsForUser } from "@/lib/user-access";
@@ -59,8 +59,6 @@ function getLastContactLabel(chat: ChatRecord) {
 function uniqueSorted(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
 }
-
-
 
 function getTagKey(tag: ChatTag) {
   return tag.id || tag.label;
@@ -157,8 +155,6 @@ export default function ContatosPage() {
   useEffect(() => {
     window.queueMicrotask(() => void loadContacts({ refresh: true, searchTerm: debouncedSearch }));
   }, [debouncedSearch, loadContacts]);
-
-
 
   function loadMore() {
     if (isLoadingMore || !hasMore) return;
@@ -449,7 +445,7 @@ export default function ContatosPage() {
                       <div className="flex flex-col w-full">
                         {filteredContacts.map((contact) => {
                           const name = getDisplayName(contact);
-                          const tags = getChatTags(contact).slice(0, 2);
+                          const tags = getChatTags(contact).slice(0, 3);
                           return (
                             <button
                               key={contact.id}

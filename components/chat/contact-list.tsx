@@ -47,6 +47,7 @@ interface ContactListProps {
   canUseAdminChatModes?: boolean;
 
   isMobile?: boolean;
+  onResetChats?: () => void;
 }
 
 const ALL_FILTERS = "all";
@@ -177,6 +178,7 @@ export function ContactList({
   onToggleGhost,
   canUseAdminChatModes = false,
   isMobile,
+  onResetChats,
 }: ContactListProps) {
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState(ALL_FILTERS);
@@ -208,6 +210,14 @@ export function ContactList({
   const sectorOptions = useMemo(() => (sectorCatalog.length > 0 ? sectorCatalog : getUniqueOptions(sectorIds.map((id) => getSectorLabel(id, sectorLabels)))), [sectorCatalog, sectorIds, sectorLabels]);
 
   const hasActiveFilters = statusFilter !== ALL_FILTERS || tagFilter !== ALL_FILTERS || interestFilter !== ALL_FILTERS || sectorFilter !== ALL_FILTERS || !!search.trim();
+
+  const prevHasActiveFiltersRef = useRef(hasActiveFilters);
+  useEffect(() => {
+    if (prevHasActiveFiltersRef.current && !hasActiveFilters) {
+      onResetChats?.();
+    }
+    prevHasActiveFiltersRef.current = hasActiveFilters;
+  }, [hasActiveFilters, onResetChats]);
 
   const { user, isLoading } = useCurrentUser();
   const userName = user?.name ?? "Usuário";
@@ -384,6 +394,25 @@ export function ContactList({
     return counts;
   }, [filteredChats, scopeTab]);
 
+  const scopeCounts = useMemo(() => {
+    const counts = {
+      all: 0,
+      ia: 0,
+      mine: 0,
+    };
+
+    filteredChats.forEach((chat) => {
+      counts.all += 1;
+      if (chat.ia_responde === true) {
+        counts.ia += 1;
+      } else {
+        counts.mine += 1;
+      }
+    });
+
+    return counts;
+  }, [filteredChats]);
+
   function clearFilters() {
     setStatusFilter(ALL_FILTERS);
     setTagFilter(ALL_FILTERS);
@@ -447,7 +476,8 @@ export function ContactList({
       if (!target) return;
 
       const hasFilledVisibleArea = target.scrollHeight > target.clientHeight + 24;
-      if (!hasFilledVisibleArea) {
+      const shouldAutoLoad = !hasFilledVisibleArea || hasActiveFilters || scopeTab !== "all";
+      if (shouldAutoLoad) {
         const autoLoadKey = [chats.length, visibleChats.length, scopeTab, stateTab, statusFilter, tagFilter, interestFilter, sectorFilter].join("|");
         if (autoLoadKeyRef.current === autoLoadKey) return;
 
@@ -457,7 +487,7 @@ export function ContactList({
     });
 
     return () => window.cancelAnimationFrame(frameId);
-  }, [chats.length, hasMore, interestFilter, isLoading, isLoadingMore, isSearching, onLoadMore, scopeTab, sectorFilter, stateTab, statusFilter, tagFilter, visibleChats.length]);
+  }, [chats.length, hasMore, hasActiveFilters, isLoading, isLoadingMore, isSearching, onLoadMore, scopeTab, sectorFilter, stateTab, statusFilter, tagFilter, interestFilter, visibleChats.length]);
 
   return (
     <div className={cn("flex h-full shrink-0 flex-col border-r border-border bg-card", isMobile ? "w-full" : "w-[340px]")}>
@@ -609,12 +639,22 @@ export function ContactList({
               key={tab.id}
               type="button"
               className={cn(
-                "relative text-xs font-medium text-muted-foreground transition-colors hover:text-foreground",
+                "relative text-xs font-medium text-muted-foreground transition-colors hover:text-foreground flex items-center justify-center gap-1.5",
                 scopeTab === tab.id && "text-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-(--color-theme-primary)",
               )}
               onClick={() => setScopeTab(tab.id)}
             >
-              {tab.label}
+              <span>{tab.label}</span>
+              {hasActiveFilters && (
+                <span
+                  className={cn(
+                    "inline-flex h-4 items-center justify-center rounded px-1.25 text-[9px] font-bold transition-colors border",
+                    scopeTab === tab.id ? "bg-theme-primary/10 text-theme-primary border-theme-primary/20" : "bg-muted text-muted-foreground/80 border-border",
+                  )}
+                >
+                  {scopeCounts[tab.id]}
+                </span>
+              )}
             </button>
           ))}
         </div>
