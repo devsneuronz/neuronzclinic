@@ -9,10 +9,10 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { parseDateOnly } from "@/lib/date";
 import { fetchChats, type ChatRecord } from "@/lib/supabase-rest";
-import { fallbackTaskOptions, getTaskNoteAttachmentType, type StatusConfigMap, type Task, type TaskOptions, type TaskResolutionNote, type TaskStatus } from "@/lib/task";
+import { fallbackTaskOptions, getTaskNoteAttachmentType, statusConfig, type Task, type TaskOptions, type TaskResolutionNote, type TaskStatus } from "@/lib/task";
 import { getDraTatianaResponsibleFilter, isDraTatianaUser } from "@/lib/user-access";
 import { cn } from "@/lib/utils";
-import { AlertCircle, CheckCircle2, Circle, CircleDashed, IdCardLanyard, ListPlus, Loader2, Plus, RefreshCw, Search, Shapes, Timer, User } from "lucide-react";
+import { AlertCircle, Circle, IdCardLanyard, ListPlus, Loader2, Plus, RefreshCw, Search, Shapes, User } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -31,42 +31,6 @@ const taskViewOptions: Array<{ value: TaskView; label: string }> = [
   { value: "resolvendo", label: "Resolvendo" },
   { value: "finalizado", label: "Finalizadas" },
 ];
-
-const statusConfig: StatusConfigMap = {
-  aguardando: {
-    label: "Aguardando",
-    helper: "Pendentes de triagem ou início",
-    icon: CircleDashed,
-    columnClassName: "border-amber-500/20 bg-amber-500/5",
-    headerClassName: "text-amber-500",
-    helperClassName: "text-muted-foreground",
-    markerClassName: "bg-amber-500",
-    countClassName: "border-amber-500/20 bg-amber-500/10 text-amber-500",
-    ringClassName: "hover:ring-amber-500 focus-visible:ring-amber-500",
-  },
-  resolvendo: {
-    label: "Resolvendo",
-    helper: "Em acompanhamento pela equipe",
-    icon: Timer,
-    columnClassName: "border-cyan-500/20 bg-cyan-500/5",
-    headerClassName: "text-cyan-500",
-    helperClassName: "text-muted-foreground",
-    markerClassName: "bg-cyan-500",
-    countClassName: "border-cyan-500/20 bg-cyan-500/10 text-cyan-500",
-    ringClassName: "hover:ring-cyan-500 focus-visible:ring-cyan-500",
-  },
-  finalizado: {
-    label: "Finalizadas",
-    helper: "Concluídas no fluxo",
-    icon: CheckCircle2,
-    columnClassName: "border-teal-500/20 bg-teal-500/5",
-    headerClassName: "text-teal-500",
-    helperClassName: "text-muted-foreground",
-    markerClassName: "bg-teal-600",
-    countClassName: "border-teal-500/20 bg-teal-500/10 text-teal-500",
-    ringClassName: "hover:ring-teal-500 focus-visible:ring-teal-500",
-  },
-};
 
 function getTaskSortTime(task: Task) {
   const value = task.dueDate || task.createdAt || "";

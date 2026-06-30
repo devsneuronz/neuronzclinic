@@ -1,6 +1,6 @@
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { formatDateTime } from "@/lib/date";
-import { isOverdue, Task } from "@/lib/task";
+import { getTaskTypeBadgeClassName, isOverdue, Task } from "@/lib/task";
 import { cn } from "@/lib/utils";
 import { AvatarImage } from "@radix-ui/react-avatar";
 import { AlertCircle, Clock3, MessageCircle } from "lucide-react";
@@ -16,27 +16,6 @@ export function TaskCard({ task, onSelect, onOpenPatientMessages }: { task: Task
     hour: "2-digit",
     minute: "2-digit",
   });
-
-  function getTaskTypeBadgeClassName(type: string) {
-    const normalizedType = type
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase();
-
-    if (normalizedType.includes("aviso")) {
-      return "border-sky-400/20 bg-sky-400/10 text-sky-400";
-    }
-
-    if (normalizedType.includes("pendencia")) {
-      return "border-rose-400/25 bg-rose-400/10 text-rose-400";
-    }
-
-    if (normalizedType.includes("tarefa")) {
-      return "border-violet-400/20 bg-violet-400/10 text-violet-400";
-    }
-
-    return "border-primary/20 bg-primary/5 text-primary";
-  }
 
   return (
     <article

@@ -1,14 +1,13 @@
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { formatDateTime, getDateInputValue } from "@/lib/date";
-import { fallbackTaskOptions, getTaskNoteAttachmentType, isOverdue, ParsedTaskResolutionNote, StatusConfigMap, Task, TaskOptions, TaskResolutionNote } from "@/lib/task";
+import { fallbackTaskOptions, getTaskNoteAttachmentType, getTaskTypeBadgeClassName, isOverdue, ParsedTaskResolutionNote, StatusConfigMap, Task, TaskOptions, TaskResolutionNote } from "@/lib/task";
 import { cn } from "@/lib/utils";
-import { AlertCircle, ArrowRight, CalendarDays, ImageIcon, Loader2, Mic, Plus, Save, Square, Trash2, X } from "lucide-react";
+import { AlertCircle, ArrowRight, CalendarDays, ImageIcon, ListTodo, Loader2, Mic, Plus, Save, Square, Trash2, X } from "lucide-react";
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
-import { FieldLabel } from "../ui/fields";
 import { Input } from "../ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Textarea } from "../ui/textarea";
@@ -86,6 +85,8 @@ export function TaskDetailsDialog({
         minute: "2-digit",
       })
     : "";
+
+  const currentStatus = statusConfig[task?.status as keyof typeof statusConfig] || statusConfig.aguardando;
 
   function mergeOptions(options: string[], currentValue: string) {
     return Array.from(new Set([currentValue, ...options].map((option) => option.trim()).filter(Boolean)));
@@ -282,294 +283,303 @@ export function TaskDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[85dvh] flex flex-col p-0 overflow-hidden">
         {task ? (
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <DialogHeader className="pr-6">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary">
+          <form className="flex flex-1 flex-col overflow-hidden" onSubmit={handleSubmit}>
+            <DialogHeader className="p-6 pb-2 shrink-0">
+              <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                <Badge variant="outline" className={cn(" text-[10px] font-semibold px-2 py-0.5", getTaskTypeBadgeClassName(task.type))}>
                   {task.type || "Tarefa"}
                 </Badge>
-                <Badge variant="outline" className={cn(overdue ? "border-destructive/25 bg-destructive/5 text-destructive" : "")}>
-                  {overdue ? "Atrasada" : task.statusLabel || statusConfig[task.status].label}
+                <Badge
+                  variant="outline"
+                  className={cn("text-[10px] font-semibold px-2 py-0.5 transition-colors", overdue ? "border-destructive/25 bg-destructive/5 text-destructive" : cn(currentStatus.headerClassName, currentStatus.columnClassName))}
+                >
+                  {overdue ? "Atrasada" : currentStatus.label}
                 </Badge>
               </div>
-              <DialogTitle className="pt-2 text-xl leading-7">Editar tarefa</DialogTitle>
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <ListTodo className="h-4 w-4 text-theme-primary" />
+                Editar tarefa
+              </DialogTitle>
               <DialogDescription>Atualize os campos do encaminhamento registrado no Airtable.</DialogDescription>
             </DialogHeader>
 
-            <div className="grid gap-4 border-y py-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <FieldLabel>Tipo</FieldLabel>
-                <Select value={type} onValueChange={setType} required>
-                  <SelectTrigger className="h-10 w-full">
-                    <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mergeOptions(taskOptions.types, task.type).map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <FieldLabel>Status</FieldLabel>
-                <Select value={status} onValueChange={setStatus} required>
-                  <SelectTrigger className="h-10 w-full">
-                    <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mergeOptions(taskOptions.statuses, task.statusLabel || statusConfig[task.status].label).map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <FieldLabel>Prazo</FieldLabel>
-                <Input type="date" className="h-10" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
-              </div>
-
-              <div className="space-y-1.5">
-                <FieldLabel>Responsável</FieldLabel>
-                <Select value={responsibleUserId} onValueChange={setResponsibleUserId} required>
-                  <SelectTrigger className="h-10 w-full">
-                    <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {responsibleOptions.length > 0 ? (
-                      responsibleOptions.map((user) => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.label}
+            <div className="flex-1 overflow-y-auto p-6 pt-2 space-y-4 min-h-0 custom-scrollbar">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">Tipo</label>
+                  <Select value={type} onValueChange={setType} required>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {mergeOptions(taskOptions.types, task.type).map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
                         </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="no-users" disabled>
-                        Nenhum usuário encontrado
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Paciente</p>
-                {task.patient ? (
-                  <button
-                    type="button"
-                    className={cn(
-                      "group mt-1 flex max-w-full items-center gap-2 rounded-md text-left transition-colors",
-                      task.patientChatId ? "-mx-1 px-1.5 py-1 hover:bg-primary/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" : "cursor-default",
-                    )}
-                    onClick={() => {
-                      if (task.patientChatId) onOpenPatientMessages(task);
-                    }}
-                    disabled={!task.patientChatId}
-                  >
-                    <Avatar className="h-8 w-8 shrink-0 border">
-                      <AvatarImage src={task.patientPhotoUrl || undefined} alt={task.patient} />
-                      <AvatarFallback className="bg-muted text-[10px] font-semibold text-muted-foreground">{getAvatarInitials(task.patient)}</AvatarFallback>
-                    </Avatar>
-                    <span className="min-w-0 break-words text-sm font-medium text-foreground">{task.patient}</span>
-                    {task.patientChatId ? <ArrowRight className="h-4 w-4 shrink-0 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-70" /> : null}
-                  </button>
-                ) : (
-                  <p className="mt-1 break-words text-sm text-foreground">Nao informado</p>
-                )}
-              </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">Status</label>
+                  <Select value={status} onValueChange={setStatus} required>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {mergeOptions(taskOptions.statuses, task.statusLabel || statusConfig[task.status].label).map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Criada em</p>
-                <p className="mt-1 flex items-center gap-2 text-sm text-foreground">
-                  <CalendarDays className="h-4 w-4" />
-                  {createdAt || "Nao informado"}
-                </p>
-              </div>
-            </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">Prazo</label>
+                  <Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+                </div>
 
-            <div className="space-y-1.5">
-              <FieldLabel>Assunto</FieldLabel>
-              <Input className="h-10" value={subject} onChange={(event) => setSubject(event.target.value)} required />
-            </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">Responsável</label>
+                  <Select value={responsibleUserId} onValueChange={setResponsibleUserId} required>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {responsibleOptions.length > 0 ? (
+                        responsibleOptions.map((user) => (
+                          <SelectItem key={user.id} value={user.id}>
+                            {user.label}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-users" disabled>
+                          Nenhum usuário encontrado
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <div className="space-y-1.5">
-              <FieldLabel>Observações</FieldLabel>
-              <Textarea className="min-h-28 resize-y" value={observations} onChange={(event) => setObservations(event.target.value)} />
-            </div>
-
-            <section className="space-y-3 border-t pt-4">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Evolução / resolução</h3>
-                <p className="mt-1 text-xs text-muted-foreground">Registre o histórico de acompanhamento desta tarefa.</p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <input ref={noteAttachmentInputRef} type="file" accept="image/*" className="hidden" onChange={handleAttachmentChange} disabled={isSavingNote || isRecordingAudio} />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="transition hover:-translate-y-0.5 hover:border-sky-400/50 hover:bg-sky-400/10 hover:text-sky-600 hover:shadow-xs"
-                  onClick={() => noteAttachmentInputRef.current?.click()}
-                  disabled={isSavingNote || isRecordingAudio}
-                >
-                  <ImageIcon className="h-4 w-4" />
-                  Imagem
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className={cn(
-                    "transition hover:-translate-y-0.5 hover:shadow-xs",
-                    isRecordingAudio ? "border-rose-400/50 bg-rose-400/10 text-rose-600 hover:bg-rose-400/15" : "hover:border-teal-400/50 hover:bg-teal-400/10 hover:text-teal-600",
+                <div className="space-y-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground block">Paciente</span>
+                  {task.patient ? (
+                    <button
+                      type="button"
+                      className={cn(
+                        "group flex max-w-full items-center gap-2 rounded-md text-left transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1",
+                        task.patientChatId ? "-mx-1 px-1.5 py-1 hover:bg-theme-primary/5 hover:text-foreground" : "cursor-default",
+                      )}
+                      onClick={() => {
+                        if (task.patientChatId) onOpenPatientMessages(task);
+                      }}
+                      disabled={!task.patientChatId}
+                    >
+                      <Avatar className="h-7 w-7 shrink-0 border border-border/60">
+                        <AvatarImage src={task.patientPhotoUrl || undefined} alt={task.patient} />
+                        <AvatarFallback className="bg-muted text-[10px] font-bold text-muted-foreground">{getAvatarInitials(task.patient)}</AvatarFallback>
+                      </Avatar>
+                      <span className="min-w-0 truncate text-sm font-medium text-foreground">{task.patient}</span>
+                      {task.patientChatId ? <ArrowRight className="h-3.5 w-3.5 shrink-0 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-70" /> : null}
+                    </button>
+                  ) : (
+                    <p className="py-1 text-sm text-muted-foreground italic">Não informado</p>
                   )}
-                  onClick={handleAudioRecording}
-                  disabled={isSavingNote}
-                >
-                  {isRecordingAudio ? <Square className="h-4 w-4 fill-current" /> : <Mic className="h-4 w-4" />}
-                  {isRecordingAudio ? "Parar gravação" : "Gravar audio"}
-                </Button>
-                {noteAttachment ? (
-                  <div
-                    className={cn(
-                      "flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs",
-                      attachmentType === "unsupported" ? "border-destructive/25 bg-destructive/5 text-destructive" : "bg-background text-muted-foreground",
-                    )}
+                </div>
+
+                <div className="space-y-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground block">Criada em</span>
+                  <p className="flex items-center gap-1.5 py-1 text-sm text-foreground">
+                    <CalendarDays className="h-4 w-4 text-muted-foreground/80" />
+                    {createdAt || "Não informado"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground">Assunto</label>
+                <Input value={subject} onChange={(event) => setSubject(event.target.value)} required />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground">Observações</label>
+                <Textarea className="min-h-20 resize-none" value={observations} onChange={(event) => setObservations(event.target.value)} />
+              </div>
+
+              <div className="space-y-3 border-t border-border/60 pt-4">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-foreground/90">Evolução / Resolução</h3>
+                  <p className="text-[11px] text-muted-foreground">Registre o histórico de acompanhamento desta tarefa.</p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <input ref={noteAttachmentInputRef} type="file" accept="image/*" className="hidden" onChange={handleAttachmentChange} disabled={isSavingNote || isRecordingAudio} />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs transition hover:-translate-y-0.5 hover:border-sky-400/50 hover:bg-sky-400/10 hover:text-sky-600 hover:shadow-xs"
+                    onClick={() => noteAttachmentInputRef.current?.click()}
+                    disabled={isSavingNote || isRecordingAudio}
                   >
-                    <span className="truncate">
-                      {attachmentType === "unsupported" ? "Formato nao suportado" : getTaskNoteAttachmentLabel(noteAttachment)}: {noteAttachment.name}
-                    </span>
-                    <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={handleClearAttachment} aria-label="Remover anexo">
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
+                    <ImageIcon className="h-3.5 w-3.5" />
+                    Imagem
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      "h-8 text-xs transition hover:-translate-y-0.5 hover:shadow-xs",
+                      isRecordingAudio ? "border-rose-400/50 bg-rose-400/10 text-rose-600 hover:bg-rose-400/15" : "hover:border-teal-400/50 hover:bg-teal-400/10 hover:text-teal-600",
+                    )}
+                    onClick={handleAudioRecording}
+                    disabled={isSavingNote}
+                  >
+                    {isRecordingAudio ? <Square className="h-3.5 w-3.5 fill-current" /> : <Mic className="h-3.5 w-3.5" />}
+                    {isRecordingAudio ? "Parar gravação" : "Gravar áudio"}
+                  </Button>
+
+                  {noteAttachment ? (
+                    <div
+                      className={cn(
+                        "flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-xs",
+                        attachmentType === "unsupported" ? "border-destructive/25 bg-destructive/5 text-destructive" : "bg-background text-muted-foreground",
+                      )}
+                    >
+                      <span className="truncate">
+                        {attachmentType === "unsupported" ? "Formato não suportado" : getTaskNoteAttachmentLabel(noteAttachment)}: {noteAttachment.name}
+                      </span>
+                      <Button type="button" variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={handleClearAttachment} aria-label="Remover anexo">
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+
+                {audioRecordingError ? (
+                  <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-xs text-destructive animate-fade-in">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    {audioRecordingError}
                   </div>
                 ) : null}
+
+                {attachmentType === "image" && noteMediaPreviewUrl ? (
+                  <div className="overflow-hidden rounded-lg border bg-background max-h-52 flex items-center justify-center p-2">
+                    <img src={noteMediaPreviewUrl} alt={noteAttachment?.name || "Preview"} className="max-h-48 rounded-md object-contain" />
+                  </div>
+                ) : null}
+
+                {attachmentType === "audio" && noteMediaPreviewUrl ? <audio controls className="w-full h-9" src={noteMediaPreviewUrl} /> : null}
+
+                <Textarea
+                  className="min-h-16 resize-none"
+                  value={noteDraft}
+                  onChange={(event) => onNoteDraftChange(event.target.value)}
+                  placeholder={noteAttachment ? "Legenda opcional..." : "Digite uma atualização sobre a resolução da tarefa..."}
+                  disabled={isSavingNote}
+                />
+
+                <div className="flex items-center justify-between gap-3 pt-0.5">
+                  <p className="text-[11px] font-medium text-muted-foreground">{isLoadingNotes ? "Carregando histórico..." : `${notes.length} registro${notes.length === 1 ? "" : "s"}`}</p>
+                  <Button type="button" size="sm" className="h-8 text-xs gap-1.5" disabled={!canCreateNote || isSavingNote} onClick={() => onCreateNote(task)}>
+                    {isSavingNote ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                    {isSavingNote ? "Salvando..." : "Adicionar evolução"}
+                  </Button>
+                </div>
+
+                {noteErrorMessage ? (
+                  <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-xs text-destructive animate-fade-in">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    {noteErrorMessage}
+                  </div>
+                ) : null}
+
+                <div className="max-h-48 space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+                  {!isLoadingNotes && notes.length === 0 ? (
+                    <p className="rounded-lg border border-dashed p-3 text-center text-xs text-muted-foreground">Nenhuma evolução registrada.</p>
+                  ) : (
+                    notes.map((note) => {
+                      const parsedNote = parseTaskResolutionNoteContent(note.content);
+                      return (
+                        <div key={note.id} className="rounded-lg border bg-background/50 p-3 shadow-2xs">
+                          <div className="mb-2 flex items-center justify-between gap-2 border-b border-border/40 pb-1.5">
+                            <div className="min-w-0 text-[10px] text-muted-foreground flex items-center gap-2 flex-wrap">
+                              <span className="font-medium">{formatDateTime(note.updated_at || note.created_at, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                              {note.status_snapshot && <span className="bg-muted px-1.5 py-0.5 rounded-sm border border-border/60 text-foreground/80">Status: {note.status_snapshot}</span>}
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground hover:text-destructive rounded-md"
+                              onClick={() => onDeleteNote(note.id)}
+                              aria-label="Apagar evolução"
+                              disabled={deletingNoteId === note.id}
+                            >
+                              {deletingNoteId === note.id ? <Loader2 className="h-3 animate-spin" /> : <Trash2 className="h-3" />}
+                            </Button>
+                          </div>
+
+                          {parsedNote.type === "image" && (
+                            <a href={parsedNote.mediaUrl} target="_blank" rel="noreferrer" className="mb-2 block overflow-hidden rounded-md border bg-background max-h-40">
+                              <img src={parsedNote.mediaUrl} alt={parsedNote.content || parsedNote.fileName} className="max-h-40 w-full object-contain" />
+                            </a>
+                          )}
+
+                          {parsedNote.type === "audio" && <audio controls className="mb-2 w-full h-8" src={parsedNote.mediaUrl} />}
+
+                          {parsedNote.content && <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground/90">{parsedNote.content}</p>}
+                          {parsedNote.type !== "text" && <p className="mt-1 truncate text-[10px] text-muted-foreground italic">{parsedNote.fileName}</p>}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="p-6 pt-4 border-t border-border bg-muted/20 shrink-0 flex items-center sm:justify-between gap-2">
+              <div className="text-[11px] text-muted-foreground mr-auto">
+                Criado por <span className="font-medium text-foreground/80">{task.creator || "Sistema"}</span>
               </div>
 
-              {audioRecordingError ? (
-                <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  {audioRecordingError}
-                </div>
-              ) : null}
-
-              {attachmentType === "image" && noteMediaPreviewUrl ? (
-                <div className="overflow-hidden rounded-md border bg-background">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={noteMediaPreviewUrl} alt={noteAttachment?.name || "Preview da imagem"} className="max-h-64 w-full object-contain" />
-                </div>
-              ) : null}
-
-              {attachmentType === "audio" && noteMediaPreviewUrl ? <audio controls className="w-full" src={noteMediaPreviewUrl} /> : null}
-
-              <Textarea
-                className="min-h-24 resize-y"
-                value={noteDraft}
-                onChange={(event) => onNoteDraftChange(event.target.value)}
-                placeholder={noteAttachment ? "Legenda opcional" : "Digite uma atualização sobre a resolução da tarefa"}
-                disabled={isSavingNote}
-              />
-
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs text-muted-foreground">{isLoadingNotes ? "Carregando histórico..." : `${notes.length} registro${notes.length === 1 ? "" : "s"}`}</p>
-                <Button type="button" size="sm" disabled={!canCreateNote || isSavingNote} onClick={() => onCreateNote(task)}>
-                  {isSavingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  {isSavingNote ? "Salvando..." : "Adicionar evolução"}
+              <div className="flex items-center gap-2 shrink-0">
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isBusy} className="h-9 text-xs">
+                  Fechar
+                </Button>
+                <Button type="button" variant="destructive" onClick={() => onDelete(task)} disabled={isBusy} className="gap-1.5 h-9 text-xs">
+                  {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                  Excluir
+                </Button>
+                <Button type="submit" disabled={isBusy || isLoadingTaskOptions || !responsibleUserId} className="gap-1.5 h-9 text-xs bg-theme-primary text-white hover:bg-theme-primary/90">
+                  {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                  Salvar
                 </Button>
               </div>
+            </DialogFooter>
 
-              {noteErrorMessage ? (
-                <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  {noteErrorMessage}
-                </div>
-              ) : null}
-
-              <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
-                {!isLoadingNotes && notes.length === 0 ? (
-                  <p className="rounded-md border border-dashed px-3 py-3 text-sm text-muted-foreground">Nenhuma evolução registrada.</p>
-                ) : (
-                  notes.map((note) => {
-                    const parsedNote = parseTaskResolutionNoteContent(note.content);
-
-                    return (
-                      <div key={note.id} className="rounded-md border bg-card px-3 py-2">
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <div className="min-w-0 text-[11px] text-muted-foreground">
-                            <span>{formatDateTime(note.updated_at || note.created_at, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
-                            {note.status_snapshot ? <span className="ml-2">Status: {note.status_snapshot}</span> : null}
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            onClick={() => onDeleteNote(note.id)}
-                            aria-label="Apagar evolução"
-                            disabled={deletingNoteId === note.id}
-                          >
-                            {deletingNoteId === note.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                          </Button>
-                        </div>
-
-                        {parsedNote.type === "image" ? (
-                          <a href={parsedNote.mediaUrl} target="_blank" rel="noreferrer" className="mb-2 block overflow-hidden rounded-md border bg-background">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={parsedNote.mediaUrl} alt={parsedNote.content || parsedNote.fileName} className="max-h-72 w-full object-contain" />
-                          </a>
-                        ) : null}
-
-                        {parsedNote.type === "audio" ? (
-                          <audio controls className="mb-2 w-full" src={parsedNote.mediaUrl}>
-                            <a href={parsedNote.mediaUrl}>{parsedNote.fileName}</a>
-                          </audio>
-                        ) : null}
-
-                        {parsedNote.content ? <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{parsedNote.content}</p> : null}
-                        {parsedNote.type !== "text" ? <p className="mt-1 truncate text-[11px] text-muted-foreground">{parsedNote.fileName}</p> : null}
-                      </div>
-                    );
-                  })
+            {(overdue && !isSaving) || errorMessage ? (
+              <div className="px-6 pb-4 bg-muted/20 space-y-2 shrink-0">
+                {overdue && (
+                  <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-1.5 text-xs text-destructive animate-fade-in">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    Esta tarefa está atrasada no Airtable.
+                  </div>
+                )}
+                {errorMessage && (
+                  <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-1.5 text-xs text-destructive animate-fade-in">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    {errorMessage}
+                  </div>
                 )}
               </div>
-            </section>
-
-            <div className="text-xs text-muted-foreground">Criado por {task.creator || "Sistema"}</div>
-
-            {overdue ? (
-              <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                <AlertCircle className="h-4 w-4" />
-                Esta tarefa está atrasada.
-              </div>
             ) : null}
-
-            {errorMessage ? (
-              <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                <AlertCircle className="h-4 w-4" />
-                {errorMessage}
-              </div>
-            ) : null}
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isBusy}>
-                Fechar
-              </Button>
-              <Button type="button" variant="destructive" onClick={() => onDelete(task)} disabled={isBusy}>
-                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                {isDeleting ? "Excluindo..." : "Excluir tarefa"}
-              </Button>
-              <Button type="submit" disabled={isBusy || isLoadingTaskOptions || !responsibleUserId}>
-                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                {isSaving ? "Salvando..." : "Salvar alterações"}
-              </Button>
-            </DialogFooter>
           </form>
         ) : null}
       </DialogContent>
