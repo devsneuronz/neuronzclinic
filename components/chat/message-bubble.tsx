@@ -31,6 +31,8 @@ export type MessageBubbleProps = {
 export const MessageBubble = memo(
   function MessageBubble({ message, chat, messagesByRemoteId, selected, isSelectionMode, onToggleSelection, onReply, onForward, onDelete, onCreateNote, onExpandImage, isHighlighted, onScrollToMessage }: MessageBubbleProps) {
     const fromMe = !!message.from_me;
+    const isGroupChat = chat.chat_id?.endsWith("@g.us") || chat.grupo === true;
+    const incomingSenderName = isGroupChat ? message.participant : getDisplayName(chat);
     const mediaUrl = getMediaUrl(message);
     const mediaKind = getMediaKind(message);
     const hasCaption = !!message.content?.trim();
@@ -101,7 +103,7 @@ export const MessageBubble = memo(
     `,
           )}
         >
-          {message.participant && !fromMe && <p className="mb-1 text-sm font-medium text-(--chat-primary)">{message.participant}</p>}
+          {message.participant && !fromMe && <p className="mb-1 text-sm font-medium text-(--chat-primary)">{incomingSenderName}</p>}
 
           {!deleted && !isSelectionMode && (
             <div className={cn("absolute top-1 flex rounded-full bg-(--chat-card)/90 p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100", fromMe ? "right-full mr-2" : "left-full ml-2")}>
