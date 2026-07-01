@@ -7,7 +7,6 @@ import type { ContactInfoValues } from "@/components/contact-details/profile-vie
 import { useChatOptions } from "@/hooks/use-chat-options";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { useSignatureMode } from "@/hooks/use-signature-mode";
 import { type ChatStatusOption } from "@/lib/chat-status";
 import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, type ChatTag } from "@/lib/chat-tags";
 import { createSupabaseRealtimeSubscription, type SupabasePostgresChangePayload } from "@/lib/supabase-realtime";
@@ -412,7 +411,13 @@ export default function ChatsPage() {
 
   const [trainingTrigger, setTrainingTrigger] = useState<number>(0);
 
-  const { isSignatureMode: effectiveSignatureMode, rawSignatureMode: isSignatureMode, setSignatureMode: setIsAssinaturaMode, canUseAdminChatModes } = useSignatureMode();
+  const [isSignatureMode, setIsAssinaturaMode] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("neuronzclinic.chat.use-signature");
+      return saved === null ? true : saved === "true";
+    }
+    return true;
+  });
 
   const [isGhostMode, setIsGhostMode] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
@@ -422,8 +427,14 @@ export default function ChatsPage() {
     return true;
   });
 
+  const canUseAdminChatModes = user?.role === "admin";
+  const effectiveSignatureMode = canUseAdminChatModes ? isSignatureMode : true;
   const effectiveGhostMode = isCurrentUserLoading ? true : canUseAdminChatModes ? isGhostMode : false;
   const isGhostModeRef = useRef(effectiveGhostMode);
+
+  useEffect(() => {
+    localStorage.setItem("neuronzclinic.chat.use-signature", String(isSignatureMode));
+  }, [isSignatureMode]);
 
   useEffect(() => {
     localStorage.setItem("neuronzclinic.chat.ghost-mode", String(isGhostMode));

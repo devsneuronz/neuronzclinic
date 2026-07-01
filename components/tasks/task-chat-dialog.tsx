@@ -1,26 +1,16 @@
 "use client";
 
-import { ContactDetails } from "@/components/contact-details/contact-details";
 import { ChatWindow } from "@/components/chat/chat-window";
+import { ContactDetails } from "@/components/contact-details/contact-details";
+import type { ContactInfoValues } from "@/components/contact-details/profile-view";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import {
-  fetchChats,
-  fetchMessages,
-  deleteMessages,
-  forwardMessages,
-  sendMessage,
-  updateChatDetails,
-  type ChatRecord,
-  type MessageRecord,
-} from "@/lib/supabase-rest";
+import { useChatOptions } from "@/hooks/use-chat-options";
+import type { ChatStatusOption } from "@/lib/chat-status";
+import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, type ChatTag } from "@/lib/chat-tags";
+import { deleteMessages, fetchChats, fetchMessages, forwardMessages, sendMessage, updateChatDetails, type ChatRecord, type MessageRecord } from "@/lib/supabase-rest";
 import type { Task } from "@/lib/task";
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useChatOptions } from "@/hooks/use-chat-options";
-import { useSignatureMode } from "@/hooks/use-signature-mode";
-import { CHAT_INTEREST_FIELD_CANDIDATES, getChatTags, getChatInterestTags, type ChatTag } from "@/lib/chat-tags";
-import type { ChatStatusOption } from "@/lib/chat-status";
-import type { ContactInfoValues } from "@/components/contact-details/profile-view";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const MESSAGE_PAGE_SIZE = 50;
 
@@ -128,7 +118,6 @@ export function TaskChatDialog({ task, open, onOpenChange, forwardTargets }: Tas
   const [error, setError] = useState<string>();
 
   const { statusOptions, tagOptions, interestOptions, error: chatOptionsError } = useChatOptions(forwardTargets);
-  const { isSignatureMode: effectiveSignatureMode } = useSignatureMode();
 
   useEffect(() => {
     if (chatOptionsError) setError(chatOptionsError);
@@ -161,9 +150,7 @@ export function TaskChatDialog({ task, open, onOpenChange, forwardTargets }: Tas
       setIsLoadingMessages(true);
     });
 
-    const loadChat = knownChat
-      ? Promise.resolve(knownChat)
-      : fetchChats({ limit: 1, offset: 0, search: chatId }).then((results) => results.find((candidate) => candidate.chat_id === chatId || candidate.id === chatId) || results[0]);
+    const loadChat = knownChat ? Promise.resolve(knownChat) : fetchChats({ limit: 1, offset: 0, search: chatId }).then((results) => results.find((candidate) => candidate.chat_id === chatId || candidate.id === chatId) || results[0]);
 
     loadChat
       .then(async (loadedChat) => {
@@ -231,34 +218,40 @@ export function TaskChatDialog({ task, open, onOpenChange, forwardTargets }: Tas
     [chat, loadLatestMessages],
   );
 
-  const handleForwardMessages = useCallback(async ({ messages: messagesToForward, targetChatId }: { messages: MessageRecord[]; targetChatId: string }) => {
-    await forwardMessages({ messages: messagesToForward, targetChatId });
-    if (targetChatId === chat?.chat_id) {
-      await loadLatestMessages(targetChatId);
-    }
-  }, [chat, loadLatestMessages]);
+  const handleForwardMessages = useCallback(
+    async ({ messages: messagesToForward, targetChatId }: { messages: MessageRecord[]; targetChatId: string }) => {
+      await forwardMessages({ messages: messagesToForward, targetChatId });
+      if (targetChatId === chat?.chat_id) {
+        await loadLatestMessages(targetChatId);
+      }
+    },
+    [chat, loadLatestMessages],
+  );
 
-  const handleDeleteMessages = useCallback(async (messagesToDelete: MessageRecord[]) => {
-    if (!chat?.chat_id || messagesToDelete.length === 0) return;
+  const handleDeleteMessages = useCallback(
+    async (messagesToDelete: MessageRecord[]) => {
+      if (!chat?.chat_id || messagesToDelete.length === 0) return;
 
-    const previousMessages = messages;
-    setMessages((current) => current.filter((message) => !messagesToDelete.some((messageToDelete) => messageToDelete.id === message.id)));
+      const previousMessages = messages;
+      setMessages((current) => current.filter((message) => !messagesToDelete.some((messageToDelete) => messageToDelete.id === message.id)));
 
-    try {
-      await deleteMessages({ chatId: chat.chat_id, messages: messagesToDelete });
-      await loadLatestMessages(chat.chat_id);
-    } catch (err) {
-      setMessages(previousMessages);
-      setError(err instanceof Error ? err.message : "Nao foi possivel apagar a mensagem.");
-      throw err;
-    }
-  }, [chat, loadLatestMessages, messages]);
+      try {
+        await deleteMessages({ chatId: chat.chat_id, messages: messagesToDelete });
+        await loadLatestMessages(chat.chat_id);
+      } catch (err) {
+        setMessages(previousMessages);
+        setError(err instanceof Error ? err.message : "Nao foi possivel apagar a mensagem.");
+        throw err;
+      }
+    },
+    [chat, loadLatestMessages, messages],
+  );
 
   const handleToggleStatus = useCallback(async () => {
     if (!chat) return;
     const nextFinalizada = !chat.finalizada;
     const previousChat = chat;
-    setChat((current) => current ? { ...current, finalizada: nextFinalizada } : current);
+    setChat((current) => (current ? { ...current, finalizada: nextFinalizada } : current));
     setError(undefined);
     try {
       await updateChatDetails({ id: chat.id, finalizada: nextFinalizada });
@@ -272,7 +265,7 @@ export function TaskChatDialog({ task, open, onOpenChange, forwardTargets }: Tas
     if (!chat) return;
     const nextIA = !chat.ia_responde;
     const previousChat = chat;
-    setChat((current) => current ? { ...current, ia_responde: nextIA } : current);
+    setChat((current) => (current ? { ...current, ia_responde: nextIA } : current));
     setError(undefined);
     try {
       await updateChatDetails({ id: chat.id, ia_responde: nextIA });
@@ -282,111 +275,140 @@ export function TaskChatDialog({ task, open, onOpenChange, forwardTargets }: Tas
     }
   }, [chat]);
 
-  const handleChangeStatus = useCallback(async (status: ChatStatusOption) => {
-    if (!chat) return;
-    const updatePatch = getStatusFields(chat, status);
-    const previousChat = chat;
-    setChat((current) => current ? { ...current, ...updatePatch } : current);
-    setError(undefined);
-    try {
-      await updateChatDetails({ id: chat.id, ...updatePatch });
-    } catch (err) {
-      setChat(previousChat);
-      setError(err instanceof Error ? err.message : "Não foi possível atualizar o status do contato.");
-    }
-  }, [chat]);
+  const handleChangeStatus = useCallback(
+    async (status: ChatStatusOption) => {
+      if (!chat) return;
+      const updatePatch = getStatusFields(chat, status);
+      const previousChat = chat;
+      setChat((current) => (current ? { ...current, ...updatePatch } : current));
+      setError(undefined);
+      try {
+        await updateChatDetails({ id: chat.id, ...updatePatch });
+      } catch (err) {
+        setChat(previousChat);
+        setError(err instanceof Error ? err.message : "Não foi possível atualizar o status do contato.");
+      }
+    },
+    [chat],
+  );
 
-  const handleToggleTag = useCallback(async (tag: ChatTag) => {
-    if (!chat) return;
-    const currentTags = getChatTags(chat);
-    const tagKey = getTagKey(tag);
-    const hasTag = currentTags.some((t) => getTagKey(t) === tagKey);
-    const nextTags = hasTag ? currentTags.filter((t) => getTagKey(t) !== tagKey) : [...currentTags, tag];
-    const previousChat = chat;
-    setChat((current) => current ? {
-      ...current,
-      json_tags: nextTags,
-      json_tags_parsed: nextTags,
-      tag_chat_array: nextTags,
-    } : current);
-    setError(undefined);
-    try {
-      await updateChatDetails({ id: chat.id, tags: nextTags });
-    } catch (err) {
-      setChat(previousChat);
-      setError(err instanceof Error ? err.message : "Não foi possível salvar as tags do contato.");
-    }
-  }, [chat]);
+  const handleToggleTag = useCallback(
+    async (tag: ChatTag) => {
+      if (!chat) return;
+      const currentTags = getChatTags(chat);
+      const tagKey = getTagKey(tag);
+      const hasTag = currentTags.some((t) => getTagKey(t) === tagKey);
+      const nextTags = hasTag ? currentTags.filter((t) => getTagKey(t) !== tagKey) : [...currentTags, tag];
+      const previousChat = chat;
+      setChat((current) =>
+        current
+          ? {
+              ...current,
+              json_tags: nextTags,
+              json_tags_parsed: nextTags,
+              tag_chat_array: nextTags,
+            }
+          : current,
+      );
+      setError(undefined);
+      try {
+        await updateChatDetails({ id: chat.id, tags: nextTags });
+      } catch (err) {
+        setChat(previousChat);
+        setError(err instanceof Error ? err.message : "Não foi possível salvar as tags do contato.");
+      }
+    },
+    [chat],
+  );
 
-  const handleToggleInterest = useCallback(async (interest: ChatTag) => {
-    if (!chat) return;
-    const currentInterests = getChatInterestTags(chat);
-    const interestKey = getTagKey(interest);
-    const hasInterest = currentInterests.some((i) => getTagKey(i) === interestKey);
-    const nextInterests = hasInterest ? currentInterests.filter((i) => getTagKey(i) !== interestKey) : [...currentInterests, interest];
-    const interestPatch = CHAT_INTEREST_FIELD_CANDIDATES.reduce<Record<string, ChatTag[]>>((patch, field) => {
-      patch[field] = nextInterests;
-      return patch;
-    }, {});
-    const previousChat = chat;
-    setChat((current) => current ? { ...current, ...interestPatch } : current);
-    setError(undefined);
-    try {
-      await updateChatDetails({ id: chat.id, interestTags: nextInterests });
-    } catch (err) {
-      setChat(previousChat);
-      setError(err instanceof Error ? err.message : "Não foi possível salvar os interesses do contato.");
-    }
-  }, [chat]);
+  const handleToggleInterest = useCallback(
+    async (interest: ChatTag) => {
+      if (!chat) return;
+      const currentInterests = getChatInterestTags(chat);
+      const interestKey = getTagKey(interest);
+      const hasInterest = currentInterests.some((i) => getTagKey(i) === interestKey);
+      const nextInterests = hasInterest ? currentInterests.filter((i) => getTagKey(i) !== interestKey) : [...currentInterests, interest];
+      const interestPatch = CHAT_INTEREST_FIELD_CANDIDATES.reduce<Record<string, ChatTag[]>>((patch, field) => {
+        patch[field] = nextInterests;
+        return patch;
+      }, {});
+      const previousChat = chat;
+      setChat((current) => (current ? { ...current, ...interestPatch } : current));
+      setError(undefined);
+      try {
+        await updateChatDetails({ id: chat.id, interestTags: nextInterests });
+      } catch (err) {
+        setChat(previousChat);
+        setError(err instanceof Error ? err.message : "Não foi possível salvar os interesses do contato.");
+      }
+    },
+    [chat],
+  );
 
-  const handleChangeName = useCallback(async (name: string) => {
-    if (!chat) return;
-    const nextName = name.trim();
-    const previousChat = chat;
-    setChat((current) => current ? { ...current, nome_contato: nextName } : current);
-    setError(undefined);
-    try {
-      await updateChatDetails({ id: chat.id, nome_contato: nextName });
-    } catch (err) {
-      setChat(previousChat);
-      setError(err instanceof Error ? err.message : "Não foi possível salvar o nome do contato.");
-    }
-  }, [chat]);
+  const handleChangeName = useCallback(
+    async (name: string) => {
+      if (!chat) return;
+      const nextName = name.trim();
+      const previousChat = chat;
+      setChat((current) => (current ? { ...current, nome_contato: nextName } : current));
+      setError(undefined);
+      try {
+        await updateChatDetails({ id: chat.id, nome_contato: nextName });
+      } catch (err) {
+        setChat(previousChat);
+        setError(err instanceof Error ? err.message : "Não foi possível salvar o nome do contato.");
+      }
+    },
+    [chat],
+  );
 
-  const handleChangeContactInfo = useCallback(async (info: ContactInfoValues) => {
-    if (!chat) return;
-    const previousChat = chat;
-    setChat((current) => current ? { ...current, ...info } : current);
-    setError(undefined);
-    try {
-      await updateChatDetails({ id: chat.id, ...info });
-    } catch (err) {
-      setChat(previousChat);
-      setError(err instanceof Error ? err.message : "Não foi possível salvar os detalhes do contato.");
-    }
-  }, [chat]);
+  const handleChangeContactInfo = useCallback(
+    async (info: ContactInfoValues) => {
+      if (!chat) return;
+      const previousChat = chat;
+      setChat((current) => (current ? { ...current, ...info } : current));
+      setError(undefined);
+      try {
+        await updateChatDetails({ id: chat.id, ...info });
+      } catch (err) {
+        setChat(previousChat);
+        setError(err instanceof Error ? err.message : "Não foi possível salvar os detalhes do contato.");
+      }
+    },
+    [chat],
+  );
 
-  const handleReorderTags = useCallback((tags: ChatTag[]) => {
-    if (!chat) return;
-    setChat((current) => current ? {
-      ...current,
-      json_tags: tags,
-      json_tags_parsed: tags,
-      tag_chat_array: tags,
-    } : current);
-  }, [chat]);
+  const handleReorderTags = useCallback(
+    (tags: ChatTag[]) => {
+      if (!chat) return;
+      setChat((current) =>
+        current
+          ? {
+              ...current,
+              json_tags: tags,
+              json_tags_parsed: tags,
+              tag_chat_array: tags,
+            }
+          : current,
+      );
+    },
+    [chat],
+  );
 
-  const handleCommitTagOrder = useCallback(async (tags: ChatTag[]) => {
-    if (!chat) return;
-    const previousChat = chat;
-    setError(undefined);
-    try {
-      await updateChatDetails({ id: chat.id, tags });
-    } catch (err) {
-      setChat(previousChat);
-      setError(err instanceof Error ? err.message : "Não foi possível salvar a ordem das tags.");
-    }
-  }, [chat]);
+  const handleCommitTagOrder = useCallback(
+    async (tags: ChatTag[]) => {
+      if (!chat) return;
+      const previousChat = chat;
+      setError(undefined);
+      try {
+        await updateChatDetails({ id: chat.id, tags });
+      } catch (err) {
+        setChat(previousChat);
+        setError(err instanceof Error ? err.message : "Não foi possível salvar a ordem das tags.");
+      }
+    },
+    [chat],
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -419,7 +441,7 @@ export function TaskChatDialog({ task, open, onOpenChange, forwardTargets }: Tas
                 onToggleDetails={() => setShowDetails((current) => !current)}
                 isDetailsOpen={showDetails}
                 onToggleStatus={handleToggleStatus}
-                isSignatureMode={effectiveSignatureMode}
+                isSignatureMode={true}
                 onOpenIATraining={() => setShowDetails(true)}
               />
             </div>
