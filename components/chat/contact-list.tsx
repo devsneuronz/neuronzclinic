@@ -6,20 +6,21 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { CHAT_DRAFT_CHANGED_EVENT, CHAT_DRAFT_STORAGE_PREFIX, readChatDraft, type ChatDraftChangedDetail } from "@/lib/chat-drafts";
-import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
+import { getChatStatusColor, getChatStatusLabel, normalizeStatusColor, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
 import { getChatInterestTags, getChatTags, getReadableTextColor, resolveChatTags, type ChatTag } from "@/lib/chat-tags";
 import { ChatRecord, LatestMessageStatus } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 import { formatBoldText } from "@/utils/utils";
-import { ChevronDown, ChevronUp, Feather, FilterX, HatGlasses, Loader2, Search, Send, SquarePlus } from "lucide-react";
+import { Building2, ChevronDown, ChevronUp, Feather, FilterX, HatGlasses, Loader2, Search, Send, SquarePlus, Star, TagsIcon } from "lucide-react";
 import type { FormEvent, UIEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { DropdownMenuSeparator } from "../ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { ExpandedImageModal } from "./expanded-image-modal";
 import { MessageStatusIcon } from "./message-status-icon";
@@ -34,7 +35,7 @@ interface ContactListProps {
   selectedId?: string;
   latestMessageStatuses?: Record<string, LatestMessageStatus>;
   statusOptions?: ChatStatusOption[];
-  tagOptions?: ChatTag[];
+  tagOptions: ChatTag[];
   onSearchChange?: (value: string) => void;
   onSelect?: (id: string) => void;
   onLoadMore?: () => void;
@@ -167,7 +168,7 @@ export function ContactList({
   selectedId,
   latestMessageStatuses = {},
   statusOptions: catalogStatusOptions = [],
-  tagOptions: catalogTagOptions = [],
+  tagOptions,
   onSearchChange,
   onSelect,
   onLoadMore,
@@ -201,10 +202,30 @@ export function ContactList({
   const autoLoadKeyRef = useRef("");
 
   const statusOptions = useMemo(() => {
-    const catalogLabels = catalogStatusOptions.map((status) => status.label);
-    return getUniqueOptions([...catalogLabels, ...chats.map(getChatStatusLabel)]);
+    const statuses = new Map<string, ChatStatusOption>();
+
+    for (const option of catalogStatusOptions) {
+      if (!option.label) continue;
+      statuses.set(option.label.toLowerCase(), {
+        label: option.label,
+        color: normalizeStatusColor(option.color),
+      });
+    }
+
+    for (const chat of chats) {
+      const label = getChatStatusLabel(chat);
+      if (!label) continue;
+      const key = label.toLowerCase();
+      if (!statuses.has(key)) {
+        statuses.set(key, {
+          label,
+          color: normalizeStatusColor(chat.hex_status),
+        });
+      }
+    }
+
+    return sortStatusOptions(Array.from(statuses.values()));
   }, [catalogStatusOptions, chats]);
-  const tagOptions = useMemo(() => getUniqueOptions(chats.flatMap((chat) => getChatTags(chat).map((tag) => tag.label))), [chats]);
   const interestOptions = useMemo(() => getUniqueOptions(chats.flatMap((chat) => getChatInterestTags(chat).map((tag) => tag.label))), [chats]);
   const sectorIds = useMemo(() => Array.from(new Set(chats.flatMap((chat) => getSectorIds(chat.setor)))), [chats]);
   const sectorOptions = useMemo(() => (sectorCatalog.length > 0 ? sectorCatalog : getUniqueOptions(sectorIds.map((id) => getSectorLabel(id, sectorLabels)))), [sectorCatalog, sectorIds, sectorLabels]);
@@ -547,10 +568,10 @@ export function ContactList({
           </button>
           <div className="flex items-center gap-3">
             <Button
-              variant="ghost"
+              variant="destructive"
               disabled={!hasActiveFilters}
               size="icon"
-              className={cn("h-7 w-7 text-muted-foreground", hasActiveFilters && "hover:bg-red-500/10! hover:text-red-500")}
+              className={cn("h-7 w-7", !hasActiveFilters ? "text-muted-foreground" : "not-hover:text-muted-foreground")}
               onClick={clearFilters}
               title="Limpar filtros"
               aria-label="Limpar filtros"
@@ -566,64 +587,155 @@ export function ContactList({
         {isFiltersOpen && (
           <div className="space-y-2 px-3 pb-4">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-8 w-full bg-card text-xs">
-                <SelectValue placeholder="Status" />
+              <SelectTrigger className={cn("h-8 w-full bg-card text-xs gap-2 font-medium hover:bg-accent transition-colors", statusFilter === ALL_FILTERS && "border-dashed")}>
+                <div className="flex items-center gap-2 truncate">
+                  {statusFilter && statusFilter !== ALL_FILTERS ? (
+                    <>
+                      {(() => {
+                        const selectedStatus = statusOptions.find((s) => s.label === statusFilter);
+                        return (
+                          <span className="flex items-center gap-2">
+                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: selectedStatus?.color || "#db351f" }} />
+                            <span className="text-foreground">{statusFilter}</span>
+                          </span>
+                        );
+                      })()}
+                    </>
+                  ) : (
+                    <>
+                      <div className="relative w-4 h-4 p-0">
+                        <span className="absolute h-2 w-2 left-1/2 top-1/2 -translate-1/2 rounded-full bg-muted-foreground" />
+                      </div>
+                      <span className="text-muted-foreground">Filtrar por status</span>
+                    </>
+                  )}
+                </div>
               </SelectTrigger>
+
               <SelectContent>
-                <SelectItem value={ALL_FILTERS}>
-                  <span className="text-muted-foreground">Selecione um status</span>
+                <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm cursor-pointer">
+                  Selecione um status
                 </SelectItem>
+
                 {statusOptions.map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status}
-                  </SelectItem>
+                  <Fragment key={status.label}>
+                    {status.label === "ADM" && <DropdownMenuSeparator />}
+
+                    <SelectItem value={status.label} className="text-xs my-0.5 rounded-sm focus:bg-accent cursor-pointer">
+                      <span className="flex items-center gap-2 font-medium">
+                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: status.color || "#db351f" }} />
+                        {status.label}
+                      </span>
+                    </SelectItem>
+                  </Fragment>
                 ))}
               </SelectContent>
             </Select>
 
             <Select value={tagFilter} onValueChange={setTagFilter}>
-              <SelectTrigger className="h-8 w-full bg-card text-xs">
-                <SelectValue placeholder="Tags" />
+              <SelectTrigger className={cn("h-8 w-full bg-card text-xs gap-2 font-medium hover:bg-accent transition-colors", tagFilter === ALL_FILTERS && "border-dashed")}>
+                <div className="flex items-center gap-2 truncate">
+                  {tagFilter && tagFilter !== ALL_FILTERS ? (
+                    <>
+                      {(() => {
+                        const selectedTag = tagOptions.find((t) => t.label === tagFilter);
+                        return (
+                          <span className="flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px]" style={{ backgroundColor: `${selectedTag?.color}`, color: getReadableTextColor(selectedTag?.color) }}>
+                            {tagFilter}
+                          </span>
+                        );
+                      })()}
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-4 h-4">
+                        <TagsIcon className=" text-muted-foreground shrink-0" />
+                      </div>
+                      <span className="text-muted-foreground">Filtrar por tag</span>
+                    </>
+                  )}
+                </div>
               </SelectTrigger>
+
               <SelectContent>
-                <SelectItem value={ALL_FILTERS}>
-                  <span className="text-muted-foreground">Selecione uma tag</span>
+                <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm">
+                  Todas as tags
                 </SelectItem>
-                {tagOptions.map((tag) => (
-                  <SelectItem key={tag} value={tag}>
-                    {tag}
-                  </SelectItem>
-                ))}
+
+                {tagOptions.map((tag) => {
+                  return (
+                    <SelectItem key={tag.id} value={tag.label} className="text-xs my-0.5 rounded-sm focus:bg-accent cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-xs shrink-0" style={{ backgroundColor: tag.color }} />
+                        <span className="font-medium">{tag.label}</span>
+                      </div>
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
 
             <Select value={interestFilter} onValueChange={setInterestFilter}>
-              <SelectTrigger className="h-8 w-full bg-card text-xs">
-                <SelectValue placeholder="Interesse" />
+              <SelectTrigger className={cn("h-8 w-full bg-card text-xs gap-2 font-medium hover:bg-accent transition-colors", interestFilter === ALL_FILTERS && "border-dashed")}>
+                <div className="flex items-center gap-2 truncate">
+                  {interestFilter && interestFilter !== ALL_FILTERS ? (
+                    <>
+                      {(() => {
+                        return <span className="flex items-center rounded-md py-0.5 text-[11px]">{interestFilter}</span>;
+                      })()}
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-4 h-4">
+                        <Star className=" text-muted-foreground shrink-0" />
+                      </div>
+                      <span className="text-muted-foreground">Filtrar por interesse</span>
+                    </>
+                  )}
+                </div>
               </SelectTrigger>
+
               <SelectContent>
-                <SelectItem value={ALL_FILTERS}>
-                  <span className="text-muted-foreground">Selecione um interesse</span>
+                <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm cursor-pointer">
+                  Selecione um interesse
                 </SelectItem>
+
                 {interestOptions.map((interest) => (
-                  <SelectItem key={interest} value={interest}>
-                    {interest}
+                  <SelectItem key={interest} value={interest} className="text-xs my-0.5 rounded-sm focus:bg-accent cursor-pointer">
+                    <span className="flex items-center gap-2 font-medium">{interest}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
             <Select value={sectorFilter} onValueChange={setSectorFilter}>
-              <SelectTrigger className="h-8 w-full bg-card text-xs">
-                <SelectValue placeholder="Setor" />
+              <SelectTrigger className={cn("h-8 w-full bg-card text-xs gap-2 font-medium hover:bg-accent transition-colors", sectorFilter === ALL_FILTERS && "border-dashed")}>
+                <div className="flex items-center gap-2 truncate">
+                  {sectorFilter && sectorFilter !== ALL_FILTERS ? (
+                    <>
+                      {(() => {
+                        return <span className="flex items-center rounded-md py-0.5 text-[11px]">{sectorFilter}</span>;
+                      })()}
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-4 h-4">
+                        <Building2 className=" text-muted-foreground shrink-0" />
+                      </div>
+                      <span className="text-muted-foreground">Filtrar por setor</span>
+                    </>
+                  )}
+                </div>
               </SelectTrigger>
+
               <SelectContent>
-                <SelectItem value={ALL_FILTERS}>
-                  <span className="text-muted-foreground">Selecione um setor</span>
+                <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm cursor-pointer">
+                  Selecione um setor
                 </SelectItem>
+
                 {sectorOptions.map((sector) => (
-                  <SelectItem key={sector} value={sector}>
-                    {sector}
+                  <SelectItem key={sector} value={sector} className="text-xs my-0.5 rounded-sm focus:bg-accent cursor-pointer">
+                    <span className="flex items-center gap-2 font-medium">{sector}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -693,7 +805,7 @@ export function ContactList({
         ) : (
           visibleChats.map((chat) => {
             const name = getDisplayName(chat);
-            const tags = resolveChatTags(getChatTags(chat), catalogTagOptions).slice(0, 3);
+            const tags = resolveChatTags(getChatTags(chat), tagOptions).slice(0, 3);
             const latestStatus = latestMessageStatuses[chat.chat_id];
             const draft = draftsByChatId[chat.chat_id]?.trim();
             const hasDraft = !!draft;

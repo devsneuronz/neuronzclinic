@@ -373,6 +373,7 @@ export default function ChatsPage() {
   const [hasMoreMessagesByChatId, setHasMoreMessagesByChatId] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string>();
   const searchRequestIdRef = useRef(0);
+  const latestMessageStatusesRef = useRef<Record<string, LatestMessageStatus>>({});
   const [storedTargetChatId, setStoredTargetChatId] = useState(() => (typeof window === "undefined" ? "" : window.localStorage.getItem(LAST_OPEN_CHAT_STORAGE_KEY) || ""));
 
   const normalizedSearch = search.trim();
@@ -1270,7 +1271,11 @@ export default function ChatsPage() {
   }, [mergeFreshMessages, selectedChatRemoteId, setChatHasMoreMessages]);
 
   useEffect(() => {
-    const chatsNeedingStatus = visibleChats.filter((chat) => chat.last_message_fromMe && !hasFreshLatestStatus(chat, latestMessageStatuses[chat.chat_id]));
+    latestMessageStatusesRef.current = latestMessageStatuses;
+  }, [latestMessageStatuses]);
+
+  useEffect(() => {
+    const chatsNeedingStatus = visibleChats.filter((chat) => chat.last_message_fromMe && !hasFreshLatestStatus(chat, latestMessageStatusesRef.current[chat.chat_id]));
     const chatIds = chatsNeedingStatus.map((chat) => chat.chat_id);
 
     if (chatIds.length === 0) return;
@@ -1302,7 +1307,7 @@ export default function ChatsPage() {
     return () => {
       isMounted = false;
     };
-  }, [latestMessageStatuses, visibleChats]);
+  }, [visibleChats]);
 
   useEffect(() => {
     const chatIds = visibleChatRemoteIdsKey ? visibleChats.filter((chat) => chat.chat_id && (!chat.last_message_time || !chat.text_last_message)).map((chat) => chat.chat_id) : [];
