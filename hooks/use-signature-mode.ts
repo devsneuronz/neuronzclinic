@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { useEffect, useState } from "react";
 
 export function useSignatureMode() {
   const { user } = useCurrentUser();
@@ -19,12 +19,12 @@ export function useSignatureMode() {
   }, [isSignatureMode]);
 
   const canUseAdminChatModes = user?.role === "admin";
-  const effectiveSignatureMode = canUseAdminChatModes ? isSignatureMode : false;
+  const effectiveSignatureMode = canUseAdminChatModes ? isSignatureMode : true;
 
   return {
     isSignatureMode: effectiveSignatureMode,
     rawSignatureMode: isSignatureMode,
-    setSignatureMode: setIsSignatureMode,
+    setSignatureMode: canUseAdminChatModes ? setIsSignatureMode : () => {},
     canUseAdminChatModes,
   };
 }
