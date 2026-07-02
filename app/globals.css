@@ -72,6 +72,9 @@
 
   --color-chat-scheduled: var(--chat-scheduled);
   --login-background: var(--login-custom-bg);
+
+  /* skeleton shimmer */
+  --shimmer-color: var(--shimmer);
 }
 
 @layer base {
@@ -145,6 +148,8 @@
 
     /* Login */
     --login-custom-bg: url(https://images.pexels.com/photos/33797647/pexels-photo-33797647.jpeg?_gl=1*1r1azh5*_ga*MjE3MDg1NjY4LjE3Nzk3MjQ0Nzk.*_ga_8JE65Q40S6*czE3Nzk3MjQ0NzkkbzEkZzAkdDE3Nzk3MjQ0NzkkajYwJGwwJGgw);
+
+    --shimmer: oklch(0.8 0 0);
   }
 
   .dark {
@@ -211,6 +216,8 @@
     --chat-reply-other-bg: #1d1e1e;
 
     --chat-scheduled: #122a20;
+
+    --shimmer: oklch(0.45 0 0);
   }
 }
 
@@ -383,4 +390,34 @@
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background-color: var(--muted-foreground);
   }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+@utility animate-shimmer {
+  position: relative;
+  overflow: hidden;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    right: -50%;
+    bottom: -50%;
+    transform: translateX(-100%) translateY(-100%);
+    background: linear-gradient(135deg, transparent 0%, rgba(255, 255, 255, 0.2) 50%, transparent 100%);
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+}
+
+.dark .animate-shimmer::after {
+  background: linear-gradient(135deg, transparent 0%, rgba(255, 255, 255, 0.08) 50%, transparent 100%);
 }

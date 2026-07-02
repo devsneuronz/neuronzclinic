@@ -6,16 +6,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useCurrentUser } from "@/hooks/use-current-user";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { formatDateTime, parseDateOnly } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import { addDays, addHours, format, isBefore, isToday, startOfToday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AlertCircle, Bot, Calendar, CheckCircle, Clock, Loader2, RefreshCw, Stethoscope, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { SkeletonShimmer } from "../ui/skeleton-shimmer";
 
 type CalendarAppointment = {
   id: string;
@@ -148,19 +149,126 @@ async function fetchAppointmentOptions() {
   };
 }
 
-function StatCard({ label, value, description, icon: Icon }: { label: string; value: string; description: string; icon: typeof Calendar }) {
+function StatCardSkeleton() {
+  return (
+    <Card className="border border-border bg-card shadow-sm">
+      <CardContent className="h-full flex items-center justify-between gap-4">
+        <div className="space-y-2.5 min-w-0 flex-1">
+          <SkeletonShimmer className="h-3 w-24" />
+          <SkeletonShimmer className="h-8 w-16" />
+          <SkeletonShimmer className="h-3 w-32" />
+        </div>
+        <SkeletonShimmer className="h-10 w-10 rounded-xl shrink-0" />
+      </CardContent>
+    </Card>
+  );
+}
+
+function AppointmentsTableSkeleton() {
+  return (
+    <Card className="border border-border bg-card shadow-sm h-full flex flex-col overflow-hidden gap-0">
+      <CardHeader className="shrink-0 border-b border-border/40 gap-0">
+        <div className="flex items-center gap-2 h-6">
+          <SkeletonShimmer className="h-4 w-4 rounded" />
+          <SkeletonShimmer className="h-4 w-48" />
+        </div>
+      </CardHeader>
+      <div className="grid grid-cols-[80px_2fr_1.2fr_1.2fr_110px] border-b border-border bg-muted/20 px-4 py-3 gap-4 max-md:hidden shrink-0">
+        {["w-8", "w-16", "w-20", "w-20", "w-12"].map((w, i) => (
+          <SkeletonShimmer key={i} className={cn("h-3", w)} />
+        ))}
+      </div>
+      <CardContent className="flex-1 p-0">
+        <div className="flex flex-col w-full divide-y divide-border/60">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="grid grid-cols-[80px_2fr_1.2fr_1.2fr_110px] items-center gap-4 px-4 py-3.5">
+              <SkeletonShimmer className="h-4 w-12" />
+              <div className="flex items-center gap-2.5">
+                <SkeletonShimmer className="h-7 w-7 rounded-full shrink-0" />
+                <SkeletonShimmer className="h-4 flex-1 max-w-[160px]" />
+              </div>
+              <SkeletonShimmer className="h-4 w-24" />
+              <SkeletonShimmer className="h-4 w-24" />
+              <SkeletonShimmer className="h-5 w-20 rounded-md ml-auto" />
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PendingTasksSkeleton() {
+  return (
+    <Card className="border border-border bg-card shadow-sm h-full flex flex-col overflow-hidden gap-0">
+      <CardHeader className="pb-3 shrink-0 border-b border-border/40 gap-0">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 h-6">
+            <SkeletonShimmer className="h-4 w-4 rounded" />
+            <SkeletonShimmer className="h-4 w-36" />
+          </div>
+          <SkeletonShimmer className="h-5 w-6 rounded-full" />
+        </div>
+      </CardHeader>
+      <CardContent className="flex-1 p-4">
+        <div className="space-y-1.5">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex items-start justify-between gap-3 p-2.5 rounded-lg">
+              <div className="min-w-0 space-y-2 flex-1">
+                <SkeletonShimmer className="h-4 w-full max-w-[180px]" />
+                <SkeletonShimmer className="h-3 w-40" />
+                <div className="flex items-center gap-2 pt-0.5">
+                  <SkeletonShimmer className="h-4 w-16 rounded" />
+                  <SkeletonShimmer className="h-3 w-20" />
+                </div>
+              </div>
+              <SkeletonShimmer className="h-5 w-14 rounded-md shrink-0" />
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ActivitySummarySkeleton() {
+  return (
+    <Card className="h-fit flex flex-col border-border bg-card shadow-sm gap-0 overflow-visible">
+      <CardHeader className="pb-3 shrink-0 gap-0">
+        <div className="flex items-center gap-2">
+          <SkeletonShimmer className="h-5 w-5 rounded" />
+          <SkeletonShimmer className="h-4 w-40" />
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex items-start gap-3">
+              <SkeletonShimmer className="h-8 w-8 rounded-lg shrink-0" />
+              <SkeletonShimmer className="h-4 flex-1 mt-1" />
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function StatCard({ label, value, description, icon: Icon, isLoading }: { label: string; value: string; description: string; icon: typeof Calendar; isLoading?: boolean }) {
+  if (isLoading) return <StatCardSkeleton />;
+
   return (
     <Card className="border border-border bg-card shadow-sm transition-all hover:shadow-md">
-      <CardContent className=" flex items-center justify-between gap-4">
-        <div className="space-y-1 min-w-0">
-          <p className="text-xs font-medium text-muted-foreground tracking-wide uppercase">{label}</p>
+      <CardContent className="h-full flex items-center justify-between gap-4">
+        <div className="space-y-1 min-w-0 h-full">
+          <p className="text-xs font-medium text-muted-foreground tracking-wide uppercase whitespace-nowrap">{label}</p>
           <p className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">{value}</p>
           <p className="text-xs text-muted-foreground truncate first-letter:uppercase" title={description}>
             {description}
           </p>
         </div>
 
-        <div className="rounded-xl bg-theme-primary/30 p-2.5 text-theme-primary-fg shrink-0">
+        <div className="rounded-xl p-2.5 shrink-0 transition-colors text-theme-primary-fg bg-theme-primary">
           <Icon className="h-5 w-5" />
         </div>
       </CardContent>
@@ -546,16 +654,23 @@ export function DashboardContent() {
 
             <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4 shrink-0">
               {stats.map((stat) => (
-                <StatCard key={stat.label} {...stat} />
+                <StatCard key={stat.label} {...stat} isLoading={isLoading || isRefreshing} />
               ))}
             </div>
 
             <div className="flex-1 min-h-0 w-full h-auto lg:h-full">
               {isLoading ? (
-                <div className="flex h-64 lg:h-full items-center justify-center rounded-lg border border-dashed">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin text-theme-primary" />
-                    Carregando dashboard
+                <div className="grid gap-4 sm:gap-6 lg:grid-cols-3 h-auto lg:h-full min-h-0 lg:overflow-hidden pb-6 lg:pb-0">
+                  <div className="lg:col-span-2 flex flex-col h-auto lg:h-full lg:min-h-0 overflow-visible lg:overflow-hidden">
+                    <div className="flex-1 lg:overflow-y-auto rounded-xl">
+                      <AppointmentsTableSkeleton />
+                    </div>
+                  </div>
+                  <div className="lg:col-span-1 flex flex-col gap-4 sm:gap-6 h-auto lg:h-full lg:min-h-0">
+                    <div className="h-full overflow-visible lg:overflow-hidden flex flex-col">
+                      <PendingTasksSkeleton />
+                    </div>
+                    <ActivitySummarySkeleton />
                   </div>
                 </div>
               ) : (
@@ -612,7 +727,7 @@ export function DashboardContent() {
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-foreground">Status</label>
                 <Select value={appointmentStatus} onValueChange={setAppointmentStatus} required disabled={isLoadingAppointmentOptions}>
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className={cn("w-full", isLoadingAppointmentOptions && "animate-shimmer")}>
                     <SelectValue placeholder={isLoadingAppointmentOptions ? "Carregando..." : "Status"} />
                   </SelectTrigger>
                   <SelectContent>
@@ -628,7 +743,7 @@ export function DashboardContent() {
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-foreground">Tipo</label>
                 <Select value={appointmentType} onValueChange={setAppointmentType} required disabled={isLoadingAppointmentOptions}>
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className={cn("w-full", isLoadingAppointmentOptions && "animate-shimmer")}>
                     <SelectValue placeholder={isLoadingAppointmentOptions ? "Carregando..." : "Tipo"} />
                   </SelectTrigger>
                   <SelectContent>
@@ -654,7 +769,7 @@ export function DashboardContent() {
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-foreground">Presencial/Online</label>
                 <Select value={appointmentAttendanceMode} onValueChange={setAppointmentAttendanceMode} required disabled={isLoadingAppointmentOptions}>
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className={cn("w-full", isLoadingAppointmentOptions && "animate-shimmer")}>
                     <SelectValue placeholder={isLoadingAppointmentOptions ? "Carregando..." : "Formato"} />
                   </SelectTrigger>
                   <SelectContent>
@@ -670,7 +785,7 @@ export function DashboardContent() {
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-foreground">Profissional</label>
                 <Select value={appointmentProfessionalId} onValueChange={setAppointmentProfessionalId} required disabled={isLoadingAppointmentOptions}>
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className={cn("w-full", isLoadingAppointmentOptions && "animate-shimmer")}>
                     <SelectValue placeholder={isLoadingAppointmentOptions ? "Carregando..." : "Profissional"} />
                   </SelectTrigger>
                   <SelectContent>

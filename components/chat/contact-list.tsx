@@ -17,10 +17,12 @@ import { getChatInterestTags, getChatTags, getReadableTextColor, resolveChatTags
 import { ChatRecord, LatestMessageStatus } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 import { formatBoldText } from "@/utils/utils";
+import { motion, Variants } from "framer-motion";
 import { Building2, ChevronDown, ChevronUp, Feather, FilterX, HatGlasses, Loader2, Search, Send, SquarePlus, Star, TagsIcon } from "lucide-react";
 import type { FormEvent, UIEvent } from "react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { DropdownMenuSeparator } from "../ui/dropdown-menu";
+import { SkeletonShimmer } from "../ui/skeleton-shimmer";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { ExpandedImageModal } from "./expanded-image-modal";
 import { MessageStatusIcon } from "./message-status-icon";
@@ -65,6 +67,35 @@ const stateTabs = [
 
 type ScopeTab = (typeof scopeTabs)[number]["id"];
 type StateTab = (typeof stateTabs)[number]["id"];
+
+const INITIAL_SKELETON_COUNT = 50;
+const MIN_SEARCH_SKELETON_COUNT = 1;
+
+const skeletonContainerVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.025,
+    },
+  },
+};
+
+const skeletonItemVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 10,
+  },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: "spring",
+      stiffness: 300,
+      damping: 24,
+    },
+  },
+};
 
 function getDisplayName(chat: ChatRecord) {
   return chat.nome_contato || chat.pushname || chat.chat_id?.replace("@s.whatsapp.net", "") || "Contato sem nome";
@@ -159,9 +190,111 @@ function getSectorLabel(id: string, labels: Record<string, string>) {
   return labels[id] || id;
 }
 
+function ChatListItemSkeleton() {
+  return (
+    <div className="flex w-full items-start gap-3 border-b border-border/50 p-3">
+      <SkeletonShimmer className="h-11 w-11 shrink-0 rounded-full" />
+
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex items-center justify-between gap-2">
+          <SkeletonShimmer className="h-4 w-1/3 rounded" />
+          <SkeletonShimmer className="h-3 w-8 rounded" />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <SkeletonShimmer className="h-4 w-3/4 rounded" />
+          <SkeletonShimmer className="ml-auto h-5 w-5 shrink-0 rounded-sm  " />
+        </div>
+
+        <div className="flex gap-1 pt-1">
+          <SkeletonShimmer className="h-4 w-12 rounded-md" />
+          <SkeletonShimmer className="h-4 w-8 rounded-md" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChatListSkeletonList({ count, animationKey }: { count: number; animationKey: number }) {
+  const skeletonArray = Array.from({ length: count }, (_, i) => i);
+
+  return (
+    <motion.div key={animationKey} variants={skeletonContainerVariants} initial="hidden" animate="show" className="w-full">
+      {skeletonArray.map((index) => (
+        <motion.div key={index} variants={skeletonItemVariants}>
+          <ChatListItemSkeleton />
+        </motion.div>
+      ))}
+    </motion.div>
+  );
+}
+
+function useDelayedLoading(isLoading: boolean | undefined, delay = 300) {
+  const [shouldShowSkeleton, setShouldShowSkeleton] = useState(isLoading);
+
+  useEffect(() => {
+    if (isLoading) {
+      setShouldShowSkeleton(true);
+    } else {
+      const timer = setTimeout(() => {
+        setShouldShowSkeleton(false);
+      }, delay);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, delay]);
+
+  return shouldShowSkeleton;
+}
+
+function useSkeletonAnimationKey(showSkeleton: boolean | undefined) {
+  const [animationKey, setAnimationKey] = useState(0);
+  const wasShowingRef = useRef(false);
+
+  useEffect(() => {
+    if (!showSkeleton) {
+      wasShowingRef.current = false;
+      return;
+    }
+
+    if (!wasShowingRef.current) {
+      wasShowingRef.current = true;
+      setAnimationKey((current) => current + 1);
+    }
+  }, [showSkeleton]);
+
+  return animationKey;
+}
+
+function useStableSkeletonCount(showSkeleton: boolean | undefined, isInitialLoading: boolean, expectedLength: number) {
+  const [count, setCount] = useState(INITIAL_SKELETON_COUNT);
+  const wasShowingRef = useRef(false);
+
+  useEffect(() => {
+    if (!showSkeleton) {
+      wasShowingRef.current = false;
+      return;
+    }
+
+    const nextCount = isInitialLoading ? INITIAL_SKELETON_COUNT : Math.max(expectedLength, MIN_SEARCH_SKELETON_COUNT);
+
+    if (!wasShowingRef.current) {
+      wasShowingRef.current = true;
+      setCount(nextCount);
+      return;
+    }
+
+    if (!isInitialLoading && expectedLength > 0) {
+      setCount(expectedLength);
+    }
+  }, [expectedLength, isInitialLoading, showSkeleton]);
+
+  return count;
+}
+
 export function ContactList({
   chats,
   search,
+  isLoadingMessages,
   isLoadingMore,
   isSearching,
   hasMore,
@@ -240,7 +373,7 @@ export function ContactList({
     prevHasActiveFiltersRef.current = hasActiveFilters;
   }, [hasActiveFilters, onResetChats]);
 
-  const { user, isLoading } = useCurrentUser();
+  const { user, isLoading: isUserLoading } = useCurrentUser();
   const userName = user?.name ?? "Usuário";
 
   useEffect(() => {
@@ -449,6 +582,13 @@ export function ContactList({
     setNewContactError("");
   }
 
+  const totalExpectedItems = useMemo(() => {
+    if (scopeTab === "all") {
+      return Object.values(tabCounts).reduce((acc, curr) => acc + (curr || 0), 0);
+    }
+    return tabCounts[stateTab] || 0;
+  }, [scopeTab, stateTab, tabCounts]);
+
   async function handleCreateContactSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -490,7 +630,7 @@ export function ContactList({
   }
 
   useEffect(() => {
-    if (!hasMore || isLoadingMore || isLoading || isSearching) return;
+    if (!hasMore || isLoadingMore || isUserLoading || isSearching) return;
 
     const frameId = window.requestAnimationFrame(() => {
       const target = listScrollRef.current;
@@ -508,298 +648,367 @@ export function ContactList({
     });
 
     return () => window.cancelAnimationFrame(frameId);
-  }, [chats.length, hasMore, hasActiveFilters, isLoading, isLoadingMore, isSearching, onLoadMore, scopeTab, sectorFilter, stateTab, statusFilter, tagFilter, interestFilter, visibleChats.length]);
+  }, [chats.length, hasMore, hasActiveFilters, isUserLoading, isLoadingMore, isSearching, onLoadMore, scopeTab, sectorFilter, stateTab, statusFilter, tagFilter, interestFilter, visibleChats.length]);
+
+  const isInitialLoading = isUserLoading || !!isLoadingMessages;
+  const showSkeleton = useDelayedLoading(isInitialLoading || !!isSearching, 1000);
+  const skeletonCount = useStableSkeletonCount(showSkeleton, isInitialLoading, totalExpectedItems);
+  const skeletonAnimationKey = useSkeletonAnimationKey(showSkeleton);
 
   return (
     <div className={cn("flex h-full shrink-0 flex-col border-r border-border bg-card", isMobile ? "w-full" : "w-[340px]")}>
-      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <Avatar className="h-9 w-9">
-          <AvatarFallback className="bg-gradient-to-br from-teal-600 to-teal-800 text-xs text-white">P</AvatarFallback>
-        </Avatar>
-        <span className="font-medium text-foreground whitespace-nowrap">{isLoading ? "Carregando usuário..." : userName}</span>
-
-        {canUseAdminChatModes && (
-          <div className="ml-auto flex items-center gap-3">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center ">
-                    <Feather className="mr-1 h-3.5 w-3.5 text-muted-foreground" />
-                    <Switch className="scale-75" checked={isSignatureMode} onCheckedChange={onToggleAssinatura} />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" align="start">
-                  <p className="text-xs font-medium">Modo assinatura</p>
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center">
-                    <HatGlasses className="mr-1 h-4 w-4 text-muted-foreground" />
-                    <Switch className="scale-75" checked={isGhostMode} onCheckedChange={onToggleGhost} />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" align="start">
-                  <p className="text-xs font-medium">Não visualizar mensagens</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        )}
-      </div>
-
-      <div className="border-b border-border p-3">
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(event) => onSearchChange?.(event.target.value)} placeholder="Procure a conversa" className="h-9 border-0 bg-secondary pl-9 text-sm" />
+      {isUserLoading ? (
+        <>
+          {/* Header com foto, nome e switchs */}
+          <div className="flex items-center gap-2 border-b border-border px-4 py-3 h-[61px]">
+            <SkeletonShimmer className="h-9 w-9 rounded-full bg-gradient-to-br from-teal-600/20 to-teal-800/20" />
+            <SkeletonShimmer className="h-4 w-32 rounded" />
+            <div className="ml-auto flex items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <SkeletonShimmer className="h-3.5 w-3.5 rounded-sm" />
+                <SkeletonShimmer className="h-4 w-7 rounded-full" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <SkeletonShimmer className="h-4 w-4 rounded-sm" />
+                <SkeletonShimmer className="h-4 w-7 rounded-full" />
+              </div>
+            </div>
           </div>
 
-          <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground" title="Novo contato" aria-label="Novo contato" onClick={() => setIsNewContactOpen(true)}>
-            <SquarePlus className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
-      <div className="border-b border-border bg-muted/80">
-        <div className="flex h-10 items-center justify-between px-3">
-          <button className="text-sm font-semibold text-foreground" onClick={() => setIsFiltersOpen((current) => !current)}>
-            Filtros
-          </button>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="destructive"
-              disabled={!hasActiveFilters}
-              size="icon"
-              className={cn("h-7 w-7", !hasActiveFilters ? "text-muted-foreground" : "not-hover:text-muted-foreground")}
-              onClick={clearFilters}
-              title="Limpar filtros"
-              aria-label="Limpar filtros"
-            >
-              <FilterX className="h-4 w-4" />
-            </Button>
-            <button className="text-muted-foreground hover:text-foreground" onClick={() => setIsFiltersOpen((current) => !current)} aria-label={isFiltersOpen ? "Ocultar filtros" : "Mostrar filtros"}>
-              {isFiltersOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            </button>
+          {/* input e adicionar contato */}
+          <div className="border-b border-border p-3">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <SkeletonShimmer className="h-9 w-full rounded-md" />
+              </div>
+              <div className="w-9 h-9 flex items-center justify-center">
+                <SkeletonShimmer className="h-5 w-5 rounded-sm" />
+              </div>
+            </div>
           </div>
-        </div>
 
-        {isFiltersOpen && (
-          <div className="space-y-2 px-3 pb-4">
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className={cn("h-8 w-full bg-card text-xs gap-2 font-medium hover:bg-accent transition-colors", statusFilter === ALL_FILTERS && "border-dashed")}>
-                <div className="flex items-center gap-2 truncate">
-                  {statusFilter && statusFilter !== ALL_FILTERS ? (
-                    <>
-                      {(() => {
-                        const selectedStatus = statusOptions.find((s) => s.label === statusFilter);
-                        return (
-                          <span className="flex items-center gap-2">
-                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: selectedStatus?.color || "#db351f" }} />
-                            <span className="text-foreground">{statusFilter}</span>
-                          </span>
-                        );
-                      })()}
-                    </>
-                  ) : (
-                    <>
-                      <div className="relative w-4 h-4 p-0">
-                        <span className="absolute h-2 w-2 left-1/2 top-1/2 -translate-1/2 rounded-full bg-muted-foreground" />
-                      </div>
-                      <span className="text-muted-foreground">Filtrar por status</span>
-                    </>
-                  )}
-                </div>
-              </SelectTrigger>
-
-              <SelectContent>
-                <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm cursor-pointer">
-                  Selecione um status
-                </SelectItem>
-
-                {statusOptions.map((status) => (
-                  <Fragment key={status.label}>
-                    {status.label === "ADM" && <DropdownMenuSeparator />}
-
-                    <SelectItem value={status.label} className="text-xs my-0.5 rounded-sm focus:bg-accent cursor-pointer">
-                      <span className="flex items-center gap-2 font-medium">
-                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: status.color || "#db351f" }} />
-                        {status.label}
-                      </span>
-                    </SelectItem>
-                  </Fragment>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={tagFilter} onValueChange={setTagFilter}>
-              <SelectTrigger className={cn("h-8 w-full bg-card text-xs gap-2 font-medium hover:bg-accent transition-colors", tagFilter === ALL_FILTERS && "border-dashed")}>
-                <div className="flex items-center gap-2 truncate">
-                  {tagFilter && tagFilter !== ALL_FILTERS ? (
-                    <>
-                      {(() => {
-                        const selectedTag = tagOptions.find((t) => t.label === tagFilter);
-                        return (
-                          <span className="flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px]" style={{ backgroundColor: `${selectedTag?.color}`, color: getReadableTextColor(selectedTag?.color) }}>
-                            {tagFilter}
-                          </span>
-                        );
-                      })()}
-                    </>
-                  ) : (
-                    <>
-                      <div className="w-4 h-4">
-                        <TagsIcon className=" text-muted-foreground shrink-0" />
-                      </div>
-                      <span className="text-muted-foreground">Filtrar por tag</span>
-                    </>
-                  )}
-                </div>
-              </SelectTrigger>
-
-              <SelectContent>
-                <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm">
-                  Todas as tags
-                </SelectItem>
-
-                {tagOptions.map((tag) => {
-                  return (
-                    <SelectItem key={tag.id} value={tag.label} className="text-xs my-0.5 rounded-sm focus:bg-accent cursor-pointer">
-                      <div className="flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-xs shrink-0" style={{ backgroundColor: tag.color }} />
-                        <span className="font-medium">{tag.label}</span>
-                      </div>
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
-
-            <Select value={interestFilter} onValueChange={setInterestFilter}>
-              <SelectTrigger className={cn("h-8 w-full bg-card text-xs gap-2 font-medium hover:bg-accent transition-colors", interestFilter === ALL_FILTERS && "border-dashed")}>
-                <div className="flex items-center gap-2 truncate">
-                  {interestFilter && interestFilter !== ALL_FILTERS ? (
-                    <>
-                      {(() => {
-                        return <span className="flex items-center rounded-md py-0.5 text-[11px]">{interestFilter}</span>;
-                      })()}
-                    </>
-                  ) : (
-                    <>
-                      <div className="w-4 h-4">
-                        <Star className=" text-muted-foreground shrink-0" />
-                      </div>
-                      <span className="text-muted-foreground">Filtrar por interesse</span>
-                    </>
-                  )}
-                </div>
-              </SelectTrigger>
-
-              <SelectContent>
-                <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm cursor-pointer">
-                  Selecione um interesse
-                </SelectItem>
-
-                {interestOptions.map((interest) => (
-                  <SelectItem key={interest} value={interest} className="text-xs my-0.5 rounded-sm focus:bg-accent cursor-pointer">
-                    <span className="flex items-center gap-2 font-medium">{interest}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={sectorFilter} onValueChange={setSectorFilter}>
-              <SelectTrigger className={cn("h-8 w-full bg-card text-xs gap-2 font-medium hover:bg-accent transition-colors", sectorFilter === ALL_FILTERS && "border-dashed")}>
-                <div className="flex items-center gap-2 truncate">
-                  {sectorFilter && sectorFilter !== ALL_FILTERS ? (
-                    <>
-                      {(() => {
-                        return <span className="flex items-center rounded-md py-0.5 text-[11px]">{sectorFilter}</span>;
-                      })()}
-                    </>
-                  ) : (
-                    <>
-                      <div className="w-4 h-4">
-                        <Building2 className=" text-muted-foreground shrink-0" />
-                      </div>
-                      <span className="text-muted-foreground">Filtrar por setor</span>
-                    </>
-                  )}
-                </div>
-              </SelectTrigger>
-
-              <SelectContent>
-                <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm cursor-pointer">
-                  Selecione um setor
-                </SelectItem>
-
-                {sectorOptions.map((sector) => (
-                  <SelectItem key={sector} value={sector} className="text-xs my-0.5 rounded-sm focus:bg-accent cursor-pointer">
-                    <span className="flex items-center gap-2 font-medium">{sector}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* dropdown de filtros */}
+          <div className="border-b border-border bg-muted/80">
+            <div className="flex h-10 items-center justify-between px-3">
+              <SkeletonShimmer className="h-4 w-12 rounded" />
+              <div className="flex items-center gap-3">
+                <SkeletonShimmer className="h-7 w-7 rounded-md" />
+                <SkeletonShimmer className="h-4 w-4 rounded" />
+              </div>
+            </div>
           </div>
-        )}
-      </div>
 
-      <div className="border-b border-border bg-card">
-        <div className="grid h-11 grid-cols-3 px-2">
-          {scopeTabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              className={cn(
-                "relative text-xs font-medium text-muted-foreground transition-colors hover:text-foreground flex items-center justify-center gap-1.5",
-                scopeTab === tab.id && "text-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-(--color-theme-primary)",
-              )}
-              onClick={() => setScopeTab(tab.id)}
-            >
-              <span>{tab.label}</span>
-              {hasActiveFilters && (
-                <span
-                  className={cn(
-                    "inline-flex h-4 items-center justify-center rounded px-1.25 text-[9px] font-bold transition-colors border",
-                    scopeTab === tab.id ? "bg-theme-primary/10 text-theme-primary border-theme-primary/20" : "bg-muted text-muted-foreground/80 border-border",
-                  )}
-                >
-                  {scopeCounts[tab.id]}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-        {scopeTab !== "all" && (
-          <div className="grid grid-cols-3 gap-1 border-t border-border/60 bg-secondary/60 p-1.5">
-            {stateTabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                className={cn(
-                  "h-8 rounded-md text-xs font-medium text-muted-foreground transition-colors flex flex-row items-center justify-center gap-1",
-                  stateTab === tab.id ? "bg-theme-primary text-white shadow-sm ring-1 ring-border/70" : "hover:bg-theme-accent hover:text-foreground dark:hover:bg-theme-primary/20",
-                )}
-                onClick={() => setStateTab(tab.id)}
-              >
-                <span>{tab.label}</span>
-                <span
-                  className={cn(
-                    "inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[8px] font-semibold transition-colors",
-                    stateTab === tab.id ? "bg-white/20 text-white" : "bg-muted-foreground/15 text-muted-foreground",
-                  )}
-                >
-                  {tabCounts[tab.id]}
-                </span>
+          {/* Tabs */}
+          <div className="border-b border-border bg-card">
+            {/* Scope Tabs (Top) */}
+            <div className="grid h-11 grid-cols-3 px-2">
+              <div className="flex items-center justify-center gap-1.5">
+                <SkeletonShimmer className="h-3 w-14 rounded" />
+              </div>
+              <div className="flex items-center justify-center gap-1.5">
+                <SkeletonShimmer className="h-3 w-14 rounded" />
+              </div>
+              <div className="flex items-center justify-center gap-1.5">
+                <SkeletonShimmer className="h-3 w-14 rounded" />
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Header com foto, nome e switchs */}
+          <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+            <Avatar className="h-9 w-9">
+              <AvatarFallback className="bg-gradient-to-br from-teal-600 to-teal-800 text-xs text-white">{userName.trim().charAt(0).toUpperCase() || "U"}</AvatarFallback>
+            </Avatar>
+            <span className="font-medium text-foreground whitespace-nowrap">{isUserLoading ? "Carregando usuário..." : userName}</span>
+            {canUseAdminChatModes && (
+              <div className="ml-auto flex items-center gap-3">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center ">
+                        <Feather className="mr-1 h-3.5 w-3.5 text-muted-foreground" />
+                        <Switch className="scale-75" checked={isSignatureMode} onCheckedChange={onToggleAssinatura} />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="start">
+                      <p className="text-xs font-medium">Modo assinatura</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center">
+                        <HatGlasses className="mr-1 h-4 w-4 text-muted-foreground" />
+                        <Switch className="scale-75" checked={isGhostMode} onCheckedChange={onToggleGhost} />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="start">
+                      <p className="text-xs font-medium">Não visualizar mensagens</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            )}
+          </div>
+
+          {/* input e adicionar contato */}
+          <div className="border-b border-border p-3">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input value={search} onChange={(event) => onSearchChange?.(event.target.value)} placeholder="Procure a conversa" className="h-9 border-0 bg-secondary pl-9 text-sm" />
+              </div>
+
+              <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground" title="Novo contato" aria-label="Novo contato" onClick={() => setIsNewContactOpen(true)}>
+                <SquarePlus className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* dropdown de filtros */}
+          <div className="border-b border-border bg-muted/80">
+            <div className="flex h-10 items-center justify-between px-3">
+              <button className="text-sm font-semibold text-foreground" onClick={() => setIsFiltersOpen((current) => !current)}>
+                Filtros
               </button>
-            ))}
-          </div>
-        )}
-      </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="destructive"
+                  disabled={!hasActiveFilters}
+                  size="icon"
+                  className={cn("h-7 w-7", !hasActiveFilters ? "text-muted-foreground" : "not-hover:text-muted-foreground")}
+                  onClick={clearFilters}
+                  title="Limpar filtros"
+                  aria-label="Limpar filtros"
+                >
+                  <FilterX className="h-4 w-4" />
+                </Button>
+                <button className="text-muted-foreground hover:text-foreground" onClick={() => setIsFiltersOpen((current) => !current)} aria-label={isFiltersOpen ? "Ocultar filtros" : "Mostrar filtros"}>
+                  {isFiltersOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </button>
+              </div>
+            </div>
 
-      <div ref={listScrollRef} className="flex-1 overflow-y-auto" onScroll={handleListScroll}>
-        {isLoading || isSearching ? (
-          <div className="p-4 text-sm text-muted-foreground">Carregando conversas...</div>
+            {isFiltersOpen && (
+              <div className="space-y-2 px-3 pb-4">
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className={cn("h-8 w-full bg-card text-xs gap-2 font-medium hover:bg-accent transition-colors", statusFilter === ALL_FILTERS && "border-dashed")}>
+                    <div className="flex items-center gap-2 truncate">
+                      {statusFilter && statusFilter !== ALL_FILTERS ? (
+                        <>
+                          {(() => {
+                            const selectedStatus = statusOptions.find((s) => s.label === statusFilter);
+                            return (
+                              <span className="flex items-center gap-2">
+                                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: selectedStatus?.color || "#db351f" }} />
+                                <span className="text-foreground">{statusFilter}</span>
+                              </span>
+                            );
+                          })()}
+                        </>
+                      ) : (
+                        <>
+                          <div className="relative w-4 h-4 p-0">
+                            <span className="absolute h-2 w-2 left-1/2 top-1/2 -translate-1/2 rounded-full bg-muted-foreground" />
+                          </div>
+                          <span className="text-muted-foreground">Filtrar por status</span>
+                        </>
+                      )}
+                    </div>
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm cursor-pointer">
+                      Selecione um status
+                    </SelectItem>
+
+                    {statusOptions.map((status) => (
+                      <Fragment key={status.label}>
+                        {status.label === "ADM" && <DropdownMenuSeparator />}
+
+                        <SelectItem value={status.label} className="text-xs my-0.5 rounded-sm focus:bg-accent cursor-pointer">
+                          <span className="flex items-center gap-2 font-medium">
+                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: status.color || "#db351f" }} />
+                            {status.label}
+                          </span>
+                        </SelectItem>
+                      </Fragment>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={tagFilter} onValueChange={setTagFilter}>
+                  <SelectTrigger className={cn("h-8 w-full bg-card text-xs gap-2 font-medium hover:bg-accent transition-colors", tagFilter === ALL_FILTERS && "border-dashed")}>
+                    <div className="flex items-center gap-2 truncate">
+                      {tagFilter && tagFilter !== ALL_FILTERS ? (
+                        <>
+                          {(() => {
+                            const selectedTag = tagOptions.find((t) => t.label === tagFilter);
+                            return (
+                              <span className="flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px]" style={{ backgroundColor: `${selectedTag?.color}`, color: getReadableTextColor(selectedTag?.color) }}>
+                                {tagFilter}
+                              </span>
+                            );
+                          })()}
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-4 h-4">
+                            <TagsIcon className=" text-muted-foreground shrink-0" />
+                          </div>
+                          <span className="text-muted-foreground">Filtrar por tag</span>
+                        </>
+                      )}
+                    </div>
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm">
+                      Todas as tags
+                    </SelectItem>
+
+                    {tagOptions.map((tag) => {
+                      return (
+                        <SelectItem key={tag.id} value={tag.label} className="text-xs my-0.5 rounded-sm focus:bg-accent cursor-pointer">
+                          <div className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-xs shrink-0" style={{ backgroundColor: tag.color }} />
+                            <span className="font-medium">{tag.label}</span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+
+                <Select value={interestFilter} onValueChange={setInterestFilter}>
+                  <SelectTrigger className={cn("h-8 w-full bg-card text-xs gap-2 font-medium hover:bg-accent transition-colors", interestFilter === ALL_FILTERS && "border-dashed")}>
+                    <div className="flex items-center gap-2 truncate">
+                      {interestFilter && interestFilter !== ALL_FILTERS ? (
+                        <>
+                          {(() => {
+                            return <span className="flex items-center rounded-md py-0.5 text-[11px]">{interestFilter}</span>;
+                          })()}
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-4 h-4">
+                            <Star className=" text-muted-foreground shrink-0" />
+                          </div>
+                          <span className="text-muted-foreground">Filtrar por interesse</span>
+                        </>
+                      )}
+                    </div>
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm cursor-pointer">
+                      Selecione um interesse
+                    </SelectItem>
+
+                    {interestOptions.map((interest) => (
+                      <SelectItem key={interest} value={interest} className="text-xs my-0.5 rounded-sm focus:bg-accent cursor-pointer">
+                        <span className="flex items-center gap-2 font-medium">{interest}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={sectorFilter} onValueChange={setSectorFilter}>
+                  <SelectTrigger className={cn("h-8 w-full bg-card text-xs gap-2 font-medium hover:bg-accent transition-colors", sectorFilter === ALL_FILTERS && "border-dashed")}>
+                    <div className="flex items-center gap-2 truncate">
+                      {sectorFilter && sectorFilter !== ALL_FILTERS ? (
+                        <>
+                          {(() => {
+                            return <span className="flex items-center rounded-md py-0.5 text-[11px]">{sectorFilter}</span>;
+                          })()}
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-4 h-4">
+                            <Building2 className=" text-muted-foreground shrink-0" />
+                          </div>
+                          <span className="text-muted-foreground">Filtrar por setor</span>
+                        </>
+                      )}
+                    </div>
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm cursor-pointer">
+                      Selecione um setor
+                    </SelectItem>
+
+                    {sectorOptions.map((sector) => (
+                      <SelectItem key={sector} value={sector} className="text-xs my-0.5 rounded-sm focus:bg-accent cursor-pointer">
+                        <span className="flex items-center gap-2 font-medium">{sector}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+
+          {/* tabs */}
+          <div className="border-b border-border bg-card">
+            <div className="grid h-11 grid-cols-3 px-2">
+              {scopeTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={cn(
+                    "relative text-xs font-medium text-muted-foreground transition-colors hover:text-foreground flex items-center justify-center gap-1.5",
+                    scopeTab === tab.id && "text-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-(--color-theme-primary)",
+                  )}
+                  onClick={() => setScopeTab(tab.id)}
+                >
+                  <span>{tab.label}</span>
+                  {hasActiveFilters && (
+                    <span
+                      className={cn(
+                        "inline-flex h-4 items-center justify-center rounded px-1.25 text-[9px] font-bold transition-colors border",
+                        scopeTab === tab.id ? "bg-theme-primary/10 text-theme-primary border-theme-primary/20" : "bg-muted text-muted-foreground/80 border-border",
+                      )}
+                    >
+                      {scopeCounts[tab.id]}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+            {scopeTab !== "all" && (
+              <div className="grid grid-cols-3 gap-1 border-t border-border/60 bg-secondary/60 p-1.5">
+                {stateTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    className={cn(
+                      "h-8 rounded-md text-xs font-medium text-muted-foreground transition-colors flex flex-row items-center justify-center gap-1",
+                      stateTab === tab.id ? "bg-theme-primary text-white shadow-sm ring-1 ring-border/70" : "hover:bg-theme-accent hover:text-foreground dark:hover:bg-theme-primary/20",
+                    )}
+                    onClick={() => setStateTab(tab.id)}
+                  >
+                    <span>{tab.label}</span>
+                    <span
+                      className={cn(
+                        "inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[8px] font-semibold transition-colors",
+                        stateTab === tab.id ? "bg-white/20 text-white" : "bg-muted-foreground/15 text-muted-foreground",
+                      )}
+                    >
+                      {tabCounts[tab.id]}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      <div ref={listScrollRef} className="flex-1 overflow-y-auto custom-scrollbar" onScroll={handleListScroll}>
+        {showSkeleton ? (
+          <ChatListSkeletonList count={skeletonCount} animationKey={skeletonAnimationKey} />
         ) : visibleChats.length === 0 ? (
           <div className="p-4 text-sm text-muted-foreground">Nenhuma conversa encontrada.</div>
         ) : (
@@ -888,7 +1097,7 @@ export function ContactList({
             );
           })
         )}
-        {!isLoading && (
+        {!showSkeleton && (
           <div className="p-3">
             {hasMore && isLoadingMore ? (
               <p className="py-2 text-center text-xs text-muted-foreground">Carregando mais conversas...</p>
