@@ -12,10 +12,12 @@ import { fetchChats, type ChatRecord } from "@/lib/supabase-rest";
 import { fallbackTaskOptions, getTaskNoteAttachmentType, statusConfig, type Task, type TaskOptions, type TaskResolutionNote, type TaskStatus } from "@/lib/task";
 import { getDraTatianaResponsibleFilter, isDraTatianaUser } from "@/lib/user-access";
 import { cn } from "@/lib/utils";
-import { AlertCircle, Circle, IdCardLanyard, ListPlus, Loader2, Plus, RefreshCw, Search, Shapes, User } from "lucide-react";
+import { motion, type Variants } from "framer-motion";
+import { AlertCircle, ChevronDown, Circle, IdCardLanyard, ListPlus, Loader2, Plus, RefreshCw, Search, Shapes, User } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
+import { SkeletonShimmer } from "../ui/skeleton-shimmer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { FilterMenu } from "./filter-menu";
 import { KanbanColumn } from "./kanban-column";
@@ -208,6 +210,149 @@ async function deleteTaskResolutionNote(noteId: string) {
 
 function FieldLabel({ children }: { children: ReactNode }) {
   return <label className="text-xs font-semibold text-foreground">{children}</label>;
+}
+
+const taskSkeletonContainerVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.045,
+    },
+  },
+};
+
+const taskSkeletonItemVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 10,
+  },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: "spring",
+      stiffness: 300,
+      damping: 24,
+    },
+  },
+};
+
+const taskSkeletonCounts: Record<TaskStatus, number> = {
+  aguardando: 4,
+  resolvendo: 3,
+  finalizado: 3,
+};
+
+function TaskCardSkeleton() {
+  return (
+    <div className="rounded-md border bg-card p-4 text-left shadow-xs">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex items-center gap-2">
+            <SkeletonShimmer className="h-5 w-24 rounded-md" />
+            <SkeletonShimmer className="h-5 w-16 rounded-md" />
+          </div>
+          <SkeletonShimmer className="h-4 w-11/12 rounded" />
+          <SkeletonShimmer className="h-4 w-2/3 rounded" />
+        </div>
+        <SkeletonShimmer className="h-8 w-8 shrink-0 rounded-full" />
+      </div>
+
+      <div className="mb-4 space-y-2">
+        <SkeletonShimmer className="h-3.5 w-full rounded" />
+        <SkeletonShimmer className="h-3.5 w-10/12 rounded" />
+        <SkeletonShimmer className="h-3.5 w-7/12 rounded" />
+      </div>
+
+      <div className="space-y-3 border-t pt-3">
+        <div className="flex items-center gap-2">
+          <SkeletonShimmer className="h-7 w-7 shrink-0 rounded-full" />
+          <SkeletonShimmer className="h-4 w-36 rounded" />
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 flex-1 space-y-1">
+            <SkeletonShimmer className="h-3 w-20 rounded" />
+            <SkeletonShimmer className="h-4 w-28 rounded" />
+          </div>
+          <div className="flex flex-col items-end space-y-1">
+            <SkeletonShimmer className="h-3 w-10 rounded" />
+            <SkeletonShimmer className="h-4 w-20 rounded" />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <SkeletonShimmer className="h-3 w-32 rounded" />
+          <SkeletonShimmer className="h-3 w-16 rounded" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TaskSkeletonColumn({ status, count = taskSkeletonCounts[status] }: { status: TaskStatus; count?: number }) {
+  const config = statusConfig[status];
+  const Icon = config.icon;
+  const skeletonItems = Array.from({ length: count }, (_, index) => index);
+
+  return (
+    <section className={cn("flex min-w-[300px] flex-1 flex-col rounded-md border p-3", config.columnClassName)}>
+      <div className="mb-3 flex items-start justify-between gap-3 px-1">
+        <div className="flex items-start gap-2">
+          <span className={cn("mt-1.25 h-2.5 w-2.5 rounded-full", config.markerClassName)} />
+          <div>
+            <div className={cn("flex items-center gap-2 font-semibold", config.headerClassName)}>
+              <Icon className="h-4 w-4" />
+              {config.label}
+            </div>
+            <p className={cn("mt-0.5 text-xs", config.helperClassName)}>{config.helper}</p>
+          </div>
+        </div>
+        <SkeletonShimmer className={cn("h-6 w-8 rounded-md border shadow-xs", config.countClassName)} />
+      </div>
+
+      <motion.div variants={taskSkeletonContainerVariants} initial="hidden" animate="show" className="flex flex-1 flex-col gap-3 overflow-y-auto p-1 custom-scrollbar">
+        {skeletonItems.map((index) => (
+          <motion.div key={index} variants={taskSkeletonItemVariants}>
+            <TaskCardSkeleton />
+          </motion.div>
+        ))}
+      </motion.div>
+    </section>
+  );
+}
+
+function TaskSkeletonGrid({ status }: { status: TaskStatus }) {
+  const config = statusConfig[status];
+  const Icon = config.icon;
+  const skeletonItems = Array.from({ length: 20 }, (_, index) => index);
+
+  return (
+    <section className={cn("flex min-w-full flex-1 flex-col rounded-md border p-3", config.columnClassName)}>
+      <div className="mb-3 flex items-start justify-between gap-3 px-1">
+        <div className="flex items-start gap-2">
+          <span className={cn("mt-1.25 h-2.5 w-2.5 rounded-full", config.markerClassName)} />
+          <div>
+            <div className={cn("flex items-center gap-2 font-semibold", config.headerClassName)}>
+              <Icon className="h-4 w-4" />
+              {config.label}
+            </div>
+            <p className={cn("mt-0.5 text-xs", config.helperClassName)}>{config.helper}</p>
+          </div>
+        </div>
+        <SkeletonShimmer className={cn("h-6 w-8 rounded-md border shadow-xs", config.countClassName)} />
+      </div>
+
+      <motion.div variants={taskSkeletonContainerVariants} initial="hidden" animate="show" className="grid flex-1 auto-rows-max grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 overflow-y-auto p-1 pr-1 custom-scrollbar">
+        {skeletonItems.map((index) => (
+          <motion.div key={index} variants={taskSkeletonItemVariants}>
+            <TaskCardSkeleton />
+          </motion.div>
+        ))}
+      </motion.div>
+    </section>
+  );
 }
 
 export function KanbanBoard() {
@@ -660,20 +805,39 @@ export function KanbanBoard() {
             </div>
 
             <div className="flex flex-row items-center gap-3">
-              <div className="hidden sm:grid grid-cols-3 overflow-hidden rounded-lg border bg-background shadow-xs">
-                <div className="px-4 py-2 text-center">
-                  <p className="text-lg font-semibold text-foreground">{filteredTasks.length}</p>
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Visíveis</p>
+              {isLoading ? (
+                <div className="hidden sm:grid grid-cols-3 overflow-hidden rounded-lg border bg-background shadow-xs w-77.25">
+                  <div className="flex flex-col items-center justify-center gap-1.5 h-[60.5px]">
+                    <SkeletonShimmer className="h-6 w-8 rounded" />
+                    <SkeletonShimmer className="h-3 w-12 rounded-xs" />
+                  </div>
+
+                  <div className="flex flex-col items-center justify-center border-x gap-1.5 h-[60.5px]">
+                    <SkeletonShimmer className="h-6 w-8 rounded" />
+                    <SkeletonShimmer className="h-3 w-12 rounded-xs" />
+                  </div>
+
+                  <div className="flex flex-col items-center justify-center gap-1.5 h-[60.5px]">
+                    <SkeletonShimmer className="h-6 w-8 rounded" />
+                    <SkeletonShimmer className="h-3 w-16 rounded-xs" />
+                  </div>
                 </div>
-                <div className="border-x px-4 py-2 text-center">
-                  <p className="text-lg font-semibold text-foreground">{totalOpen}</p>
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Abertas</p>
+              ) : (
+                <div className="hidden sm:grid grid-cols-3 overflow-hidden rounded-lg border bg-background shadow-xs">
+                  <div className="px-4 py-2 text-center">
+                    <p className="text-lg font-semibold text-foreground">{filteredTasks.length}</p>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Visíveis</p>
+                  </div>
+                  <div className="border-x px-4 py-2 text-center">
+                    <p className="text-lg font-semibold text-foreground">{totalOpen}</p>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Abertas</p>
+                  </div>
+                  <div className="px-4 py-2 text-center">
+                    <p className="text-lg font-semibold text-foreground">{tasksByStatus.finalizado.length}</p>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Finalizadas</p>
+                  </div>
                 </div>
-                <div className="px-4 py-2 text-center">
-                  <p className="text-lg font-semibold text-foreground">{tasksByStatus.finalizado.length}</p>
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Finalizadas</p>
-                </div>
-              </div>
+              )}
               <Button type="button" className="gap-2 bg-theme-primary text-white hover:bg-theme-primary/90 h-10 min-[412px]:h-9" onClick={handleOpenCreateDialog}>
                 <Plus className="h-4 w-4" />
                 <span className="hidden min-[412px]:inline">Nova Tarefa</span>
@@ -681,25 +845,53 @@ export function KanbanBoard() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Buscar por assunto, paciente, responsável..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="h-10 bg-background pl-9" />
-            </div>
+          {isLoading ? (
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div className="relative flex-1">
+                <div className="h-10 w-full rounded-lg border border-border flex flex-row items-center p-3 gap-2 bg-muted/60">
+                  <SkeletonShimmer className="w-4 h-4 rounded-sm " />
+                  <SkeletonShimmer className="w-2/3 h-3 rounded-sm " />
+                </div>
+              </div>
 
-            <div className="flex items-center gap-2 flex-2 min-w-0">
-              <div className="flex flex-row items-center justify-end gap-2 w-full">
-                {filtersConfig.map((filter) => (
-                  <FilterMenu key={filter.id} icon={filter.icon} value={filter.value} options={filter.options} filterAll={filter.filterAll} onChange={filter.onChange} />
-                ))}
+              <div className="flex items-center gap-2 flex-2 min-w-0">
+                <div className="flex flex-row items-center justify-end gap-2 w-full">
+                  {Array.from({ length: 3 }, (_, i) => (
+                    <div key={i} className="h-10 w-24 rounded-lg border border-border flex flex-row items-center p-3 gap-2 bg-muted/60 shrink-0">
+                      <SkeletonShimmer className="w-4 h-4 rounded-sm shrink-0" />
+                      <SkeletonShimmer className="w-12 h-3 rounded-sm" />
+                      <ChevronDown className="w-4 text-(--shimmer-color)/30" />
+                    </div>
+                  ))}
 
-                <Button type="button" variant="outline" className="sm:justify-start bg-background h-10 shrink-0 sm:w-auto justify-center" onClick={() => loadTasks({ refresh: true })} disabled={isLoading || isRefreshing}>
-                  {isLoading || isRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-theme-primary" /> : <RefreshCw className="h-4 w-4" />}
-                  <span className="hidden lg:inline ml-2">{isRefreshing ? "Atualizando" : "Atualizar"}</span>
-                </Button>
+                  <div className="h-10 w-[40px] lg:w-[116.58px] rounded-lg border border-border flex flex-row items-center justify-center p-3 lg:justify-start gap-2 bg-muted/60 shrink-0">
+                    <SkeletonShimmer className="w-4 h-4 rounded-sm shrink-0 bg-theme" />
+                    <SkeletonShimmer className="hidden lg:block w-14 h-3 rounded-sm" />
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input placeholder="Buscar por assunto, paciente, responsável..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="h-10 bg-background pl-9" />
+              </div>
+
+              <div className="flex items-center gap-2 flex-2 min-w-0">
+                <div className="flex flex-row items-center justify-end gap-2 w-full">
+                  {filtersConfig.map((filter) => (
+                    <FilterMenu key={filter.id} icon={filter.icon} value={filter.value} options={filter.options} filterAll={filter.filterAll} onChange={filter.onChange} />
+                  ))}
+
+                  <Button type="button" variant="outline" className="sm:justify-start bg-background h-10 shrink-0 sm:w-auto justify-center" onClick={() => loadTasks({ refresh: true })} disabled={isLoading || isRefreshing}>
+                    {isLoading || isRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-theme-primary" /> : <RefreshCw className="h-4 w-4" />}
+                    <span className="hidden lg:inline ml-2">{isRefreshing ? "Atualizando" : "Atualizar"}</span>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {errorMessage ? (
             <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
@@ -744,13 +936,12 @@ export function KanbanBoard() {
         {taskViewOptions.map((view) => (
           <TabsContent key={view.value} value={view.value} className="min-h-0 overflow-hidden">
             <main className="flex h-full flex-1 gap-4 overflow-x-auto p-5 custom-scrollbar">
-              {isLoading ? (
-                <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin text-theme-primary" />
-                    Carregando encaminhamentos
-                  </div>
-                </div>
+              {isLoading || isRefreshing ? (
+                view.value === "todas" ? (
+                  statusOrder.map((status) => <TaskSkeletonColumn key={status} status={status} />)
+                ) : (
+                  <TaskSkeletonGrid status={view.value} />
+                )
               ) : view.value === "todas" ? (
                 statusOrder.map((status) => (
                   <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} isFiltering={isFiltering} onSelectTask={handleSelectTask} onOpenPatientMessages={handleOpenPatientMessages} statusConfig={statusConfig} />
