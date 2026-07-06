@@ -4,7 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn, normalizeText } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarPlus, Loader2, Save, Search } from "lucide-react";
+import { CalendarCog, CalendarPlus, Loader2, Save, Search } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
 import { Button } from "../ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
@@ -27,9 +27,10 @@ export interface AppointmentDialogProps {
   onUpdate?: (id: string, data: FormData) => Promise<void>;
   isSaving?: boolean;
   initialPatient?: { id: string; label: string } | null;
+  isLoading: boolean;
 }
 
-export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ open, onOpenChange, appointment, startDate, endDate, options, onCreate, onUpdate, isSaving = false, initialPatient = null }) => {
+export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ open, onOpenChange, appointment, startDate, endDate, options, onCreate, onUpdate, isSaving = false, initialPatient = null, isLoading }) => {
   const isEdit = Boolean(appointment);
 
   const [appointmentStatus, setAppointmentStatus] = useState("");
@@ -111,7 +112,7 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
       <DialogContent className="max-w-2xl max-h-[85dvh] flex flex-col p-0 overflow-hidden">
         <DialogHeader className="p-6 pb-2 shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
-            <CalendarPlus className="h-4 w-4 text-primary" />
+            {isEdit ? <CalendarCog className="h-4 w-4 text-theme-primary" /> : <CalendarPlus className="h-4 w-4 text-theme-primary" />}
             {isEdit ? "Editar agendamento" : "Novo agendamento"}
           </DialogTitle>
           <DialogDescription>{appointmentStartDateTime ? format(new Date(appointmentStartDateTime), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : "Selecione os dados do agendamento."}</DialogDescription>
@@ -122,9 +123,9 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-foreground">Status</label>
-                <Select value={appointmentStatus} onValueChange={setAppointmentStatus} required>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Status" />
+                <Select value={appointmentStatus} onValueChange={setAppointmentStatus} required disabled={isLoading}>
+                  <SelectTrigger className={cn("w-full", isLoading && "animate-shimmer")}>
+                    <SelectValue placeholder={isLoading ? "Carregando..." : "Status"} />
                   </SelectTrigger>
                   <SelectContent>
                     {options.status.map((status) => (
@@ -138,9 +139,9 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
 
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-foreground">Tipo</label>
-                <Select value={appointmentType} onValueChange={setAppointmentType} required>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Tipo" />
+                <Select value={appointmentType} onValueChange={setAppointmentType} required disabled={isLoading}>
+                  <SelectTrigger className={cn("w-full", isLoading && "animate-shimmer")}>
+                    <SelectValue placeholder={isLoading ? "Carregando..." : "Tipo"} />
                   </SelectTrigger>
                   <SelectContent>
                     {options.types.map((type) => (
@@ -164,9 +165,9 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
 
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-foreground">Presencial/Online</label>
-                <Select value={appointmentAttendanceMode} onValueChange={setAppointmentAttendanceMode} required>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Formato" />
+                <Select value={appointmentAttendanceMode} onValueChange={setAppointmentAttendanceMode} required disabled={isLoading}>
+                  <SelectTrigger className={cn("w-full", isLoading && "animate-shimmer")}>
+                    <SelectValue placeholder={isLoading ? "Carregando..." : "Formato"} />
                   </SelectTrigger>
                   <SelectContent>
                     {options.attendanceModes.map((mode) => (
@@ -180,9 +181,9 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
 
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-foreground">Profissional</label>
-                <Select value={appointmentProfessionalId} onValueChange={setAppointmentProfessionalId} required>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Profissional" />
+                <Select value={appointmentProfessionalId} onValueChange={setAppointmentProfessionalId} required disabled={isLoading}>
+                  <SelectTrigger className={cn("w-full", isLoading && "animate-shimmer")}>
+                    <SelectValue placeholder={isLoading ? "Carregando..." : "Profissional"} />
                   </SelectTrigger>
                   <SelectContent>
                     {options.professionals.map((professional) => (
@@ -197,12 +198,13 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
 
             <div className="space-y-2">
               <label className="text-xs font-semibold text-foreground">Paciente</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <div className={cn("relative", isLoading && "cursor-not-allowed")}>
+                <Search className={cn("absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground", isLoading && "text-muted-foreground/50")} />
                 <Input
-                  className="pl-9"
+                  className={cn("pl-9", isLoading && "animate-shimmer")}
                   value={appointmentPatientSearch}
-                  placeholder={selectedAppointmentPatient?.label || "Digite o nome do paciente"}
+                  disabled={isLoading}
+                  placeholder={isLoading ? "Carregando..." : selectedAppointmentPatient?.label || "Digite o nome do paciente"}
                   onBlur={() => {
                     window.setTimeout(() => setIsPatientSearchOpen(false), 120);
                   }}
@@ -216,7 +218,7 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
                   }}
                 />
                 {isPatientSearchOpen && appointmentPatientSearch.trim() && (
-                  <div className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md">
+                  <div className="absolute z-50 mt-1 max-h-33 w-full overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md custom-scrollbar">
                     {patientSearchResults.length > 0 ? (
                       patientSearchResults.map((patient) => (
                         <button
@@ -254,7 +256,7 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving} className="gap-2 h-9 text-xs">
               Cancelar
             </Button>
-            <Button variant="primary" type="submit" disabled={isSaving} className="gap-2 h-9 text-xs bg-theme-primary text-white hover:bg-theme-primary/90">
+            <Button variant="primary" type="submit" disabled={isSaving} className="gap-2 h-9 text-xs">
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {isEdit ? "Salvar alterações" : "Salvar agendamento"}
             </Button>

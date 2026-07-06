@@ -13,7 +13,7 @@ import { fallbackTaskOptions, getTaskNoteAttachmentType, statusConfig, type Task
 import { getDraTatianaResponsibleFilter, isDraTatianaUser } from "@/lib/user-access";
 import { cn } from "@/lib/utils";
 import { motion, type Variants } from "framer-motion";
-import { AlertCircle, ChevronDown, Circle, IdCardLanyard, ListPlus, Loader2, Plus, RefreshCw, Search, Shapes, User } from "lucide-react";
+import { AlertCircle, Circle, IdCardLanyard, ListPlus, Loader2, Plus, RefreshCw, Search, Shapes, User } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -844,54 +844,25 @@ export function KanbanBoard() {
               </Button>
             </div>
           </div>
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className={cn("relative flex-1", isLoading && "cursor-not-allowed")}>
+              {isLoading ? <Loader2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50 animate-spin" /> : <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />}
+              <Input placeholder="Buscar por assunto, paciente, responsável..." value={searchQuery} disabled={isLoading} onChange={(event) => setSearchQuery(event.target.value)} className="h-10 bg-background pl-9" />
+            </div>
 
-          {isLoading ? (
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div className="relative flex-1">
-                <div className="h-10 w-full rounded-lg border border-border flex flex-row items-center p-3 gap-2 bg-muted/60">
-                  <SkeletonShimmer className="w-4 h-4 rounded-sm " />
-                  <SkeletonShimmer className="w-2/3 h-3 rounded-sm " />
-                </div>
-              </div>
+            <div className="flex items-center gap-2 flex-2 min-w-0">
+              <div className="flex flex-row items-center justify-end gap-2 w-full">
+                {filtersConfig.map((filter) => (
+                  <FilterMenu isLoading={isLoading} key={filter.id} icon={filter.icon} value={filter.value} options={filter.options} filterAll={filter.filterAll} onChange={filter.onChange} />
+                ))}
 
-              <div className="flex items-center gap-2 flex-2 min-w-0">
-                <div className="flex flex-row items-center justify-end gap-2 w-full">
-                  {Array.from({ length: 3 }, (_, i) => (
-                    <div key={i} className="h-10 w-24 rounded-lg border border-border flex flex-row items-center p-3 gap-2 bg-muted/60 shrink-0">
-                      <SkeletonShimmer className="w-4 h-4 rounded-sm shrink-0" />
-                      <SkeletonShimmer className="w-12 h-3 rounded-sm" />
-                      <ChevronDown className="w-4 text-(--shimmer-color)/30" />
-                    </div>
-                  ))}
-
-                  <div className="h-10 w-[40px] lg:w-[116.58px] rounded-lg border border-border flex flex-row items-center justify-center p-3 lg:justify-start gap-2 bg-muted/60 shrink-0">
-                    <SkeletonShimmer className="w-4 h-4 rounded-sm shrink-0 bg-theme" />
-                    <SkeletonShimmer className="hidden lg:block w-14 h-3 rounded-sm" />
-                  </div>
-                </div>
+                <Button type="button" variant="outline" className="sm:justify-start bg-background h-10 shrink-0 sm:w-auto justify-center" onClick={() => loadTasks({ refresh: true })} disabled={isLoading || isRefreshing}>
+                  {isRefreshing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  <span className="hidden lg:inline ml-2">{isRefreshing ? "Atualizando" : "Atualizar"}</span>
+                </Button>
               </div>
             </div>
-          ) : (
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input placeholder="Buscar por assunto, paciente, responsável..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="h-10 bg-background pl-9" />
-              </div>
-
-              <div className="flex items-center gap-2 flex-2 min-w-0">
-                <div className="flex flex-row items-center justify-end gap-2 w-full">
-                  {filtersConfig.map((filter) => (
-                    <FilterMenu key={filter.id} icon={filter.icon} value={filter.value} options={filter.options} filterAll={filter.filterAll} onChange={filter.onChange} />
-                  ))}
-
-                  <Button type="button" variant="outline" className="sm:justify-start bg-background h-10 shrink-0 sm:w-auto justify-center" onClick={() => loadTasks({ refresh: true })} disabled={isLoading || isRefreshing}>
-                    {isLoading || isRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-theme-primary" /> : <RefreshCw className="h-4 w-4" />}
-                    <span className="hidden lg:inline ml-2">{isRefreshing ? "Atualizando" : "Atualizar"}</span>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
+          </div>
 
           {errorMessage ? (
             <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">

@@ -1,5 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Loader2, LucideIcon } from "lucide-react";
 
 interface FilterMenuProps {
   value: string;
@@ -7,14 +8,15 @@ interface FilterMenuProps {
   filterAll: string;
   onChange: (value: string) => void;
   icon: LucideIcon;
+  isLoading: boolean;
 }
 
-export function FilterMenu({ value, options, filterAll, onChange, icon: Icon }: FilterMenuProps) {
+export function FilterMenu({ value, options, filterAll, onChange, icon: Icon, isLoading }: FilterMenuProps) {
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="min-w-0 bg-background justify-between h-10! shadow-xs w-full md:w-fit">
+    <Select value={value} onValueChange={onChange} disabled={isLoading}>
+      <SelectTrigger className={cn("min-w-0 bg-background justify-between h-10! shadow-xs w-full md:w-fit", isLoading && "animate-shimmer")}>
         <div className="flex flex-row items-center gap-2.5 overflow-hidden truncate">
-          <Icon className="hidden sm:inline h-4 w-4 text-muted-foreground/80 shrink-0" />
+          {isLoading ? <Loader2 className="animate-spin" /> : <Icon className="hidden sm:inline h-4 w-4 text-muted-foreground/80 shrink-0" />}
 
           <SelectValue placeholder={filterAll} />
         </div>

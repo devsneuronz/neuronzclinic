@@ -8,12 +8,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn, normalizeText } from "@/lib/utils";
 import { addDays, addMonths, addWeeks, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek, subMonths, subWeeks } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { AlertTriangle, Calendar1, CalendarDays, CalendarIcon, ChevronLeft, ChevronRight, Circle, Clock, Columns3, List, Loader2, Phone, Pin, Plus, Search, SquarePen, Stethoscope, Trash2, User, UserPlus } from "lucide-react";
+import { motion, type Variants } from "framer-motion";
+import { AlertTriangle, Calendar1, CalendarDays, CalendarIcon, CalendarPlus, ChevronLeft, ChevronRight, Circle, Clock, Columns3, List, Loader2, Phone, Pin, Plus, Search, SquarePen, Stethoscope, Trash2, User, UserPlus } from "lucide-react";
 
 import type { MouseEvent } from "react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Calendar } from "../ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { SkeletonShimmer } from "../ui/skeleton-shimmer";
 import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
 import { AppointmentCreationDialog } from "./appointment-creation-dialog";
 
@@ -188,6 +190,146 @@ function getAppointmentStyle(appointment: CalendarAppointment) {
   };
 }
 
+const calendarSkeletonContainerVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.05 },
+  },
+};
+
+const calendarSkeletonItemVariants: Variants = {
+  hidden: { opacity: 0, scale: 0.95, y: 4 },
+  show: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: { type: "spring", stiffness: 350, damping: 26 },
+  },
+};
+
+const getRandomInRange = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+function AppointmentCardSkeleton({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={cn("h-full overflow-hidden rounded-md bg-muted/20 p-1 shadow-xs flex flex-row gap-1", compact && "min-h-0 p-1.5")}>
+      <div className="bg-(--shimmer-color)/20 min-w-1 h-full rounded-full"></div>
+      <div className="flex h-full flex-col justify-between gap-2 p-1">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <SkeletonShimmer className={cn("h-3 rounded", compact ? "w-16" : "w-20")} />
+            <SkeletonShimmer className={cn("h-3 rounded", compact ? "w-20" : "w-28")} />
+          </div>
+          {!compact && <SkeletonShimmer className="h-5 w-12 shrink-0 rounded-md" />}
+        </div>
+        {!compact && (
+          <div className="flex items-center justify-between gap-2 border-t border-border/30 pt-1.5">
+            <SkeletonShimmer className="h-3 w-16 rounded" />
+            <SkeletonShimmer className="h-4 w-14 rounded" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MonthDaySkeleton({ dayIndex }: { dayIndex: number }) {
+  const count = dayIndex % 4 === 0 ? 1 : dayIndex % 3 === 0 ? 3 : 2;
+
+  return (
+    <motion.div variants={calendarSkeletonContainerVariants} initial="hidden" animate="show" className="space-y-1.5">
+      {Array.from({ length: count }, (_, index) => (
+        <motion.div key={index} variants={calendarSkeletonItemVariants} className="h-12">
+          <AppointmentCardSkeleton compact />
+        </motion.div>
+      ))}
+    </motion.div>
+  );
+}
+
+export function AppointmentListSkeleton() {
+  return (
+    <motion.div variants={calendarSkeletonContainerVariants} initial="hidden" animate="show" className="divide-y divide-border">
+      {Array.from({ length: 6 }, (_, index) => (
+        <motion.div key={index} variants={calendarSkeletonItemVariants} className="flex flex-col gap-3 p-4 md:grid md:grid-cols-[120px_1.5fr_1fr_1.2fr_100px_auto] md:items-center md:gap-4 md:px-4 md:py-3">
+          <div className="flex items-center justify-between min-w-0 md:contents">
+            <SkeletonShimmer className="h-4 w-20 rounded bg-muted/40 shrink-0" />
+
+            <SkeletonShimmer className="h-5 w-16 rounded-full bg-muted/40 md:h-4 md:w-16 md:rounded" />
+          </div>
+
+          <div className="flex flex-col gap-2 min-w-0 md:contents">
+            <div className="flex flex-row items-center gap-1">
+              <SkeletonShimmer className="md:hidden h-3.5 w-10 rounded bg-muted/20 shrink-0" />
+              <SkeletonShimmer className="h-4 w-1/2 md:w-36 rounded bg-muted/40" />
+            </div>
+
+            <div className="flex flex-row items-center gap-1">
+              <SkeletonShimmer className="md:hidden h-3 w-8 rounded bg-muted/20 shrink-0" />
+              <SkeletonShimmer className="h-3.5 w-1/3 md:w-24 rounded bg-muted/30" />
+            </div>
+
+            <div className="flex flex-row items-center gap-1">
+              <SkeletonShimmer className="md:hidden h-3 w-16 rounded bg-muted/20 shrink-0" />
+              <SkeletonShimmer className="h-3.5 w-5/12 md:w-28 rounded bg-muted/30" />
+            </div>
+          </div>
+
+          <div className="flex gap-1 justify-end pt-2 border-t border-border/40 md:pt-0 md:border-0 shrink-0">
+            <SkeletonShimmer className="h-8 w-8 rounded-md bg-muted/30" />
+            <SkeletonShimmer className="h-8 w-8 rounded-md bg-muted/30" />
+          </div>
+        </motion.div>
+      ))}
+    </motion.div>
+  );
+}
+
+export function TimelineDaySkeleton({ dayIndex }: { dayIndex: number }) {
+  const randomSlots = useMemo(() => {
+    const hourHeight = 90;
+    const startHourOffset = 6;
+
+    const slots = [];
+    const cardCount = getRandomInRange(1, 5);
+
+    const availableHours = Array.from({ length: 15 }, (_, i) => i + 6);
+
+    const shuffledHours = [...availableHours].sort(() => Math.random() - 0.5);
+
+    const selectedHours = shuffledHours.slice(0, cardCount);
+
+    selectedHours.forEach((hour) => {
+      const relativeHourIndex = hour - startHourOffset;
+
+      slots.push({
+        top: relativeHourIndex * hourHeight + 4,
+        height: hourHeight - 8,
+      });
+    });
+
+    return slots;
+  }, [dayIndex]);
+
+  return (
+    <motion.div variants={calendarSkeletonContainerVariants} initial="hidden" animate="show" className="pointer-events-none absolute inset-0 z-10">
+      {randomSlots.map((slot, index) => (
+        <motion.div
+          key={index}
+          variants={calendarSkeletonItemVariants}
+          className="absolute w-[calc(100%-8px)] left-1"
+          style={{
+            top: `${slot.top}px`,
+            height: `${slot.height}px`,
+          }}
+        >
+          <AppointmentCardSkeleton />
+        </motion.div>
+      ))}
+    </motion.div>
+  );
+}
+
 function getDateAtMinute(day: Date, minuteOfDay: number) {
   const date = startOfDay(day);
   date.setMinutes(minuteOfDay);
@@ -299,6 +441,8 @@ export function WeeklyCalendar() {
         professionals: Array.isArray(data.professionals) ? data.professionals : [],
         patients: Array.isArray(data.patients) ? data.patients : [],
       };
+
+      console.log(nextOptions);
 
       setOptions(nextOptions);
       return nextOptions;
@@ -601,7 +745,7 @@ export function WeeklyCalendar() {
       >
         <div className="w-1 shrink-0 rounded-full transition-transform" style={{ backgroundColor: getStatusColorHex(appointment.status).base }} />
 
-        <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5 overflow-y-auto">
+        <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5 overflow-y-auto custom-scrollbar">
           <div className="flex min-w-0 items-center justify-between gap-2 shrink-0">
             <div className="flex min-w-0 items-center gap-1.5">
               {startDate && (
@@ -750,7 +894,7 @@ export function WeeklyCalendar() {
 
             {activeView === "Mês" ? (
               <div className="min-w-341.5 grid min-h-full grid-cols-7 border-b border-border">
-                {visibleDays.map((day) => {
+                {visibleDays.map((day, dayIndex) => {
                   const dayAppointments = appointmentsByDay.get(getDateKey(day)) ?? [];
                   return (
                     <div
@@ -770,8 +914,14 @@ export function WeeklyCalendar() {
                         <span className={cn("flex h-6 w-6 items-center justify-center rounded-full text-sm", isSameDay(day, new Date()) && "bg-theme-primary text-theme-primary-fg")}>{format(day, "d")}</span>
                       </div>
                       <div className="space-y-1.5">
-                        {dayAppointments.slice(0, 3).map((appointment) => renderAppointmentCard(appointment))}
-                        {dayAppointments.length > 3 && <p className="text-xs font-medium text-muted-foreground">+{dayAppointments.length - 3} agendamentos</p>}
+                        {isLoadingAppointments ? (
+                          <MonthDaySkeleton dayIndex={dayIndex} />
+                        ) : (
+                          <>
+                            {dayAppointments.slice(0, 3).map((appointment) => renderAppointmentCard(appointment))}
+                            {dayAppointments.length > 3 && <p className="text-xs font-medium text-muted-foreground">+{dayAppointments.length - 3} agendamentos</p>}
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -780,7 +930,9 @@ export function WeeklyCalendar() {
             ) : activeView === "Lista" ? (
               <div className="p-4 md:p-6 border-t">
                 <div className="overflow-hidden rounded-md border border-border bg-card">
-                  {filteredAppointments.length === 0 ? (
+                  {isLoadingAppointments ? (
+                    <AppointmentListSkeleton />
+                  ) : filteredAppointments.length === 0 ? (
                     <div className="flex h-56 flex-col items-center justify-center gap-2 text-muted-foreground">
                       <CalendarDays className="h-8 w-8" />
                       <p className="text-sm">Nenhum agendamento neste período.</p>
@@ -790,35 +942,60 @@ export function WeeklyCalendar() {
                       {filteredAppointments.map((appointment) => {
                         const startDate = getAppointmentDate(appointment);
                         const professional = professionalLabels.get(appointment.professionalId) || appointment.professional;
+
                         return (
                           <div
                             key={appointment.id}
-                            className="flex items-center sm:grid sm:grid-cols-[120px_1fr_1fr_1fr_100px_72px] gap-2 sm:gap-4 px-4 py-3 hover:bg-muted/20 transition-colors"
+                            // Móbile: flex-col empilhado verticalmente. Desktop (md): Grid alinhado perfeitamente
+                            className="flex flex-col gap-3 p-4 hover:bg-muted/20 transition-colors md:grid md:grid-cols-[120px_1.5fr_1fr_1.2fr_100px_auto] md:items-center md:gap-4 md:px-4 md:py-3 cursor-pointer"
                             onMouseDown={(event) => event.stopPropagation()}
                             onClick={(event) => {
                               event.stopPropagation();
                               setSelectedAppointment(appointment);
                             }}
                           >
-                            <span className="text-sm font-semibold text-foreground">{startDate ? format(startDate, "dd/MM HH:mm") : "--"}</span>
-                            <div className="flex flex-col sm:contents">
-                              <span className="truncate text-sm font-medium sm:font-normal text-foreground">{appointment.patient}</span>
-                              <span className="truncate text-sm text-muted-foreground sm:text-foreground/80">
-                                <span className="sm:hidden text-xs text-muted-foreground/60">Tipo: </span>
+                            {/* Linha Superior no Mobile (Data e Status lado a lado) */}
+                            <div className="flex items-center justify-between min-w-0 md:contents">
+                              <span className="text-sm font-semibold text-foreground shrink-0">{startDate ? format(startDate, "dd/MM HH:mm") : "--"}</span>
+
+                              {/* Status - Aparece na direita no mobile e na sua coluna no desktop */}
+                              <span
+                                className="text-xs font-semibold px-2.5 py-1 rounded-full md:bg-transparent md:p-0 md:text-sm"
+                                style={{
+                                  color: getStatusColorHex(appointment.status).base,
+                                  backgroundColor: `rgba(var(--color-muted), 0.1)`, // Opcional: um badge leve no mobile
+                                }}
+                              >
+                                {appointment.status}
+                              </span>
+                            </div>
+
+                            {/* Informações Principais */}
+                            {/* No desktop, o min-w-0 evita que o flex/grid quebre o truncate */}
+                            <div className="flex flex-col gap-1 min-w-0 md:contents">
+                              {/* Nome do Paciente */}
+                              <span className="truncate text-sm font-medium text-foreground md:font-normal">{appointment.patient}</span>
+
+                              {/* Tipo de Procedimento */}
+                              <span className="truncate text-sm text-muted-foreground md:text-foreground/80">
+                                <span className="md:hidden text-xs text-muted-foreground/60 font-normal">Tipo: </span>
                                 {appointment.type || "Sem tipo"}
                               </span>
+
+                              {/* Profissional Responsável */}
                               <span className="truncate text-sm text-muted-foreground">
-                                <span className="sm:hidden text-xs text-muted-foreground/60">Profissional: </span>
+                                <span className="md:hidden text-xs text-muted-foreground/60 font-normal">Profissional: </span>
                                 {professional}
                               </span>
                             </div>
-                            <span className="text-sm font-medium mt-1 sm:mt-0" style={{ color: getStatusColorHex(appointment.status).base }}>
-                              {appointment.status}
-                            </span>
-                            <div className="flex gap-1">
+
+                            {/* Ações / Botões */}
+                            {/* No mobile: Alinhado à direita no fim do card. No Desktop: Centralizado na última coluna */}
+                            <div className="flex gap-1 justify-end pt-2 border-t border-border/40 md:pt-0 md:border-0 shrink-0">
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   openEditAppointmentDialog(appointment);
@@ -831,6 +1008,7 @@ export function WeeklyCalendar() {
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   requestDeleteAppointment(appointment);
@@ -867,7 +1045,7 @@ export function WeeklyCalendar() {
                       </div>
                     ))}
                   </div>
-                  {visibleDays.map((day) => {
+                  {visibleDays.map((day, dayIndex) => {
                     const dayAppointments = appointmentsByDay.get(getDateKey(day)) ?? [];
                     const daySelection = selection && getDateKey(selection.day) === getDateKey(day) ? selection : null;
                     const selectionTop = daySelection ? (Math.min(daySelection.startMinute, daySelection.endMinute) - dayStartHour * 60) * correctHeightAspect : 0;
@@ -888,22 +1066,26 @@ export function WeeklyCalendar() {
                           <div key={hour} className="h-[90px] border-b border-border" />
                         ))}
 
-                        {daySelection && <div className="pointer-events-none absolute left-1 right-1 z-10 rounded-md border border-dashed border-primary bg-primary/15" style={{ top: selectionTop, height: selectionHeight }} />}
+                        {daySelection && <div className="pointer-events-none absolute left-1 right-1 z-20 rounded-md border border-dashed border-primary bg-primary/15" style={{ top: selectionTop, height: selectionHeight }} />}
 
-                        {dayAppointments.map((appointment) => {
-                          const style = getAppointmentStyle(appointment);
-                          return (
-                            <div
-                              key={appointment.id}
-                              className="absolute left-1 right-1 z-10"
-                              style={{ top: style.top, height: style.height }}
-                              onMouseDown={(event) => event.stopPropagation()}
-                              onTouchStart={(event) => event.stopPropagation()}
-                            >
-                              {renderAppointmentCard(appointment)}
-                            </div>
-                          );
-                        })}
+                        {isLoadingAppointments ? (
+                          <TimelineDaySkeleton dayIndex={dayIndex} />
+                        ) : (
+                          dayAppointments.map((appointment) => {
+                            const style = getAppointmentStyle(appointment);
+                            return (
+                              <div
+                                key={appointment.id}
+                                className="absolute left-1 right-1 z-10"
+                                style={{ top: style.top, height: style.height }}
+                                onMouseDown={(event) => event.stopPropagation()}
+                                onTouchStart={(event) => event.stopPropagation()}
+                              >
+                                {renderAppointmentCard(appointment)}
+                              </div>
+                            );
+                          })
+                        )}
                       </div>
                     );
                   })}
@@ -916,93 +1098,136 @@ export function WeeklyCalendar() {
         <aside className="flex flex-row w-full lg:w-64 lg:flex-col shrink-0 border-border bg-card p-4 transition-all duration-300 border-t lg:border-l lg:border-t">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-foreground hidden lg:inline">Filtros</h3>
-            {isLoadingOptions && <Loader2 className="h-4 w-4 animate-spin text-theme-primary mr-4" />}
           </div>
-
-          <div className="grid grid-cols-3 gap-3 lg:flex lg:flex-col lg:gap-4 w-full">
-            <div className="flex-1 lg:space-y-2">
-              <label className="text-xs font-medium text-muted-foreground hidden lg:inline">Status</label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full">
-                  <div className="flex flex-row items-center gap-3 overflow-hidden">
-                    <Circle className="h-3 w-3" style={{ fill: currentStatusColor, stroke: currentStatusColor }} />
-                    <SelectValue placeholder="Selecione o status" />
+          {isLoadingOptions ? (
+            <>
+              <div className="grid grid-cols-3 gap-3 lg:flex lg:flex-col lg:gap-6 w-full mt-2">
+                <div className="flex-1 ">
+                  <div className="hidden lg:block h-4">
+                    <SkeletonShimmer className="h-2.5 w-10 rounded bg-muted/40" />
                   </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={allValue}>
-                    <span className="lg:hidden">Status</span>
-                    <span className="hidden lg:inline">Todos</span>
-                  </SelectItem>
-                  {options.status.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex-1 lg:space-y-2">
-              <label className="text-xs font-medium text-muted-foreground hidden lg:inline">Tipo</label>
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-full">
-                  <div className="flex flex-row items-center gap-3 overflow-hidden">
-                    <Stethoscope className="h-3.5 w-3.5 text-muted-foreground" />
-                    <SelectValue placeholder="Selecione o tipo" />
+                  <div className="h-9 w-full rounded-md border border-input flex items-center p-3 gap-3">
+                    <SkeletonShimmer className="h-3 w-3 rounded-full shrink-0 bg-muted/40" />
+                    <SkeletonShimmer className="h-3 w-16 rounded-sm bg-muted/30" />
                   </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={allValue}>
-                    <span className="lg:hidden">Tipo</span>
-                    <span className="hidden lg:inline">Todos</span>
-                  </SelectItem>
-                  {options.types.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                </div>
 
-            <div className="flex-1 lg:space-y-2">
-              <label className="text-xs font-medium text-muted-foreground hidden lg:inline">Profissional</label>
-              <Select value={professionalFilter} onValueChange={setProfessionalFilter}>
-                <SelectTrigger className="w-full">
-                  <div className="flex flex-row items-center gap-3 overflow-hidden">
-                    <User className="h-3.5 w-3.5 text-muted-foreground" />
-                    <SelectValue placeholder="Selecione o profissional" />
+                <div className="flex-1 ">
+                  <div className="hidden lg:block h-4">
+                    <SkeletonShimmer className="h-2.5 w-8 rounded bg-muted/40" />
                   </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={allValue}>
-                    <span className="lg:hidden">Profissional</span>
-                    <span className="hidden lg:inline">Todos</span>
-                  </SelectItem>
-                  {options.professionals.map((professional) => (
-                    <SelectItem key={professional.id} value={professional.id}>
-                      {professional.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                  <div className="h-9 w-full rounded-md border border-inputd flex items-center p-3 gap-3">
+                    <SkeletonShimmer className="h-3.5 w-3.5 rounded-sm shrink-0 bg-muted/40" />
+                    <SkeletonShimmer className="h-3 w-20 rounded-sm bg-muted/30" />
+                  </div>
+                </div>
 
-            <div className="col-span-3 sm:flex-[2] sm:min-w-[200px] lg:space-y-2">
-              <label className="text-xs font-medium text-muted-foreground hidden lg:inline">Paciente</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={patientFilter}
-                  onChange={(event) => setPatientFilter(event.target.value)}
-                  placeholder="Buscar paciente..."
-                  className="h-9 w-full rounded-md border border-input bg-background pl-10 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
+                <div className="flex-1 ">
+                  <div className="hidden lg:block h-4">
+                    <SkeletonShimmer className="h-2.5 w-16 rounded bg-muted/40" />
+                  </div>
+                  <div className="h-9 w-full rounded-md border border-input flex items-center p-3 gap-3">
+                    <SkeletonShimmer className="h-3.5 w-3.5 rounded-sm shrink-0 bg-muted/40" />
+                    <SkeletonShimmer className="h-3 w-24 rounded-sm bg-muted/30" />
+                  </div>
+                </div>
+
+                <div className="col-span-3 sm:flex-[2] sm:min-w-[200px] ">
+                  <div className="hidden lg:block h-4">
+                    <SkeletonShimmer className="h-2.5 w-12 rounded bg-muted/40" />
+                  </div>
+                  <div className="h-9 w-full rounded-md border border-input bg-background flex items-center px-3 gap-3">
+                    <SkeletonShimmer className="h-3.5 w-3.5 rounded-sm shrink-0 bg-muted/40" />
+                    <SkeletonShimmer className="h-3 w-28 rounded-sm bg-muted/30" />
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-3 gap-3 lg:flex lg:flex-col lg:gap-4 w-full">
+                <div className="flex-1 lg:space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground hidden lg:inline">Status</label>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-full">
+                      <div className="flex flex-row items-center gap-3 overflow-hidden">
+                        <Circle className="h-3 w-3" style={{ fill: currentStatusColor, stroke: currentStatusColor }} />
+                        <SelectValue placeholder="Selecione o status" />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={allValue}>
+                        <span className="lg:hidden">Status</span>
+                        <span className="hidden lg:inline">Todos</span>
+                      </SelectItem>
+                      {options.status.map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {status}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex-1 lg:space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground hidden lg:inline">Tipo</label>
+                  <Select value={typeFilter} onValueChange={setTypeFilter}>
+                    <SelectTrigger className="w-full">
+                      <div className="flex flex-row items-center gap-3 overflow-hidden">
+                        <Stethoscope className="h-3.5 w-3.5 text-muted-foreground" />
+                        <SelectValue placeholder="Selecione o tipo" />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={allValue}>
+                        <span className="lg:hidden">Tipo</span>
+                        <span className="hidden lg:inline">Todos</span>
+                      </SelectItem>
+                      {options.types.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex-1 lg:space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground hidden lg:inline">Profissional</label>
+                  <Select value={professionalFilter} onValueChange={setProfessionalFilter}>
+                    <SelectTrigger className="w-full">
+                      <div className="flex flex-row items-center gap-3 overflow-hidden">
+                        <User className="h-3.5 w-3.5 text-muted-foreground" />
+                        <SelectValue placeholder="Selecione o profissional" />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={allValue}>
+                        <span className="lg:hidden">Profissional</span>
+                        <span className="hidden lg:inline">Todos</span>
+                      </SelectItem>
+                      {options.professionals.map((professional) => (
+                        <SelectItem key={professional.id} value={professional.id}>
+                          {professional.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-3 sm:flex-[2] sm:min-w-[200px] lg:space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground hidden lg:inline">Paciente</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      value={patientFilter}
+                      onChange={(event) => setPatientFilter(event.target.value)}
+                      placeholder="Buscar paciente..."
+                      className="h-9 w-full rounded-md border border-input bg-background pl-10 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </aside>
       </div>
 
@@ -1035,7 +1260,7 @@ export function WeeklyCalendar() {
                     <SquarePen className="h-4 w-4" />
                   </Button>
                   <Button
-                    variant="ghost"
+                    variant="destructive"
                     size="icon"
                     onClick={() => {
                       if (selectedAppointment) requestDeleteAppointment(selectedAppointment);
@@ -1049,15 +1274,9 @@ export function WeeklyCalendar() {
               </DialogHeader>
 
               <div className="space-y-4">
-                <div
-                  className="rounded-md border-l-4 p-4  "
-                  style={{
-                    backgroundColor: getStatusColorHex(selectedAppointment.status).bg,
-                    borderColor: getStatusColorHex(selectedAppointment.status).base,
-                    color: getStatusColorHex(selectedAppointment.status).base,
-                  }}
-                >
-                  <div className="flex items-start justify-between gap-4">
+                <div className="rounded-md p-1 bg-card flex flex-row gap-1">
+                  <div className="min-w-1 min-h-full rounded-full" style={{ backgroundColor: getStatusColorHex(selectedAppointment.status).base }} />
+                  <div className="flex items-start justify-between gap-4 p-1 w-full">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-foreground">{professionalLabels.get(selectedAppointment.professionalId) || selectedAppointment.professional}</p>
                       <p className="mt-1 truncate text-sm text-muted-foreground">{selectedAppointment.patient}</p>
@@ -1151,44 +1370,43 @@ export function WeeklyCalendar() {
           setIsNewPatientDialogOpen(open);
         }}
       >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+        <DialogContent className="max-w-lg p-0">
+          <DialogHeader className="p-6 pb-2 shrink-0">
             <DialogTitle className="flex items-center gap-2 text-base">
-              <UserPlus className="h-4 w-4 text-primary" />
+              <UserPlus className="h-4 w-4 text-theme-primary" />
               Novo paciente
             </DialogTitle>
             <DialogDescription>Crie um contato para usar nos agendamentos.</DialogDescription>
           </DialogHeader>
 
-          <form className="space-y-4" onSubmit={handleCreatePatient}>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2 sm:col-span-2">
-                <label className="text-xs font-semibold text-foreground">Nome</label>
-                <Input value={newPatientName} onChange={(event) => setNewPatientName(event.target.value)} placeholder="Nome do contato" required disabled={isCreatingPatient} />
+          <form className="space-y-6" onSubmit={handleCreatePatient}>
+            <div className="px-6">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <label className="text-xs font-semibold text-foreground">Nome</label>
+                  <Input value={newPatientName} onChange={(event) => setNewPatientName(event.target.value)} placeholder="Nome do contato" required disabled={isCreatingPatient} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">WhatsApp</label>
+                  <Input value={newPatientPhone} onChange={(event) => setNewPatientPhone(event.target.value)} placeholder="(00) 00000-0000" disabled={isCreatingPatient} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">E-mail</label>
+                  <Input type="email" value={newPatientEmail} onChange={(event) => setNewPatientEmail(event.target.value)} placeholder="email@exemplo.com" disabled={isCreatingPatient} />
+                </div>
               </div>
-
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">WhatsApp</label>
-                <Input value={newPatientPhone} onChange={(event) => setNewPatientPhone(event.target.value)} placeholder="(00) 00000-0000" disabled={isCreatingPatient} />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">E-mail</label>
-                <Input type="email" value={newPatientEmail} onChange={(event) => setNewPatientEmail(event.target.value)} placeholder="email@exemplo.com" disabled={isCreatingPatient} />
+                <label className="text-xs font-semibold text-foreground">Observações</label>
+                <Textarea className="min-h-24 resize-none" value={newPatientObservations} onChange={(event) => setNewPatientObservations(event.target.value)} disabled={isCreatingPatient} />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-foreground">Observações</label>
-              <Textarea className="min-h-24 resize-none" value={newPatientObservations} onChange={(event) => setNewPatientObservations(event.target.value)} disabled={isCreatingPatient} />
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsNewPatientDialogOpen(false)} disabled={isCreatingPatient}>
+            <DialogFooter className="border-t border-border bg-muted/20 shrink-0 p-6 pt-4 ">
+              <Button type="button" variant="outline" className="gap-2 h-9 text-xs" onClick={() => setIsNewPatientDialogOpen(false)} disabled={isCreatingPatient}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isCreatingPatient}>
-                {isCreatingPatient && <Loader2 className="h-4 w-4 animate-spin" />}
+              <Button type="submit" variant="primary" className="gap-2 h-9 text-xs" disabled={isCreatingPatient}>
+                {isCreatingPatient ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />}
                 Criar e agendar
               </Button>
             </DialogFooter>
@@ -1213,6 +1431,7 @@ export function WeeklyCalendar() {
         startDate={dialogStartDate ?? undefined}
         endDate={dialogEndDate ?? undefined}
         initialPatient={initialAppointmentPatient}
+        isLoading={isLoadingOptions}
       />
     </div>
   );
