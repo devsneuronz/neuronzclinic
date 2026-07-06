@@ -290,12 +290,25 @@ export function TimelineDaySkeleton({ dayIndex }: { dayIndex: number }) {
     const hourHeight = 90;
     const startHourOffset = 6;
 
-    const slots = [];
-    const cardCount = getRandomInRange(1, 5);
-
+    const slots: { top: number; height: number }[] = [];
     const availableHours = Array.from({ length: 15 }, (_, i) => i + 6);
 
-    const shuffledHours = [...availableHours].sort(() => Math.random() - 0.5);
+    const rng = (() => {
+      let seed = dayIndex + 1;
+
+      return () => {
+        seed = (seed * 16807) % 2147483647;
+        return (seed - 1) / 2147483646;
+      };
+    })();
+
+    const cardCount = getRandomInRange(1, 5);
+
+    const shuffledHours = [...availableHours];
+    for (let i = shuffledHours.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(rng() * (i + 1));
+      [shuffledHours[i], shuffledHours[j]] = [shuffledHours[j], shuffledHours[i]];
+    }
 
     const selectedHours = shuffledHours.slice(0, cardCount);
 
