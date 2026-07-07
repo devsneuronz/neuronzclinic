@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { NumericFormat } from "react-number-format";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Separator } from "../ui/separator";
+import { SkeletonShimmer } from "../ui/skeleton-shimmer";
 import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
@@ -629,346 +630,451 @@ export function ClinicInfoManager() {
     }
   }
 
-  if (isLoading) {
-    return (
-      <section className="flex h-64 items-center justify-center rounded-md border border-dashed border-border bg-card text-sm text-muted-foreground">
-        <Loader2 className="mr-2 animate-spin text-theme-primary" />
-        Carregando informações
-      </section>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-border bg-card p-4 sm:p-5 transition-all">
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">{assistantDraft.name || "Lia"}</h2>
-            <p className="text-sm text-muted-foreground">Informações e diretrizes usadas pela IA para responder pacientes.</p>
-          </div>
+          {isLoading ? (
+            <div className="space-y-2">
+              <SkeletonShimmer className="h-6 w-32 rounded-md bg-muted/40" />
+              <SkeletonShimmer className="h-4 w-64 sm:w-80 rounded bg-muted/30" />
+            </div>
+          ) : (
+            <div>
+              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">{assistantDraft.name || "Lia"}</h2>
+              <p className="text-sm text-muted-foreground">Informações e diretrizes usadas pela IA para responder pacientes.</p>
+            </div>
+          )}
           <div className="flex items-center gap-2 sm:justify-end flex-wrap">
             {success ? <span className="text-sm font-medium text-emerald-600 animate-fade-in">{success}</span> : null}
             {error ? <span className="text-sm font-medium text-destructive animate-fade-in">{error}</span> : null}
             <Button type="button" variant="outline" size="sm" onClick={() => void loadInfo()} disabled={isLoading || isSavingAssistant} className="h-9">
-              <RefreshCw className="mr-2 w-3.5 h-3.5" />
+              <RefreshCw className={cn("mr-2 w-3.5 h-3.5", isLoading && "animate-spin")} />
               Atualizar
             </Button>
-            <Button type="button" size="sm" variant="primary" onClick={() => void saveAssistant()} disabled={isSavingAssistant || !assistantChanged} className="h-9">
+            <Button type="button" size="sm" variant="primary" onClick={() => void saveAssistant()} disabled={isSavingAssistant || !assistantChanged || isLoading} className="h-9">
               {isSavingAssistant ? <Loader2 className="animate-spin mr-2 w-3.5 h-3.5" /> : <Save className="mr-2 w-3.5 h-3.5" />}
               Salvar Alterações
             </Button>
           </div>
         </div>
-
-        <div className="grid gap-5">
-          <div className="space-y-2">
-            <Label htmlFor="assistant-general-info" className="text-sm font-semibold text-foreground">
-              Informações Gerais da Clínica
-            </Label>
-            <Textarea
-              id="assistant-general-info"
-              value={assistantDraft.dados_empresa}
-              onChange={(e) => setAssistantDraft((c) => ({ ...c, dados_empresa: e.target.value }))}
-              className="overflow-auto custom-scrollbar transition-all min-h-55 max-h-100 resize-y bg-background leading-relaxed rounded-lg border-0!"
-              placeholder="Dados estruturados da clínica (endereço, horários, regras de convênio)..."
-              disabled={isSavingAssistant}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="assistant-initial-message" className="text-sm font-semibold text-foreground">
-              Mensagem Inicial de Saudação
-            </Label>
-            <Textarea
-              id="assistant-initial-message"
-              value={assistantDraft.msg_inicial}
-              onChange={(e) => setAssistantDraft((c) => ({ ...c, msg_inicial: e.target.value }))}
-              className="min-h-27.5 max-h-55 resize-y bg-background leading-relaxed rounded-lg border-0! custom-scrollbar"
-              placeholder="Primeira mensagem enviada pela assistente ao iniciar um novo contato..."
-              disabled={isSavingAssistant}
-            />
-          </div>
-
-          <Separator className="my-2 bg-border/60" />
-
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Personalidade e Identidade</h3>
-              <p className="text-xs text-muted-foreground">Defina a identidade visual, gênero e as informações cadastrais da clínica.</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {isLoading ? (
+          <>
+            <div className="grid gap-5">
+              <div className="space-y-2">
+                <SkeletonShimmer className="h-4 w-44 rounded bg-muted/40" />
+                <SkeletonShimmer className="h-55 w-full rounded-lg bg-muted/20 border border-border/30" />
+              </div>
+              <div className="space-y-2">
+                <SkeletonShimmer className="h-4 w-48 rounded bg-muted/40" />
+                <SkeletonShimmer className="h-28 w-full rounded-lg bg-muted/20 border border-border/30" />
+              </div>
+              <Separator className="my-2 bg-border/60" />
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="assistant-name" className="text-xs font-semibold text-foreground">
-                    Nome da IA
-                  </Label>
-                  <Input
-                    id="assistant-name"
-                    type="text"
-                    value={assistantDraft.name || ""}
-                    onChange={(e) => setAssistantDraft((c) => ({ ...c, name: e.target.value }))}
-                    placeholder="Ex: Lia, Dr. Robô, Amanda..."
-                    disabled={isSavingAssistant}
-                  />
+                <div className="space-y-1.5">
+                  <SkeletonShimmer className="h-4 w-48 rounded bg-muted/40 font-bold" />
+                  <SkeletonShimmer className="h-3.5 w-80 rounded bg-muted/20" />
                 </div>
-
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-foreground">Gênero de Tratamento</Label>
-                  <Tabs value={assistantDraft.gender || "ia"} onValueChange={(v) => setAssistantDraft((c) => ({ ...c, gender: v }))} className="w-full">
-                    <TabsList className="w-full gap-1.5 rounded-full h-9! bg-secondary/50 border border-border/40">
-                      <TabsTrigger value="mulher" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
-                        Mulher
-                      </TabsTrigger>
-                      <TabsTrigger value="homem" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
-                        Homem
-                      </TabsTrigger>
-                      <TabsTrigger value="ia" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
-                        Neutro / IA
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <SkeletonShimmer className="h-3.5 w-20 rounded bg-muted/40" />
+                      <SkeletonShimmer className="h-9 w-full rounded-md bg-muted/20 border border-border/40" />
+                    </div>
+                    <div className="space-y-2">
+                      <SkeletonShimmer className="h-3.5 w-32 rounded bg-muted/40" />
+                      <SkeletonShimmer className="h-9 w-full rounded-full bg-muted/20 border border-border/30" />
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <SkeletonShimmer className="h-3.5 w-28 rounded bg-muted/40" />
+                      <SkeletonShimmer className="h-9 w-full rounded-md bg-muted/20 border border-border/40" />
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="assistant-style" className="text-xs font-semibold text-foreground">
-                    Estilo de Conversa
-                  </Label>
-                  <Select value={assistantDraft.estilo_conversa || "formal"} onValueChange={(v) => setAssistantDraft((c) => ({ ...c, estilo_conversa: v }))} disabled={isSavingAssistant}>
-                    <SelectTrigger id="assistant-style" className="w-full">
-                      <SelectValue placeholder="Selecione o tom da conversa" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="formal">Formal • Profissional, educado e objetivo</SelectItem>
-                      <SelectItem value="informal">Informal • Acolhedor, próximo e natural</SelectItem>
-                    </SelectContent>
-                  </Select>
+              <Separator className="my-2 bg-border/60" />
+              <div className="space-y-4 pt-2">
+                <div className="space-y-1.5">
+                  <SkeletonShimmer className="h-4 w-56 rounded bg-muted/40 font-bold" />
+                  <SkeletonShimmer className="h-3.5 w-96 rounded bg-muted/20" />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <div key={index} className="flex items-center justify-between rounded-lg border border-border/70 bg-background/20 p-3.5 min-h-15 gap-3">
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <SkeletonShimmer className="h-8 w-8 rounded-md bg-muted/30 shrink-0" />
+                        <div className="space-y-2 flex-1 min-w-0">
+                          <SkeletonShimmer className="h-3.5 w-10/12 rounded bg-muted/40" />
+                          <SkeletonShimmer className="h-3 w-full rounded bg-muted/20" />
+                          <SkeletonShimmer className="h-3 w-8/12 rounded bg-muted/20" />
+                        </div>
+                      </div>
+                      <SkeletonShimmer className="h-6 w-10 rounded-full bg-muted/30 shrink-0" />
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
-          </div>
-
-          <Separator className="my-2 bg-border/60" />
-
-          <div className="space-y-4 pt-2">
-            <div>
-              <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Comportamento e Notificações</h3>
-              <p className="text-xs text-muted-foreground">Ajuste como a assistente interage e quando ela deve enviar notificações.</p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div
-                className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
-                onClick={() => setAssistantDraft((c) => ({ ...c, emoji: !c.emoji }))}
-              >
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
-                    <Smile className="h-4 w-4" />
-                  </div>
-                  <div className="space-y-0.5 min-w-0">
-                    <Label htmlFor="assistant-emojis" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
-                      Permitir o uso de emojis
-                    </Label>
-                    <p className="text-[11px] text-muted-foreground leading-tight">{assistantDraft.emoji ? "A IA usará reações visuais moderadas nas respostas." : "Respostas estritamente textuais e limpas."}</p>
-                  </div>
-                </div>
-                <Switch id="assistant-emojis" checked={!!assistantDraft.emoji} onClick={(e) => e.stopPropagation()} onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, emoji: v }))} disabled={isSavingAssistant} />
-              </div>
-
-              <div
-                className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
-                onClick={() => setAssistantDraft((c) => ({ ...c, avisar_agendamento: !c.avisar_agendamento }))}
-              >
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
-                    <CalendarPlus className="h-4 w-4" />
-                  </div>
-                  <div className="space-y-0.5 min-w-0">
-                    <Label htmlFor="assistant-notify-booking" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
-                      Avisar sobre agendamentos
-                    </Label>
-                    <p className="text-[11px] text-muted-foreground leading-tight">Notificar quando um novo agendamento for solicitado ou realizado.</p>
-                  </div>
-                </div>
-                <Switch
-                  id="assistant-notify-booking"
-                  checked={!!assistantDraft.avisar_agendamento}
-                  onClick={(e) => e.stopPropagation()}
-                  onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, avisar_agendamento: v }))}
+          </>
+        ) : (
+          <>
+            <div className="grid gap-5">
+              <div className="space-y-2">
+                <Label htmlFor="assistant-general-info" className="text-sm font-semibold text-foreground">
+                  Informações Gerais da Clínica
+                </Label>
+                <Textarea
+                  id="assistant-general-info"
+                  value={assistantDraft.dados_empresa}
+                  onChange={(e) => setAssistantDraft((c) => ({ ...c, dados_empresa: e.target.value }))}
+                  className="overflow-auto custom-scrollbar transition-all min-h-55 max-h-100 resize-y bg-background leading-relaxed rounded-lg border-0!"
+                  placeholder="Dados estruturados da clínica (endereço, horários, regras de convênio)..."
                   disabled={isSavingAssistant}
                 />
               </div>
-
-              <div
-                className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
-                onClick={() => setAssistantDraft((c) => ({ ...c, avisar_encaminhamento: !c.avisar_encaminhamento }))}
-              >
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
-                    <ArrowUpRight className="h-4 w-4" />
-                  </div>
-                  <div className="space-y-0.5 min-w-0">
-                    <Label htmlFor="assistant-notify-forward" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
-                      Avisar sobre encaminhamentos
-                    </Label>
-                    <p className="text-[11px] text-muted-foreground leading-tight">Notificar quando a conversa for encaminhada para atendimento humano.</p>
-                  </div>
-                </div>
-                <Switch
-                  id="assistant-notify-forward"
-                  checked={!!assistantDraft.avisar_encaminhamento}
-                  onClick={(e) => e.stopPropagation()}
-                  onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, avisar_encaminhamento: v }))}
+              <div className="space-y-2">
+                <Label htmlFor="assistant-initial-message" className="text-sm font-semibold text-foreground">
+                  Mensagem Inicial de Saudação
+                </Label>
+                <Textarea
+                  id="assistant-initial-message"
+                  value={assistantDraft.msg_inicial}
+                  onChange={(e) => setAssistantDraft((c) => ({ ...c, msg_inicial: e.target.value }))}
+                  className="min-h-27.5 max-h-55 resize-y bg-background leading-relaxed rounded-lg border-0! custom-scrollbar"
+                  placeholder="Primeira mensagem enviada pela assistente ao iniciar um novo contato..."
                   disabled={isSavingAssistant}
                 />
               </div>
+              <Separator className="my-2 bg-border/60" />
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Personalidade e Identidade</h3>
+                  <p className="text-xs text-muted-foreground">Defina a identidade visual, gênero e as informações cadastrais da clínica.</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="assistant-name" className="text-xs font-semibold text-foreground">
+                        Nome da IA
+                      </Label>
+                      <Input
+                        id="assistant-name"
+                        type="text"
+                        value={assistantDraft.name || ""}
+                        onChange={(e) => setAssistantDraft((c) => ({ ...c, name: e.target.value }))}
+                        placeholder="Ex: Lia, Dr. Robô, Amanda..."
+                        disabled={isSavingAssistant}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-foreground">Gênero de Tratamento</Label>
+                      <Tabs value={assistantDraft.gender || "ia"} onValueChange={(v) => setAssistantDraft((c) => ({ ...c, gender: v }))} className="w-full">
+                        <TabsList className="w-full gap-1.5 rounded-full h-9! bg-secondary/50 border border-border/40">
+                          <TabsTrigger value="mulher" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
+                            Mulher
+                          </TabsTrigger>
+                          <TabsTrigger value="homem" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
+                            Homem
+                          </TabsTrigger>
+                          <TabsTrigger value="ia" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
+                            Neutro / IA
+                          </TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="assistant-style" className="text-xs font-semibold text-foreground">
+                        Estilo de Conversa
+                      </Label>
+                      <Select value={assistantDraft.estilo_conversa || "formal"} onValueChange={(v) => setAssistantDraft((c) => ({ ...c, estilo_conversa: v }))} disabled={isSavingAssistant}>
+                        <SelectTrigger id="assistant-style" className="w-full">
+                          <SelectValue placeholder="Selecione o tom da conversa" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="formal">Formal • Profissional, educado e objetivo</SelectItem>
+                          <SelectItem value="informal">Informal • Acolhedor, próximo e natural</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <Separator className="my-2 bg-border/60" />
+              <div className="space-y-4 pt-2">
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Comportamento e Notificações</h3>
+                  <p className="text-xs text-muted-foreground">Ajuste como a assistente interage e quando ela deve enviar notificações.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div
+                    className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
+                    onClick={() => setAssistantDraft((c) => ({ ...c, emoji: !c.emoji }))}
+                  >
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                        <Smile className="h-4 w-4" />
+                      </div>
+                      <div className="space-y-0.5 min-w-0">
+                        <Label htmlFor="assistant-emojis" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
+                          Permitir o uso de emojis
+                        </Label>
+                        <p className="text-[11px] text-muted-foreground leading-tight">{assistantDraft.emoji ? "A IA usará reações visuais moderadas nas respostas." : "Respostas estritamente textuais e limpas."}</p>
+                      </div>
+                    </div>
+                    <Switch id="assistant-emojis" checked={!!assistantDraft.emoji} onClick={(e) => e.stopPropagation()} onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, emoji: v }))} disabled={isSavingAssistant} />
+                  </div>
+                  <div
+                    className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
+                    onClick={() => setAssistantDraft((c) => ({ ...c, avisar_agendamento: !c.avisar_agendamento }))}
+                  >
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                        <CalendarPlus className="h-4 w-4" />
+                      </div>
+                      <div className="space-y-0.5 min-w-0">
+                        <Label htmlFor="assistant-notify-booking" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
+                          Avisar sobre agendamentos
+                        </Label>
+                        <p className="text-[11px] text-muted-foreground leading-tight">Notificar quando um novo agendamento for solicitado ou realizado.</p>
+                      </div>
+                    </div>
+                    <Switch
+                      id="assistant-notify-booking"
+                      checked={!!assistantDraft.avisar_agendamento}
+                      onClick={(e) => e.stopPropagation()}
+                      onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, avisar_agendamento: v }))}
+                      disabled={isSavingAssistant}
+                    />
+                  </div>
+                  <div
+                    className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
+                    onClick={() => setAssistantDraft((c) => ({ ...c, avisar_encaminhamento: !c.avisar_encaminhamento }))}
+                  >
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                        <ArrowUpRight className="h-4 w-4" />
+                      </div>
+                      <div className="space-y-0.5 min-w-0">
+                        <Label htmlFor="assistant-notify-forward" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
+                          Avisar sobre encaminhamentos
+                        </Label>
+                        <p className="text-[11px] text-muted-foreground leading-tight">Notificar quando a conversa for encaminhada para atendimento humano.</p>
+                      </div>
+                    </div>
+                    <Switch
+                      id="assistant-notify-forward"
+                      checked={!!assistantDraft.avisar_encaminhamento}
+                      onClick={(e) => e.stopPropagation()}
+                      onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, avisar_encaminhamento: v }))}
+                      disabled={isSavingAssistant}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </>
+        )}
       </section>
 
       <section className="rounded-xl border border-border bg-card">
-        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-0.5 min-w-0">
-            <h2 className="text-lg font-semibold text-foreground tracking-tight">Procedimentos</h2>
-            <p className="text-sm text-muted-foreground max-w-(--size-xl) sm:max-w-none md:line-clamp-none line-clamp-2">Procedimentos e tratamentos que a IA conhece e pode explicar aos pacientes.</p>
-          </div>
+        {isLoading ? (
+          <>
+            <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-2 min-w-0 flex-1">
+                <SkeletonShimmer className="h-6 w-36 rounded-md bg-muted/40" />
+                <SkeletonShimmer className="h-4 w-full max-w-md rounded bg-muted/20" />
+              </div>
 
-          <div className="flex items-center justify-end sm:justify-end gap-2 shrink-0 w-full sm:w-auto">
-            <span className="text-xs font-semibold text-muted-foreground bg-muted/80 border border-border/20 px-2 md:px-2.5 py-1 rounded-full">
-              {procedures.length} <span className="hidden lg:inline">cadastrado{procedures.length !== 1 ? "s" : ""}</span>
-            </span>
-
-            <Button type="button" size="sm" variant="primary" className="h-9 gap-1.5 shadow-xs font-medium cursor-pointer" onClick={() => setIsCreateDialogOpen(true)}>
-              <Plus className="h-3.5 w-3.5" />
-              <span>Novo procedimento</span>
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex flex-col bg-card rounded-b-xl shadow-sm overflow-hidden">
-          <div className="hidden md:grid grid-cols-[10px_2fr_1fr_1fr_100px] border-b border-border bg-muted/20 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground gap-4 items-center">
-            <span></span>
-            <span>Nome</span>
-            <span>Interesse</span>
-            <span>Modalidade</span>
-            <span className="text-right">Ações</span>
-          </div>
-
-          {procedures.length === 0 ? (
-            <div className="flex h-52 flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground p-6">
-              <Stethoscope className="h-9 w-9 text-muted-foreground/50 stroke-[1.5]" />
-              <div>
-                <p className="font-medium">Nenhum procedimento cadastrado.</p>
-                <p className="text-xs mt-0.5">Clique em "Novo procedimento" para começar.</p>
+              <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 w-full sm:w-auto">
+                <SkeletonShimmer className="h-6 w-16 rounded-full bg-muted/30" />
+                <SkeletonShimmer className="h-9 w-36 rounded-md bg-muted/40" />
               </div>
             </div>
-          ) : (
-            <div className="flex flex-col w-full divide-y divide-border">
-              {procedures.map((procedure) => {
-                const isActive = procedure.status === "ativo";
-                const isDeleting = deletingId === procedure.id;
-                const tag = tagOptions.find((t) => t.label === procedure.interesse);
-                const modalidadeLabel = procedure.modalidade === "presencial" ? "Presencial" : procedure.modalidade === "online" ? "Online" : procedure.modalidade;
-                const modoLabel = procedure.modo_resposta_ia === "texto_integral" ? "Integral" : procedure.modo_resposta_ia === "usar_como_base" ? "Base" : procedure.modo_resposta_ia;
 
-                return (
-                  <article key={procedure.id} className="w-full hover:bg-muted/20 transition-colors" onClick={() => setEditTarget(procedure)}>
-                    <div className="flex flex-col gap-3 p-4 md:grid md:grid-cols-[10px_2fr_1fr_1fr_100px] md:items-center md:gap-4 md:py-3.5 md:px-4">
-                      <div className="flex items-center justify-between md:justify-center shrink-0 min-w-0">
-                        <span className="text-xs text-muted-foreground/60 font-medium md:hidden">Status</span>
-                        <TooltipProvider delayDuration={200}>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="flex items-center p-0.5 shrink-0">
-                                <span className="relative flex h-2 w-2 rounded-full">
-                                  {isActive ? (
-                                    <>
-                                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                                    </>
-                                  ) : (
-                                    <span className="relative inline-flex h-2 w-2 rounded-full bg-red-400/60" />
-                                  )}
-                                </span>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs font-medium px-2 py-1">
-                              {isActive ? "Procedimento ativo" : "Procedimento inativo"}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
+            <div className="flex flex-col bg-card rounded-b-xl shadow-sm overflow-hidden">
+              <div className="hidden md:grid grid-cols-[10px_2fr_1fr_1fr_100px] border-b border-border bg-muted/10 px-4 py-3 gap-4 items-center">
+                <span className="w-2" />
+                <SkeletonShimmer className="h-3 w-12 rounded bg-muted/30" />
+                <SkeletonShimmer className="h-3 w-16 rounded bg-muted/30" />
+                <SkeletonShimmer className="h-3 w-20 rounded bg-muted/30" />
+                <span className="text-right flex justify-end">
+                  <SkeletonShimmer className="h-3 w-10 rounded bg-muted/30" />
+                </span>
+              </div>
 
-                      <div className="min-w-0 flex-1 md:flex-none">
-                        <p className="text-sm font-semibold text-foreground truncate w-full" title={procedure.nome}>
-                          {procedure.nome || "Sem nome"}
-                        </p>
-                        {procedure.info_resposta_ia && <p className="text-xs text-muted-foreground line-clamp-1 leading-relaxed mt-0.5">{procedure.info_resposta_ia}</p>}
+              <div className="flex flex-col w-full divide-y divide-border">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="flex flex-col gap-3 p-4 md:grid md:grid-cols-[10px_2fr_1fr_1fr_100px] md:items-center md:gap-4 md:py-3.5 md:px-4">
+                    <div className="flex items-center justify-between md:justify-center shrink-0">
+                      <span className="text-xs text-muted-foreground/40 md:hidden">Status</span>
+                      <SkeletonShimmer className="h-2 w-2 rounded-full bg-muted/40" />
+                    </div>
 
-                        <div className="flex items-center gap-2 mt-2 md:hidden flex-wrap">
-                          {tag ? (
-                            <span
-                              className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium border border-border/30"
-                              style={{ backgroundColor: tag.color || "var(--secondary)", color: getReadableTextColor(tag.color) }}
-                            >
-                              {tag.label}
-                            </span>
-                          ) : procedure.interesse ? (
-                            <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium bg-secondary text-secondary-foreground border border-border/30">{procedure.interesse}</span>
-                          ) : null}
-                          {modalidadeLabel ? <span className="text-[11px] text-muted-foreground">{modalidadeLabel}</span> : null}
-                          {modoLabel ? <span className="text-[11px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground font-mono">{modoLabel}</span> : null}
-                        </div>
-                      </div>
+                    <div className="min-w-0 flex-1 md:flex-none space-y-2">
+                      <SkeletonShimmer className="h-4 w-7/12 rounded bg-muted/40" />
+                      <SkeletonShimmer className="h-3 w-11/12 rounded bg-muted/20" />
 
-                      <div className="hidden md:flex items-center min-w-0 truncate">
-                        {tag ? (
-                          <span
-                            className="inline-flex items-center gap-1 rounded px-2.5 py-0.5 text-xs font-medium border border-border/20 shadow-2xs truncate max-w-full"
-                            style={{ backgroundColor: tag.color || "var(--secondary)", color: getReadableTextColor(tag.color) }}
-                          >
-                            {tag.label}
-                          </span>
-                        ) : procedure.interesse ? (
-                          <span className="inline-flex items-center rounded px-2.5 py-0.5 text-xs font-medium bg-secondary text-secondary-foreground border border-border/30 truncate max-w-full">{procedure.interesse}</span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground/50 italic">—</span>
-                        )}
-                      </div>
-
-                      <div className="hidden md:flex items-center shrink-0">
-                        <span className="text-xs text-muted-foreground truncate">{modalidadeLabel || "—"}</span>
-                      </div>
-
-                      <div className="flex items-center justify-end gap-1 shrink-0 pt-2 border-t border-border/40 md:pt-0 md:border-0">
-                        <Button type="button" variant="ghost" size="icon-sm" onClick={() => setEditTarget(procedure)} disabled={isDeleting} className="h-8 w-8 hover:bg-muted" aria-label="Editar">
-                          <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteTarget(procedure);
-                          }}
-                          disabled={isDeleting}
-                          className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          aria-label="Excluir"
-                        >
-                          {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                        </Button>
+                      <div className="flex items-center gap-2 mt-2 md:hidden">
+                        <SkeletonShimmer className="h-5 w-16 rounded bg-muted/20" />
+                        <SkeletonShimmer className="h-4 w-12 rounded bg-muted/20" />
+                        <SkeletonShimmer className="h-5 w-10 rounded bg-muted/20" />
                       </div>
                     </div>
-                  </article>
-                );
-              })}
+
+                    <div className="hidden md:flex items-center">
+                      <SkeletonShimmer className="h-5 w-24 rounded bg-muted/30" />
+                    </div>
+
+                    <div className="hidden md:flex items-center">
+                      <SkeletonShimmer className="h-4 w-16 rounded bg-muted/20" />
+                    </div>
+
+                    <div className="flex items-center justify-end gap-1 shrink-0 pt-2 border-t border-border/40 md:pt-0 md:border-0">
+                      <SkeletonShimmer className="h-8 w-8 rounded-md bg-muted/20" />
+                      <SkeletonShimmer className="h-8 w-8 rounded-md bg-muted/20" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          )}
-        </div>
+          </>
+        ) : (
+          <>
+            <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-0.5 min-w-0">
+                <h2 className="text-lg font-semibold text-foreground tracking-tight">Procedimentos</h2>
+                <p className="text-sm text-muted-foreground max-w-(--size-xl) sm:max-w-none md:line-clamp-none line-clamp-2">Procedimentos e tratamentos que a IA conhece e pode explicar aos pacientes.</p>
+              </div>
+              <div className="flex items-center justify-end sm:justify-end gap-2 shrink-0 w-full sm:w-auto">
+                <span className="text-xs font-semibold text-muted-foreground bg-muted/80 border border-border/20 px-2 md:px-2.5 py-1 rounded-full">
+                  {procedures.length} <span className="hidden lg:inline">cadastrado{procedures.length !== 1 ? "s" : ""}</span>
+                </span>
+                <Button type="button" size="sm" variant="primary" className="h-9 gap-1.5 shadow-xs font-medium cursor-pointer" onClick={() => setIsCreateDialogOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Novo procedimento</span>
+                </Button>
+              </div>
+            </div>
+            <div className="flex flex-col bg-card rounded-b-xl shadow-sm overflow-hidden">
+              <div className="hidden md:grid grid-cols-[10px_2fr_1fr_1fr_100px] border-b border-border bg-muted/20 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground gap-4 items-center">
+                <span></span>
+                <span>Nome</span>
+                <span>Interesse</span>
+                <span>Modalidade</span>
+                <span className="text-right">Ações</span>
+              </div>
+              {procedures.length === 0 ? (
+                <div className="flex h-52 flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground p-6">
+                  <Stethoscope className="h-9 w-9 text-muted-foreground/50 stroke-[1.5]" />
+                  <div>
+                    <p className="font-medium">Nenhum procedimento cadastrado.</p>
+                    <p className="text-xs mt-0.5">Clique em "Novo procedimento" para começar.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col w-full divide-y divide-border">
+                  {procedures.map((procedure) => {
+                    const isActive = procedure.status === "ativo";
+                    const isDeleting = deletingId === procedure.id;
+                    const tag = tagOptions.find((t) => t.label === procedure.interesse);
+                    const modalidadeLabel = procedure.modalidade === "presencial" ? "Presencial" : procedure.modalidade === "online" ? "Online" : procedure.modalidade;
+                    const modoLabel = procedure.modo_resposta_ia === "texto_integral" ? "Integral" : procedure.modo_resposta_ia === "usar_como_base" ? "Base" : procedure.modo_resposta_ia;
+                    return (
+                      <article key={procedure.id} className="w-full hover:bg-muted/20 transition-colors" onClick={() => setEditTarget(procedure)}>
+                        <div className="flex flex-col gap-3 p-4 md:grid md:grid-cols-[10px_2fr_1fr_1fr_100px] md:items-center md:gap-4 md:py-3.5 md:px-4">
+                          <div className="flex items-center justify-between md:justify-center shrink-0 min-w-0">
+                            <span className="text-xs text-muted-foreground/60 font-medium md:hidden">Status</span>
+                            <TooltipProvider delayDuration={200}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex items-center p-0.5 shrink-0">
+                                    <span className="relative flex h-2 w-2 rounded-full">
+                                      {isActive ? (
+                                        <>
+                                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                                          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                                        </>
+                                      ) : (
+                                        <span className="relative inline-flex h-2 w-2 rounded-full bg-red-400/60" />
+                                      )}
+                                    </span>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs font-medium px-2 py-1">
+                                  {isActive ? "Procedimento ativo" : "Procedimento inativo"}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                          <div className="min-w-0 flex-1 md:flex-none">
+                            <p className="text-sm font-semibold text-foreground truncate w-full" title={procedure.nome}>
+                              {procedure.nome || "Sem nome"}
+                            </p>
+                            {procedure.info_resposta_ia && <p className="text-xs text-muted-foreground line-clamp-1 leading-relaxed mt-0.5">{procedure.info_resposta_ia}</p>}
+                            <div className="flex items-center gap-2 mt-2 md:hidden flex-wrap">
+                              {tag ? (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium border border-border/30"
+                                  style={{ backgroundColor: tag.color || "var(--secondary)", color: getReadableTextColor(tag.color) }}
+                                >
+                                  {tag.label}
+                                </span>
+                              ) : procedure.interesse ? (
+                                <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium bg-secondary text-secondary-foreground border border-border/30">{procedure.interesse}</span>
+                              ) : null}
+                              {modalidadeLabel ? <span className="text-[11px] text-muted-foreground">{modalidadeLabel}</span> : null}
+                              {modoLabel ? <span className="text-[11px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground font-mono">{modoLabel}</span> : null}
+                            </div>
+                          </div>
+                          <div className="hidden md:flex items-center min-w-0 truncate">
+                            {tag ? (
+                              <span
+                                className="inline-flex items-center gap-1 rounded px-2.5 py-0.5 text-xs font-medium border border-border/20 shadow-2xs truncate max-w-full"
+                                style={{ backgroundColor: tag.color || "var(--secondary)", color: getReadableTextColor(tag.color) }}
+                              >
+                                {tag.label}
+                              </span>
+                            ) : procedure.interesse ? (
+                              <span className="inline-flex items-center rounded px-2.5 py-0.5 text-xs font-medium bg-secondary text-secondary-foreground border border-border/30 truncate max-w-full">{procedure.interesse}</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground/50 italic">—</span>
+                            )}
+                          </div>
+                          <div className="hidden md:flex items-center shrink-0">
+                            <span className="text-xs text-muted-foreground truncate">{modalidadeLabel || "—"}</span>
+                          </div>
+                          <div className="flex items-center justify-end gap-1 shrink-0 pt-2 border-t border-border/40 md:pt-0 md:border-0">
+                            <Button type="button" variant="ghost" size="icon-sm" onClick={() => setEditTarget(procedure)} disabled={isDeleting} className="h-8 w-8 hover:bg-muted" aria-label="Editar">
+                              <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteTarget(procedure);
+                              }}
+                              disabled={isDeleting}
+                              className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              aria-label="Excluir"
+                            >
+                              {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                            </Button>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </section>
 
       <ProcedureDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} tagOptions={tagOptions} isSaving={isSavingProcedure} onSubmit={handleCreateProcedure} />
