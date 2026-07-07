@@ -491,14 +491,16 @@ export function ContactList({
   const filteredChats = useMemo(() => {
     return chats.filter((chat) => {
       if (statusFilter !== ALL_FILTERS && getChatStatusLabel(chat) !== statusFilter) return false;
-      if (
-        sectorFilter !== ALL_FILTERS &&
-        !getSectorIds(chat.setor)
-          .map((id) => getSectorLabel(id, sectorLabels))
-          .includes(sectorFilter)
-      ) {
-        return false;
+      if (sectorFilter !== ALL_FILTERS) {
+        const parsedTags = Array.isArray(chat.json_tags_parsed) ? chat.json_tags_parsed : [];
+        const extractedSectorIds = parsedTags.map((tag) => tag.id).filter(Boolean);
+        const resolvedSectorLabels = getSectorIds(extractedSectorIds).map((id) => getSectorLabel(id, sectorLabels));
+        const rawSectorValues = getFilterValues(extractedSectorIds);
+        const allSectorValues = Array.from(new Set([...resolvedSectorLabels, ...rawSectorValues]));
+
+        if (!allSectorValues.includes(sectorFilter)) return false;
       }
+
       if (tagFilter !== ALL_FILTERS && !getChatTags(chat).some((tag) => tag.label === tagFilter)) return false;
       if (interestFilter !== ALL_FILTERS && !getChatInterestTags(chat).some((interest) => interest.label === interestFilter)) return false;
 
