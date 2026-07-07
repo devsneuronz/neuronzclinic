@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getReadableTextColor } from "@/lib/chat-tags";
 import { cn, normalizeText } from "@/lib/utils";
-import { ArrowUpRight, CalendarPlus, CalendarSearch, Loader2, Pencil, Plus, RefreshCw, Save, Search, Smile, Stethoscope, TagsIcon, Trash2, X } from "lucide-react";
+import { ArrowUpRight, CalendarDays, CalendarPlus, CalendarSearch, FileText, HelpCircle, Loader2, MessageSquareOff, Pencil, Plus, RefreshCw, Save, Search, Smile, Sparkles, Stethoscope, TagsIcon, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NumericFormat } from "react-number-format";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
@@ -82,7 +82,7 @@ const emptyProcedureDraft: ProcedureDraft = {
   nome: "",
   modo_resposta_ia: "usar_como_base",
   info_resposta_ia: "",
-  modo_agendamento_ia: "",
+  modo_agendamento_ia: "nao_conduzir_criar_aviso",
   modalidade: "presencial",
   informar_valor_avaliacao: false,
   informar_valor_consulta: false,
@@ -99,7 +99,7 @@ function procedureToDraft(p: SupabaseProcedure): ProcedureDraft {
     nome: p.nome || "",
     modo_resposta_ia: p.modo_resposta_ia || "usar_como_base",
     info_resposta_ia: p.info_resposta_ia || "",
-    modo_agendamento_ia: p.modo_agendamento_ia || "",
+    modo_agendamento_ia: p.modo_agendamento_ia || "nao_conduzir_criar_aviso",
     modalidade: p.modalidade || "presencial",
     informar_valor_avaliacao: p.informar_valor_avaliacao === "sim",
     informar_valor_consulta: p.informar_valor_consulta === "sim",
@@ -150,6 +150,42 @@ function ProcedureDialog({ open, onOpenChange, editTarget, tagOptions, isSaving,
   const [isInterestOpen, setIsInterestOpen] = useState(false);
   const interestRef = useRef<HTMLDivElement>(null);
 
+  const MODO_RESPOSTA_INFOS = {
+    usar_como_base: {
+      title: "IA adapta a resposta",
+      description: "A IA usa o conteúdo como base de conhecimento e personaliza o texto de forma natural para o cliente.",
+      icon: Sparkles,
+      colorClass: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+    },
+    texto_integral: {
+      title: "IA envia como está",
+      description: "A IA envia o texto exatamente como foi escrito, funcionando como uma resposta padrão estática.",
+      icon: FileText,
+      colorClass: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
+    },
+  };
+
+  const MODO_AGENDAMENTO_INFOS = {
+    nao_conduzir_criar_aviso: {
+      title: "Apenas criar aviso",
+      description: "A IA apenas anota o interesse do contato e avisa a equipe, sem coletar ou perguntar por horários.",
+      icon: MessageSquareOff,
+      colorClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+    },
+    coletar_preferencia_equipe_confirma: {
+      title: "Coletar preferências",
+      description: "A IA pergunta os dias e períodos preferidos do cliente e encaminha para validação da equipe.",
+      icon: CalendarDays,
+      colorClass: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20",
+    },
+    sugerir_horarios_equipe_confirma: {
+      title: "Sugerir horários",
+      description: "A IA busca na agenda e oferece até 2 horários livres para o cliente escolher antes de avisar a equipe.",
+      icon: HelpCircle,
+      colorClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+    },
+  };
+
   useEffect(() => {
     if (open) {
       setDraft(editTarget ? procedureToDraft(editTarget) : emptyProcedureDraft);
@@ -197,28 +233,12 @@ function ProcedureDialog({ open, onOpenChange, editTarget, tagOptions, isSaving,
 
         <form className="flex flex-1 flex-col overflow-hidden" onSubmit={handleSubmit}>
           <div className="flex-1 overflow-y-auto px-6 pb-2 pt-1 space-y-5 min-h-0 custom-scrollbar">
-            <div className="grid gap-4 sm:grid-cols-[auto_1fr]">
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground block">Status</label>
-                <Tabs value={draft.status} onValueChange={(v) => set("status", v)}>
-                  <TabsList className="h-9! gap-1 bg-secondary/50 border border-border/40 rounded-full">
-                    <TabsTrigger value="inativo" className="text-xs font-medium px-3 data-[state=active]:bg-red-500/20 data-[state=active]:text-red-200!">
-                      Inativo
-                    </TabsTrigger>
-                    <TabsTrigger value="ativo" className="text-xs font-medium px-3 data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-200">
-                      Ativo
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
-              </div>
-
-              <div className="space-y-2">
+            <div className="grid gap-4 sm:grid-cols-12">
+              <div className="space-y-2 col-span-6">
                 <label className="text-xs font-semibold text-foreground block">Nome do procedimento</label>
                 <Input value={draft.nome} onChange={(e) => set("nome", e.target.value)} placeholder="Ex.: TXHM, Transplante Capilar..." disabled={isSaving} required />
               </div>
-            </div>
 
-            <div className="grid gap-4 sm:grid-cols-13">
               <div className="space-y-2 col-span-3">
                 <label className="text-xs font-semibold text-foreground block">Modalidade</label>
                 <Select value={draft.modalidade} onValueChange={(v) => set("modalidade", v)} disabled={isSaving}>
@@ -232,30 +252,83 @@ function ProcedureDialog({ open, onOpenChange, editTarget, tagOptions, isSaving,
                 </Select>
               </div>
 
-              <div className="space-y-2 col-span-5">
-                <label className="text-xs font-semibold text-foreground block">Modo de resposta da IA</label>
-                <Select value={draft.modo_resposta_ia} onValueChange={(v) => set("modo_resposta_ia", v)} disabled={isSaving}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Selecione..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="usar_como_base">Usar como base — IA adapta a resposta</SelectItem>
-                    <SelectItem value="texto_integral">Texto integral — IA envia como está</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2 col-span-3">
+                <label className="text-xs font-semibold text-foreground block">Status</label>
+                <Tabs value={draft.status} onValueChange={(v) => set("status", v)}>
+                  <TabsList className="h-9! w-full gap-1 bg-secondary/50 border border-border/40 rounded-full">
+                    <TabsTrigger value="inativo" className="text-xs font-medium px-3 data-[state=active]:bg-red-500/20 data-[state=active]:text-red-200!">
+                      Inativo
+                    </TabsTrigger>
+                    <TabsTrigger value="ativo" className="text-xs font-medium px-3 data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-200">
+                      Ativo
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground block">Modo de resposta da IA</label>
+                  <Select value={draft.modo_resposta_ia} onValueChange={(v) => set("modo_resposta_ia", v)} disabled={isSaving}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="usar_como_base">Usar como base</SelectItem>
+                      <SelectItem value="texto_integral">Texto integral</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {draft.modo_resposta_ia &&
+                  MODO_RESPOSTA_INFOS[draft.modo_resposta_ia as keyof typeof MODO_RESPOSTA_INFOS] &&
+                  (() => {
+                    const info = MODO_RESPOSTA_INFOS[draft.modo_resposta_ia as keyof typeof MODO_RESPOSTA_INFOS];
+                    const Icon = info.icon;
+                    return (
+                      <div className={`p-3 rounded-lg border flex items-start gap-3 transition-all min-h-[76px] ${info.colorClass}`}>
+                        <Icon className="h-5 w-5 mt-0.5 shrink-0" />
+                        <div className="space-y-1">
+                          <h5 className="text-xs font-bold leading-none tracking-tight">{info.title}</h5>
+                          <p className="text-xs text-muted-foreground leading-relaxed">{info.description}</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
               </div>
 
-              <div className="space-y-2 col-span-5">
-                <label className="text-xs font-semibold text-foreground block">Modo de agendamento da IA</label>
-                <Select value={draft.modo_agendamento_ia} onValueChange={(v) => set("modo_agendamento_ia", v)} disabled={isSaving}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Selecione..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="coletar_preferencia_equipe_confirma">Coletar preferência</SelectItem>
-                    <SelectItem value="nao_conduzir_criar_aviso">Criar aviso</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground block">Modo de agendamento da IA</label>
+                  <Select value={draft.modo_agendamento_ia} onValueChange={(v) => set("modo_agendamento_ia", v)} disabled={isSaving}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nao_conduzir_criar_aviso">Não conduzir o usuário, apenas criar aviso</SelectItem>
+                      <SelectItem value="coletar_preferencia_equipe_confirma">Coletar preferência de horários</SelectItem>
+                      <SelectItem value="sugerir_horarios_equipe_confirma">Sugerir horários ao usuário</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {draft.modo_agendamento_ia &&
+                  MODO_AGENDAMENTO_INFOS[draft.modo_agendamento_ia as keyof typeof MODO_AGENDAMENTO_INFOS] &&
+                  (() => {
+                    const info = MODO_AGENDAMENTO_INFOS[draft.modo_agendamento_ia as keyof typeof MODO_AGENDAMENTO_INFOS];
+                    const Icon = info.icon;
+                    return (
+                      <div className={`p-3 rounded-lg border flex items-start gap-3 transition-all min-h-[76px] ${info.colorClass}`}>
+                        <Icon className="h-5 w-5 mt-0.5 shrink-0" />
+                        <div className="space-y-1">
+                          <h5 className="text-xs font-bold leading-none tracking-tight">{info.title}</h5>
+                          <p className="text-xs text-muted-foreground leading-relaxed">{info.description}</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
               </div>
             </div>
 
