@@ -7,8 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { getReadableTextColor } from "@/lib/chat-tags";
-import type { ClinicAssistantInfo, ClinicInfoPayload, ClinicProcedure, newClinicAssistantInfo } from "@/lib/clinic-info";
-import { Check, Loader2, Pencil, Plus, RefreshCw, Save, Stethoscope, Trash2, X } from "lucide-react";
+import type { ClinicInfoPayload, ClinicProcedure } from "@/lib/clinic-info";
+import { ArrowUpRight, CalendarPlus, Check, Loader2, Pencil, Plus, RefreshCw, Save, Smile, Stethoscope, Trash2, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Separator } from "../ui/separator";
@@ -23,21 +23,28 @@ type EditableProcedure = ClinicProcedure & {
   isEditing: boolean;
 };
 
-const emptyAssistant: ClinicAssistantInfo = {
-  id: null,
-  name: "Lia",
-  generalInfo: "",
-  initialMessage: "",
+type SupabaseAssistantInfo = {
+  id: string | null;
+  name: string;
+  gender: string;
+  emoji: boolean;
+  dados_empresa: string;
+  msg_inicial: string;
+  estilo_conversa: string;
+  avisar_agendamento: boolean;
+  avisar_encaminhamento: boolean;
 };
 
-const newEmptyAssistant: newClinicAssistantInfo = {
+const emptyAssistant: SupabaseAssistantInfo = {
   id: null,
   name: "Lia",
-  generalInfo: "",
-  initialMessage: "",
   gender: "ia",
-  style: "formal",
-  useEmojis: false,
+  emoji: true,
+  dados_empresa: "",
+  msg_inicial: "",
+  estilo_conversa: "formal",
+  avisar_agendamento: false,
+  avisar_encaminhamento: false,
 };
 
 const emptyProcedureForm = {
@@ -64,8 +71,8 @@ async function readApiMessage(response: Response, fallback: string) {
 }
 
 export function ClinicInfoManager() {
-  const [assistant, setAssistant] = useState<ClinicAssistantInfo>(emptyAssistant);
-  const [assistantDraft, setAssistantDraft] = useState<ClinicAssistantInfo>(emptyAssistant);
+  const [assistant, setAssistant] = useState<SupabaseAssistantInfo>(emptyAssistant);
+  const [assistantDraft, setAssistantDraft] = useState<SupabaseAssistantInfo>(emptyAssistant);
   const [procedures, setProcedures] = useState<EditableProcedure[]>([]);
   const [newProcedure, setNewProcedure] = useState(emptyProcedureForm);
   const [isLoading, setIsLoading] = useState(true);
@@ -76,11 +83,17 @@ export function ClinicInfoManager() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const [newAssistantDraft, setNewAssistantDraft] = useState<newClinicAssistantInfo>(newEmptyAssistant);
-
   const sortedProcedures = useMemo(() => procedures.slice().sort((a, b) => (a.interest || a.name).localeCompare(b.interest || b.name, "pt-BR", { sensitivity: "base" })), [procedures]);
 
-  const assistantChanged = assistantDraft.name !== assistant.name || assistantDraft.generalInfo !== assistant.generalInfo || assistantDraft.initialMessage !== assistant.initialMessage;
+  const assistantChanged =
+    assistantDraft.name !== assistant.name ||
+    assistantDraft.gender !== assistant.gender ||
+    assistantDraft.emoji !== assistant.emoji ||
+    assistantDraft.dados_empresa !== assistant.dados_empresa ||
+    assistantDraft.msg_inicial !== assistant.msg_inicial ||
+    assistantDraft.estilo_conversa !== assistant.estilo_conversa ||
+    assistantDraft.avisar_agendamento !== assistant.avisar_agendamento ||
+    assistantDraft.avisar_encaminhamento !== assistant.avisar_encaminhamento;
 
   async function loadInfo() {
     setIsLoading(true);
@@ -88,13 +101,38 @@ export function ClinicInfoManager() {
     setSuccess(null);
 
     try {
-      const response = await fetch("/api/airtable/clinic-info", { cache: "no-store" });
-      if (!response.ok) throw new Error(await readApiMessage(response, "Não foi possível carregar as informações."));
+      // 1. Fetch procedures from Airtable clinic-info
+      const procResponse = await fetch("/api/airtable/clinic-info", { cache: "no-store" });
+      let loadedProcedures: ClinicProcedure[] = [];
+      if (procResponse.ok) {
+        const procData = (await procResponse.json()) as ClinicInfoPayload;
+        loadedProcedures = procData.procedures || [];
+      }
 
-      const data = (await response.json()) as ClinicInfoPayload;
-      setAssistant(data.assistant ?? emptyAssistant);
-      setAssistantDraft(data.assistant ?? emptyAssistant);
-      setProcedures((data.procedures ?? []).map(toEditableProcedure));
+      // 2. Fetch assistant from Supabase ia-assistant
+      const assistantResponse = await fetch("/api/ia-assistant", { cache: "no-store" });
+      let loadedAssistant = emptyAssistant;
+      if (assistantResponse.ok) {
+        const assistantData = await assistantResponse.json();
+        const assistantsList = assistantData.assistants || [];
+        if (assistantsList.length > 0) {
+          loadedAssistant = {
+            id: assistantsList[0].id || null,
+            name: assistantsList[0].name || "Lia",
+            gender: assistantsList[0].gender || "ia",
+            emoji: assistantsList[0].emoji !== false,
+            dados_empresa: assistantsList[0].dados_empresa || "",
+            msg_inicial: assistantsList[0].msg_inicial || "",
+            estilo_conversa: assistantsList[0].estilo_conversa || "formal",
+            avisar_agendamento: !!assistantsList[0].avisar_agendamento,
+            avisar_encaminhamento: !!assistantsList[0].avisar_encaminhamento,
+          };
+        }
+      }
+
+      setAssistant(loadedAssistant);
+      setAssistantDraft(loadedAssistant);
+      setProcedures(loadedProcedures.map(toEditableProcedure));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível carregar as informações.");
     } finally {
@@ -118,21 +156,25 @@ export function ClinicInfoManager() {
     setSuccess(null);
 
     try {
-      const response = await fetch("/api/airtable/clinic-info", {
-        method: "PATCH",
+      const isNew = !assistant.id;
+      const method = isNew ? "POST" : "PATCH";
+      const url = "/api/ia-assistant";
+
+      const response = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "assistant", assistant: assistantDraft }),
+        body: JSON.stringify(assistantDraft),
       });
 
-      if (!response.ok) throw new Error(await readApiMessage(response, "Não foi possível salvar as informações da clínica."));
+      if (!response.ok) throw new Error(await readApiMessage(response, "Não foi possível salvar as informações da assistente."));
 
-      const data = (await response.json()) as { assistant?: ClinicAssistantInfo };
+      const data = (await response.json()) as { assistant?: any };
       const nextAssistant = data.assistant ?? assistantDraft;
       setAssistant(nextAssistant);
       setAssistantDraft(nextAssistant);
-      setSuccess("Informações da clínica salvas.");
+      setSuccess("Configurações da assistente salvas com sucesso.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível salvar as informações da clínica.");
+      setError(err instanceof Error ? err.message : "Não foi possível salvar as informações da assistente.");
     } finally {
       setIsSavingAssistant(false);
     }
@@ -281,10 +323,10 @@ export function ClinicInfoManager() {
             </Label>
             <Textarea
               id="assistant-general-info"
-              value={assistantDraft.generalInfo}
-              onChange={(event) => setAssistantDraft((current) => ({ ...current, generalInfo: event.target.value }))}
+              value={assistantDraft.dados_empresa}
+              onChange={(event) => setAssistantDraft((current) => ({ ...current, dados_empresa: event.target.value }))}
               className="overflow-auto custom-scrollbar transition-all min-h-55 max-h-100 resize-y bg-background leading-relaxed rounded-lg border-0!"
-              placeholder="Dados estruturados da clínica (endereço, horários, regras de convênio) vindos do Airtable..."
+              placeholder="Dados estruturados da clínica (endereço, horários, regras de convênio)..."
               disabled={isSavingAssistant}
             />
           </div>
@@ -295,8 +337,8 @@ export function ClinicInfoManager() {
             </Label>
             <Textarea
               id="assistant-initial-message"
-              value={assistantDraft.initialMessage}
-              onChange={(event) => setAssistantDraft((current) => ({ ...current, initialMessage: event.target.value }))}
+              value={assistantDraft.msg_inicial}
+              onChange={(event) => setAssistantDraft((current) => ({ ...current, msg_inicial: event.target.value }))}
               className="min-h-27.5 max-h-55 resize-y bg-background leading-relaxed rounded-lg border-0! custom-scrollbar"
               placeholder="Primeira mensagem enviada pela assistente ao iniciar um novo contato..."
               disabled={isSavingAssistant}
@@ -309,8 +351,8 @@ export function ClinicInfoManager() {
           {/* SEÇÃO: PERSONALIDADE E TOM DA IA */}
           <div className="space-y-4">
             <div>
-              <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Personalidade e Tom da IA</h3>
-              <p className="text-xs text-muted-foreground">Defina a identidade visual, gênero e comportamento linguístico da inteligência artificial.</p>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Personalidade e Identidade</h3>
+              <p className="text-xs text-muted-foreground">Defina a identidade visual, gênero e as informações cadastrais da clínica.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -323,8 +365,8 @@ export function ClinicInfoManager() {
                   <Input
                     id="assistant-name"
                     type="text"
-                    value={newAssistantDraft.name || ""}
-                    onChange={(event) => setNewAssistantDraft((current) => ({ ...current, name: event.target.value }))}
+                    value={assistantDraft.name || ""}
+                    onChange={(event) => setAssistantDraft((current) => ({ ...current, name: event.target.value }))}
                     placeholder="Ex: Lia, Dr. Robô, Amanda..."
                     disabled={isSavingAssistant}
                   />
@@ -332,12 +374,12 @@ export function ClinicInfoManager() {
 
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold text-foreground">Gênero de Tratamento</Label>
-                  <Tabs value={newAssistantDraft.gender || "ia"} onValueChange={(value) => setNewAssistantDraft((current) => ({ ...current, gender: value }))} className="w-full">
+                  <Tabs value={assistantDraft.gender || "ia"} onValueChange={(value) => setAssistantDraft((current) => ({ ...current, gender: value }))} className="w-full">
                     <TabsList className="w-full gap-1.5 rounded-full h-9! bg-secondary/50 border border-border/40">
-                      <TabsTrigger value="female" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
+                      <TabsTrigger value="mulher" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
                         Mulher
                       </TabsTrigger>
-                      <TabsTrigger value="male" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
+                      <TabsTrigger value="homem" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
                         Homem
                       </TabsTrigger>
                       <TabsTrigger value="ia" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
@@ -348,45 +390,105 @@ export function ClinicInfoManager() {
                 </div>
               </div>
 
+              {/* Coluna 2: Informações de Notificação (Nome e WhatsApp do Cliente) */}
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="assistant-style" className="text-xs font-semibold text-foreground">
                     Estilo de Conversa
                   </Label>
-                  <Select value={newAssistantDraft.style || "informal"} onValueChange={(value) => setNewAssistantDraft((current) => ({ ...current, style: value }))} disabled={isSavingAssistant}>
+                  <Select value={assistantDraft.estilo_conversa || "formal"} onValueChange={(value) => setAssistantDraft((current) => ({ ...current, estilo_conversa: value }))} disabled={isSavingAssistant}>
                     <SelectTrigger id="assistant-style" className="w-full">
                       <SelectValue placeholder="Selecione o tom da conversa" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="formal">Formal (Uso de 'senhor/senhora', tom corporativo/médico clássico)</SelectItem>
-                      <SelectItem value="informal">Informal (Tom acolhedor, ágil, uso de 'você')</SelectItem>
+                      <SelectItem value="formal">Formal • Profissional, educado e objetivo</SelectItem>
+                      <SelectItem value="informal">Informal • Acolhedor, próximo e natural</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+            </div>
+          </div>
 
-                <div
-                  className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15"
-                  onClick={() => setNewAssistantDraft((current) => ({ ...current, useEmojis: !current.useEmojis }))}
-                >
-                  <div className="space-y-0.5">
-                    <Label htmlFor="assistant-emojis" className="text-xs font-semibold text-foreground">
+          <Separator className="my-2 bg-border/60" />
+
+          <div className="space-y-4 pt-2">
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Comportamento e Notificações</h3>
+              <p className="text-xs text-muted-foreground">Ajuste como a assistente interage e quando ela deve enviar notificações.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div
+                className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
+                onClick={() => setAssistantDraft((current) => ({ ...current, emoji: !current.emoji }))}
+              >
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                    <Smile className="h-4 w-4" />
+                  </div>
+                  <div className="space-y-0.5 min-w-0">
+                    <Label htmlFor="assistant-emojis" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
                       Permitir o uso de emojis
                     </Label>
-                    <p className="text-[11px] text-muted-foreground leading-none">{newAssistantDraft.useEmojis ? "A IA usará reações visuais moderadas nas respostas." : "Respostas estritamente textuais e limpas."}</p>
+                    <p className="text-[11px] text-muted-foreground leading-tight">{assistantDraft.emoji ? "A IA usará reações visuais moderadas nas respostas." : "Respostas estritamente textuais e limpas."}</p>
                   </div>
-                  <Switch
-                    id="assistant-emojis"
-                    checked={!!newAssistantDraft.useEmojis}
-                    onClick={(e) => {
-                      e.preventDefault();
-                    }}
-                    onCheckedChange={(checked) => {
-                      setNewAssistantDraft((current) => ({ ...current, useEmojis: checked }));
-                    }}
-                    disabled={isSavingAssistant}
-                    className="cursor-pointer"
-                  />
                 </div>
+                <Switch
+                  id="assistant-emojis"
+                  checked={!!assistantDraft.emoji}
+                  onClick={(e) => e.stopPropagation()}
+                  onCheckedChange={(checked) => setAssistantDraft((current) => ({ ...current, emoji: checked }))}
+                  disabled={isSavingAssistant}
+                />
+              </div>
+
+              <div
+                className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
+                onClick={() => setAssistantDraft((current) => ({ ...current, avisar_agendamento: !current.avisar_agendamento }))}
+              >
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                    <CalendarPlus className="h-4 w-4" />
+                  </div>
+                  <div className="space-y-0.5 min-w-0">
+                    <Label htmlFor="assistant-notify-booking" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
+                      Avisar sobre agendamentos
+                    </Label>
+                    <p className="text-[11px] text-muted-foreground leading-tight">Notificar quando um novo agendamento for solicitado ou realizado.</p>
+                  </div>
+                </div>
+                <Switch
+                  id="assistant-notify-booking"
+                  checked={!!assistantDraft.avisar_agendamento}
+                  onClick={(e) => e.stopPropagation()}
+                  onCheckedChange={(checked) => setAssistantDraft((current) => ({ ...current, avisar_agendamento: checked }))}
+                  disabled={isSavingAssistant}
+                />
+              </div>
+
+              <div
+                className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
+                onClick={() => setAssistantDraft((current) => ({ ...current, avisar_encaminhamento: !current.avisar_encaminhamento }))}
+              >
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                    <ArrowUpRight className="h-4 w-4" />
+                  </div>
+                  <div className="space-y-0.5 min-w-0">
+                    <Label htmlFor="assistant-notify-forward" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
+                      Avisar sobre encaminhamentos
+                    </Label>
+                    <p className="text-[11px] text-muted-foreground leading-tight">Notificar quando a conversa for encaminhada para atendimento humano.</p>
+                  </div>
+                </div>
+                <Switch
+                  id="assistant-notify-forward"
+                  checked={!!assistantDraft.avisar_encaminhamento}
+                  onClick={(e) => e.stopPropagation()}
+                  onCheckedChange={(checked) => setAssistantDraft((current) => ({ ...current, avisar_encaminhamento: checked }))}
+                  disabled={isSavingAssistant}
+                />
               </div>
             </div>
           </div>
