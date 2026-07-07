@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import type { RoutineMessageTemplate } from "@/lib/routines";
+import { NextResponse } from "next/server";
 
 const AIRTABLE_BASE_ID = "app03ti52QQD3W9L2";
 const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY;
@@ -7,7 +7,7 @@ const MESSAGE_TEMPLATES_TABLE = process.env.AIRTABLE_MESSAGE_TEMPLATES_TABLE || 
 const TEMPLATE_NAME_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_NAME_FIELDS, ["Template", "Nome", "Name"]);
 const TEMPLATE_CONTENT_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_CONTENT_FIELDS, ["Mensagem", "Conteudo", "Conteúdo", "Texto", "Message", "Content"]);
 const TEMPLATE_DESCRIPTION_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_DESCRIPTION_FIELDS, ["Descrição", "Descricao", "Description"]);
-const TEMPLATE_TYPE_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_TYPE_FIELDS, ["Tipo_mensagem", "Tipo", "Categoria"]);
+const TEMPLATE_TYPE_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_TYPE_FIELDS, ["Tipo", "Tipo_mensagem", "Categoria"]);
 const TEMPLATE_COLOR_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_COLOR_FIELDS, ["HEXCOLOR", "HEXCOR", "Cor", "Color"]);
 const TEMPLATE_MEDIA_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_MEDIA_FIELDS, ["Midia", "Mídia", "Media"]);
 const TEMPLATE_ACTIVE_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_ACTIVE_FIELDS, ["Ativo", "Active", "Status"]);
@@ -25,10 +25,12 @@ type AirtableRecord = {
 };
 
 function splitFields(value: string | undefined, fallback: string[]) {
-  return value
-    ?.split(",")
-    .map((item) => item.trim())
-    .filter(Boolean) ?? fallback;
+  return (
+    value
+      ?.split(",")
+      .map((item) => item.trim())
+      .filter(Boolean) ?? fallback
+  );
 }
 
 function getStringField(fields: Record<string, unknown>, candidates: string[]) {
