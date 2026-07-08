@@ -4,131 +4,115 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAvatarInitials } from "@/lib/avatar-initials";
-import { FolderKanban, Mail, Stethoscope } from "lucide-react";
+import { FolderRoot, Mail, Pencil, Stethoscope, Trash2 } from "lucide-react";
+import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
-import { SupabaseProcedure } from "./clinic-info-manager";
-
-export type SettingsProfessional = {
-  id: string;
-  email: string;
-  name: string;
-  expertises: string[];
-  procedures: SupabaseProcedure[];
-};
+import { SettingsProfessional } from "./professionals";
 
 interface ProfessionalCardProps {
   professional: SettingsProfessional;
+  onEdit: () => void;
+  onDelete: () => void;
 }
 
-export function ProfessionalCard({ professional }: ProfessionalCardProps) {
-  // const [isOpen, setIsOpen] = useState(false);
-  // const [isSaving, setIsSaving] = useState(false);
-  // const [error, setError] = useState<string | null>(null);
-
+export function ProfessionalCard({ professional, onEdit, onDelete }: ProfessionalCardProps) {
   const proceduresList = professional.procedures || [];
-  const visibleProcedures = proceduresList.slice(0, 3);
-  const hiddenProcedures = proceduresList.slice(3);
-
-  // async function save() {
-  //   setIsSaving(true);
-  //   setError(null);
-  //   try {
-  //     const response = await fetch("/api/airtable/professionals", {
-  //       method: "PATCH",
-  //       headers: { "Content-Type": "application/json" },
-  //       body: JSON.stringify({ id: professional.id, sectorIds: selectedIds }),
-  //     });
-  //     const data = (await response.json().catch(() => null)) as { error?: string } | null;
-  //     if (!response.ok) throw new Error(data?.error || "Não foi possível atualizar o usuário.");
-  //     onUpdated({ ...professional, sectorIds: selectedIds, tags: sectors.filter((sector) => selectedIds.includes(sector.id)).map((sector) => sector.name) });
-  //     setIsOpen(false);
-  //   } catch (err) {
-  //     setError(err instanceof Error ? err.message : "Não foi possível atualizar o usuário.");
-  //   } finally {
-  //     setIsSaving(false);
-  //   }
-  // }
+  const visibleProcedures = proceduresList.slice(0, 2);
+  const hiddenProcedures = proceduresList.slice(2);
 
   return (
-    <Card className="flex flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-xs hover:shadow-md hover:border-border transition-all duration-200 group pt-6 pb-0 gap-2">
-      <CardHeader className="flex flex-col">
-        <div className="w-full h-16 rounded-md bg-linear-to-tr to-theme-primary/80"></div>
-        <div className="flex flex-row items-center gap-2 space-y-0 -mt-8 w-full px-2">
-          <Avatar className="h-11 w-11 rounded-full bg-[var(--sidebar-custom-primary)] text-[var(--sidebar-custom-primary-fg)] font-semibold shadow-xs">
-            <AvatarFallback className="rounded-xl bg-transparent">{getAvatarInitials(professional.name)}</AvatarFallback>
-          </Avatar>
-          <div className="flex min-w-0 items-center justify-between gap-2 w-full">
-            <CardTitle title={professional.name} className="min-w-0 flex-1 truncate text-base font-semibold">
-              {professional.name}
-            </CardTitle>
-            <div className="shrink-0 flex items-center px-2 py-1 text-[11px] font-medium text-muted-foreground bg-muted rounded-md">
-              <Stethoscope className="h-3 w-3" />
+    <Card className="flex flex-col overflow-hidden rounded-xl border border-border/60 bg-card/60 shadow-2xs hover:shadow-sm hover:border-border transition-all duration-200 group p-4 gap-3">
+      <CardHeader className="flex flex-row items-center gap-3 p-0 space-y-0 w-full">
+        <Avatar className="h-10 w-10 shrink-0 rounded-lg bg-[var(--sidebar-custom-primary)]/10 text-[var(--sidebar-custom-primary)] font-bold text-sm shadow-2xs">
+          <AvatarFallback className="rounded-lg bg-transparent">{getAvatarInitials(professional.name)}</AvatarFallback>
+        </Avatar>
 
-              <div className="inline-flex items-center gap-1">{(professional.expertises || []).join(", ")}</div>
+        <div className="flex flex-col min-w-0 flex-1 gap-0.5">
+          <CardTitle title={professional.name} className="truncate text-sm font-semibold text-foreground tracking-tight">
+            {professional.name}
+          </CardTitle>
+
+          {professional.expertises?.length > 0 && (
+            <div className="flex items-center gap-1 text-[11px] font-medium text-theme-primary truncate">
+              <Stethoscope className="h-3 w-3 shrink-0" />
+              <span className="truncate">
+                {(professional.expertises || [])
+                  .map((exp) => (typeof exp === "string" ? exp : exp.especialidade))
+                  .filter(Boolean)
+                  .join(", ")}
+              </span>
             </div>
-          </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="h-7 w-7 opacity-60 group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10 transition-all shrink-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            title="Excluir Profissional"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="h-7 w-7 opacity-60 group-hover:opacity-100 transition-opacity shrink-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            title="Editar Profissional"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
         </div>
       </CardHeader>
 
-      <CardContent className="px-5 py-2 space-y-3 flex-1">
-        <div className="rounded-xl bg-muted/30 p-3 border border-border/40 space-y-1">
-          <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
-            <Mail className="h-3 w-3" />
-            E-mail
-          </span>
-          <p className="break-all text-xs font-medium text-foreground/90">{professional.email}</p>
+      <CardContent className="p-0 flex flex-col gap-1.5 justify-center">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground/90">
+          <Mail className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
+          <span className="truncate font-medium selection:bg-theme-primary/20">{professional.email}</span>
         </div>
       </CardContent>
 
-      <div className="mt-auto border-t border-border/60 bg-muted/30 px-5 py-4 space-y-3 h-24.75">
-        <div className="flex items-center justify-between gap-2 h-7">
-          <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase flex items-center gap-1.5">
-            <FolderKanban className="h-3.5 w-3.5 opacity-70" />
+      <div className="border-t border-border/40 my-0.5" />
+
+      <div className="flex flex-col gap-1.5 w-full">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-bold tracking-wider text-muted-foreground/70 uppercase flex items-center gap-1">
+            <FolderRoot className="h-3 w-3 opacity-60" />
             Procedimentos
           </span>
-          {/* {/^rec[a-zA-Z0-9]+$/.test(user.id) && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="h-7 w-7"
-              onClick={() => {
-                setSelectedIds(user.sectorIds);
-                setIsOpen(true);
-              }}
-              aria-label={`Editar setores de ${user.name}`}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-          )} */}
         </div>
 
         {professional.procedures?.length ? (
-          <div className="flex flex-wrap gap-1.5">
-            {visibleProcedures.map((procedure) => {
-              return (
-                <span key={procedure.id} className="inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold border-border bg-card">
-                  {procedure.nome}
-                </span>
-              );
-            })}
+          <div className="flex flex-wrap gap-1">
+            {visibleProcedures.map((procedure) => (
+              <span key={procedure.id} className="inline-flex items-center rounded-md border border-border/50 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-foreground/80 max-w-[140px] truncate">
+                {procedure.nome}
+              </span>
+            ))}
 
             {hiddenProcedures.length > 0 && (
-              <TooltipProvider>
+              <TooltipProvider delayDuration={150}>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Badge variant="outline" className="rounded-full">
+                    <Badge variant="secondary" className="rounded-md px-1.5 py-0 h-4 text-[10px] font-bold border border-border/30 cursor-help">
                       +{hiddenProcedures.length}
                     </Badge>
                   </TooltipTrigger>
-                  <TooltipContent className="p-2 rounded-[20px]">
-                    <div className="flex gap-1 flex-wrap justify-between">
-                      {hiddenProcedures.map((procedure) => {
-                        return (
-                          <Badge key={procedure.id} className="rounded-full border border-border bg-muted">
-                            {procedure.nome}
-                          </Badge>
-                        );
-                      })}
+                  <TooltipContent className="p-2 rounded-xl border border-border bg-popover shadow-md">
+                    <div className="flex gap-1 flex-wrap max-w-xs">
+                      {hiddenProcedures.map((procedure) => (
+                        <Badge key={procedure.id} variant="outline" className="rounded-md bg-muted text-[10px]">
+                          {procedure.nome}
+                        </Badge>
+                      ))}
                     </div>
                   </TooltipContent>
                 </Tooltip>
@@ -136,41 +120,9 @@ export function ProfessionalCard({ professional }: ProfessionalCardProps) {
             )}
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground/80 italic">Nenhum setor atribuído até o momento</p>
+          <p className="text-[11px] text-muted-foreground/60 italic">Nenhum procedimento atribuído</p>
         )}
       </div>
-
-      {/* <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Setores de {professional.name}</DialogTitle>
-            <DialogDescription>Escolha os setores sob responsabilidade deste usuário.</DialogDescription>
-          </DialogHeader>
-          <div className="grid max-h-80 gap-2 overflow-y-auto">
-            {sectors.map((sector) => (
-              <label key={sector.id} className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 hover:bg-muted/50">
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(sector.id)}
-                  onChange={() => setSelectedIds((current) => (current.includes(sector.id) ? current.filter((id) => id !== sector.id) : [...current, sector.id]))}
-                  className="size-4 accent-primary"
-                />
-                <span className="size-3 rounded-full" style={{ backgroundColor: sector.color }} />
-                <span className="text-sm font-medium">{sector.name}</span>
-              </label>
-            ))}
-            {error && <p className="text-sm text-destructive">{error}</p>}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={() => void save()} disabled={isSaving}>
-              {isSaving && <Loader2 className="animate-spin" />} Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog> */}
     </Card>
   );
 }

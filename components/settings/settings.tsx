@@ -7,9 +7,9 @@ import { cn } from "@/lib/utils";
 import { Bolt, Building2, CalendarClock, CopyPlus, Loader2, Sparkles, Stethoscope, Tags, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BackgroundOptions } from "./background-options";
-import { ClinicInfoManager } from "./clinic-info-manager";
+import { ClinicInfoManager, SupabaseProcedure } from "./clinic-info-manager";
 import ColorScheme from "./color-scheme";
-import { Professionals } from "./professionals";
+import { Expertise, Professionals, SettingsProfessional } from "./professionals";
 import { SavedAttachmentsManager } from "./saved-attachments-manager";
 import { ScheduledMessagesManager } from "./scheduled-messages-manager";
 import { SectorsManager, type Sector } from "./sectors-manager";
@@ -33,11 +33,11 @@ export default function SettingsPage() {
   const [usersError, setUsersError] = useState<string | null>(null);
   const [sectors, setSectors] = useState<Sector[]>([]);
 
-  const [professionals, setProfessionals] = useState<any[]>([]);
+  const [professionals, setProfessionals] = useState<SettingsProfessional[]>([]);
   const [isLoadingProfessionals, setIsLoadingProfessionals] = useState(true);
   const [professionalError, setProfessionalError] = useState<string | null>(null);
-  const [expertises, setExpertises] = useState<any[]>([]);
-  const [procedures, setProcedures] = useState<any[]>([]);
+  const [expertises, setExpertises] = useState<Expertise[]>([]);
+  const [procedures, setProcedures] = useState<SupabaseProcedure[]>([]);
 
   useEffect(() => {
     let isMounted = true;

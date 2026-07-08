@@ -51,7 +51,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "O nome da especialidade é obrigatório." }, { status: 400 });
     }
 
-    // Check if it already exists to avoid duplication
     const checkResponse = await supabaseRequest(`especialidade?select=*&especialidade=eq.${encodeURIComponent(name)}`);
     if (checkResponse.ok) {
       const existing = await checkResponse.json();
@@ -78,3 +77,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: error instanceof Error ? error.message : "Não foi possível criar a especialidade." }, { status: 500 });
   }
 }
+

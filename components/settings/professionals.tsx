@@ -1,53 +1,157 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Check, Loader2, Plus, Stethoscope, X } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Check, Loader2, Plus, Save, Stethoscope, Trash2, UserCog, UserPlus, X } from "lucide-react";
 import { useState } from "react";
-import { ProfessionalCard, SettingsProfessional } from "./professional-card";
+import { Input } from "../ui/input";
+import { SupabaseProcedure } from "./clinic-info-manager";
+import { ProfessionalCard } from "./professional-card";
+
+export type SettingsProfessional = {
+  id: string;
+  name: string;
+  email: string;
+  cidade?: string;
+  cpf?: string;
+  doencas_atendidas?: string;
+  expertises: Expertise[];
+  procedures: SupabaseProcedure[];
+};
+
+export type Expertise = {
+  id: string;
+  especialidade: string;
+};
 
 interface ProfessionalsProps {
   sortedProfessionals: SettingsProfessional[];
   isLoadingProfessionals: boolean;
   professionalError: string | null;
-  procedures: any[];
-  expertises: any[];
+  procedures: SupabaseProcedure[];
+  expertises: Expertise[];
   onProfessionalAdded: () => void;
-  onExpertiseAdded: (newExpertise: any) => void;
+  onExpertiseAdded: (newExpertise: Expertise) => void;
 }
 
-export function Professionals({
-  sortedProfessionals,
-  isLoadingProfessionals,
-  professionalError,
-  procedures,
-  expertises,
-  onProfessionalAdded,
-  onExpertiseAdded,
-}: ProfessionalsProps) {
+export function Professionals({ sortedProfessionals, isLoadingProfessionals, professionalError, procedures, expertises, onProfessionalAdded, onExpertiseAdded }: ProfessionalsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Form states
+  const [editingProfessional, setEditingProfessional] = useState<SettingsProfessional | null>(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [cidade, setCidade] = useState("");
   const [cpf, setCpf] = useState("");
   const [doencasAtendidas, setDoencasAtendidas] = useState("");
-  const [selectedExpertiseId, setSelectedExpertiseId] = useState<string>("");
+  const [selectedExpertiseIds, setSelectedExpertiseIds] = useState<string[]>([]);
   const [selectedProcedureIds, setSelectedProcedureIds] = useState<string[]>([]);
 
-  // Specialty inline adding states
   const [isAddingSpecialty, setIsAddingSpecialty] = useState(false);
   const [newSpecialtyName, setNewSpecialtyName] = useState("");
   const [isSavingSpecialty, setIsSavingSpecialty] = useState(false);
 
-  // Handle specialty saving
+  const hasChanges = (() => {
+    if (!editingProfessional) {
+      return name.trim().length > 0 && email.trim().length > 0;
+    }
+
+    const origExpertiseIds = editingProfessional.expertises?.map((e) => e.id) || [];
+    const origProcedures = editingProfessional.procedures?.map((p) => p.id) || [];
+
+    const expertisesChanged = origExpertiseIds.length !== selectedExpertiseIds.length || !selectedExpertiseIds.every((id) => origExpertiseIds.includes(id));
+    const proceduresChanged = origProcedures.length !== selectedProcedureIds.length || !selectedProcedureIds.every((id) => origProcedures.includes(id));
+
+    return (
+      name.trim() !== (editingProfessional.name || "") ||
+      email.trim() !== (editingProfessional.email || "") ||
+      cidade.trim() !== (editingProfessional.cidade || "") ||
+      cpf.trim() !== (editingProfessional.cpf || "") ||
+      doencasAtendidas.trim() !== (editingProfessional.doencas_atendidas || "") ||
+      expertisesChanged ||
+      proceduresChanged
+    );
+  })();
+
+  const resetForm = () => {
+    setEditingProfessional(null);
+    setName("");
+    setEmail("");
+    setCidade("");
+    setCpf("");
+    setDoencasAtendidas("");
+    setSelectedExpertiseIds([]);
+    setSelectedProcedureIds([]);
+    setError(null);
+  };
+
+  const handleOpenCreate = () => {
+    resetForm();
+    setIsOpen(true);
+  };
+
+  const handleOpenEdit = (professional: SettingsProfessional) => {
+    setEditingProfessional(professional);
+
+    setName(professional.name || "");
+    setEmail(professional.email || "");
+    setCidade(professional.cidade || "");
+    setCpf(professional.cpf || "");
+    setDoencasAtendidas(professional.doencas_atendidas || "");
+
+    setSelectedExpertiseIds(professional.expertises?.map((e) => e.id) || []);
+    setSelectedProcedureIds(professional.procedures?.map((p) => p.id) || []);
+
+    setIsOpen(true);
+  };
+
+  const handleSaveProfessional = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !email.trim()) {
+      setError("Nome e E-mail são obrigatórios.");
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const isEditing = !!editingProfessional;
+
+      const payload = {
+        ...(isEditing && { id: editingProfessional.id }),
+        nome: name.trim(),
+        email: email.trim(),
+        cidade: cidade.trim(),
+        cpf: cpf.trim(),
+        doencas_atendidas: doencasAtendidas.trim(),
+        expertises: selectedExpertiseIds,
+        procedures: selectedProcedureIds,
+      };
+
+      const response = await fetch("/api/professionals", {
+        method: isEditing ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Erro ao salvar profissional");
+
+      onProfessionalAdded();
+      setIsOpen(false);
+      resetForm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível salvar o profissional.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSaveSpecialty = async () => {
     if (!newSpecialtyName.trim()) return;
     setIsSavingSpecialty(true);
@@ -62,7 +166,7 @@ export function Professionals({
       if (!response.ok) throw new Error(data.message || "Erro ao salvar especialidade");
 
       onExpertiseAdded(data.expertise);
-      setSelectedExpertiseId(data.expertise.id);
+      setSelectedExpertiseIds((current) => [...current, data.expertise.id]);
       setNewSpecialtyName("");
       setIsAddingSpecialty(false);
     } catch (err) {
@@ -72,58 +176,44 @@ export function Professionals({
     }
   };
 
-  // Toggle procedure selection
-  const handleToggleProcedure = (id: string) => {
-    setSelectedProcedureIds((current) =>
-      current.includes(id) ? current.filter((pId) => pId !== id) : [...current, id]
-    );
+  const handleToggleExpertise = (id: string) => {
+    setSelectedExpertiseIds((current) => {
+      if (current.includes(id)) {
+        return current.filter((eId) => eId !== id);
+      }
+
+      if (current.length >= 2) {
+        return current;
+      }
+
+      return [...current, id];
+    });
   };
 
-  // Handle professional saving
-  const handleSaveProfessional = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim() || !email.trim()) {
-      setError("Nome e E-mail são obrigatórios.");
-      return;
-    }
+  const handleToggleProcedure = (id: string) => {
+    setSelectedProcedureIds((current) => (current.includes(id) ? current.filter((pId) => pId !== id) : [...current, id]));
+  };
 
-    setIsSaving(true);
+  const handleDeleteProfessional = async () => {
+    if (!editingProfessional) return;
+    setIsDeleting(true);
     setError(null);
-
     try {
-      const payload = {
-        nome: name.trim(),
-        email: email.trim(),
-        cidade: cidade.trim(),
-        cpf: cpf.trim(),
-        doencas_atendidas: doencasAtendidas.trim(),
-        expertises: selectedExpertiseId ? [selectedExpertiseId] : [],
-        procedures: selectedProcedureIds,
-      };
-
-      const response = await fetch("/api/professionals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      const response = await fetch(`/api/professionals?id=${editingProfessional.id}`, {
+        method: "DELETE",
       });
-
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "Erro ao salvar profissional");
+      if (!response.ok) throw new Error(data.message || "Erro ao excluir profissional");
 
       onProfessionalAdded();
+      setIsDeleteConfirmOpen(false);
       setIsOpen(false);
-      // Reset form
-      setName("");
-      setEmail("");
-      setCidade("");
-      setCpf("");
-      setDoencasAtendidas("");
-      setSelectedExpertiseId("");
-      setSelectedProcedureIds([]);
+      resetForm();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível criar o profissional.");
+      setError(err instanceof Error ? err.message : "Não foi possível excluir o profissional.");
+      setIsDeleteConfirmOpen(false);
     } finally {
-      setIsSaving(false);
+      setIsDeleting(false);
     }
   };
 
@@ -147,173 +237,183 @@ export function Professionals({
 
   return (
     <div className="space-y-6">
+      <Button className="rounded-xl flex items-center gap-2" onClick={handleOpenCreate}>
+        <Plus className="h-4 w-4" />
+        Adicionar Profissional
+      </Button>
+
       <div className="flex justify-end">
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogTrigger asChild>
-            <Button className="rounded-xl flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              Adicionar Profissional
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg overflow-y-auto max-h-[90vh]">
-            <DialogHeader>
-              <DialogTitle>Cadastrar Profissional</DialogTitle>
-              <DialogDescription>
-                Insira os dados do profissional. Caso o e-mail pertença a um usuário existente, eles serão vinculados.
-              </DialogDescription>
+        <Dialog
+          open={isOpen}
+          onOpenChange={(open) => {
+            setIsOpen(open);
+            if (!open) resetForm();
+          }}
+        >
+          <DialogContent className="max-w-2xl max-h-[85dvh] flex flex-col p-0 overflow-hidden">
+            <DialogHeader className="p-6 pb-2 shrink-0">
+              <DialogTitle className="flex items-center gap-2 text-base">
+                {editingProfessional ? <UserCog className="h-4 w-4 text-theme-primary" /> : <UserPlus className="h-4 w-4 text-theme-primary" />}
+                {editingProfessional ? "Editar Profissional" : "Cadastrar Profissional"}
+              </DialogTitle>
+              <DialogDescription>{editingProfessional ? "Atualize os dados cadastrais deste profissional." : "Insira os dados do profissional. Caso o e-mail pertença a um usuário existente, eles serão vinculados."}</DialogDescription>
             </DialogHeader>
 
-            <form onSubmit={handleSaveProfessional} className="space-y-4 py-2">
-              <div className="space-y-1">
-                <Label htmlFor="name">Nome completo *</Label>
-                <Input
-                  id="name"
-                  placeholder="Ex: Dr. João Silva"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="email">E-mail *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="Ex: joao.silva@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="cidade">Cidade</Label>
-                  <Input
-                    id="cidade"
-                    placeholder="Ex: São Paulo"
-                    value={cidade}
-                    onChange={(e) => setCidade(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="cpf">CPF</Label>
-                  <Input
-                    id="cpf"
-                    placeholder="Ex: 000.000.000-00"
-                    value={cpf}
-                    onChange={(e) => setCpf(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="doencas">Doenças Atendidas</Label>
-                <Input
-                  id="doencas"
-                  placeholder="Ex: Hipertensão, Diabetes"
-                  value={doencasAtendidas}
-                  onChange={(e) => setDoencasAtendidas(e.target.value)}
-                />
-              </div>
-
-              {/* Specialty Section */}
-              <div className="space-y-1">
-                <Label>Especialidade</Label>
-                {!isAddingSpecialty ? (
-                  <div className="flex gap-2">
-                    <Select value={selectedExpertiseId} onValueChange={setSelectedExpertiseId}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Selecione uma especialidade" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {expertises.map((exp: any) => (
-                          <SelectItem key={exp.id} value={exp.id}>
-                            {exp.especialidade}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setIsAddingSpecialty(true)}
-                      title="Adicionar Nova Especialidade"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
+            <form onSubmit={handleSaveProfessional} className="flex flex-1 flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-6 pt-2 space-y-4 min-h-0 custom-scrollbar">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <label htmlFor="name" className="text-xs font-semibold text-foreground">
+                      Nome completo *
+                    </label>
+                    <Input id="name" placeholder="Ex: Dr. João Silva" value={name} onChange={(e) => setName(e.target.value)} required />
                   </div>
-                ) : (
-                  <div className="flex gap-2 items-center bg-muted/40 p-2 rounded-lg border">
-                    <Input
-                      placeholder="Nova especialidade..."
-                      value={newSpecialtyName}
-                      onChange={(e) => setNewSpecialtyName(e.target.value)}
-                      className="flex-1 h-9"
-                      autoFocus
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleSaveSpecialty}
-                      disabled={isSavingSpecialty}
-                      className="h-9 w-9 text-green-500 hover:text-green-600 hover:bg-green-500/10"
-                    >
-                      {isSavingSpecialty ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        setIsAddingSpecialty(false);
-                        setNewSpecialtyName("");
-                      }}
-                      className="h-9 w-9 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-              </div>
 
-              {/* Procedures Section */}
-              <div className="space-y-2">
-                <Label>Procedimentos de Responsabilidade</Label>
-                <div className="border rounded-lg p-3 max-h-40 overflow-y-auto space-y-2 bg-card">
-                  {procedures.length === 0 ? (
-                    <span className="text-xs text-muted-foreground italic">Nenhum procedimento cadastrado.</span>
+                  <div className="space-y-2">
+                    <label htmlFor="email" className="text-xs font-semibold text-foreground">
+                      E-mail *
+                    </label>
+                    <Input id="email" type="email" placeholder="Ex: joao.silva@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label htmlFor="cidade" className="text-xs font-semibold text-foreground">
+                      Cidade
+                    </label>
+                    <Input id="cidade" placeholder="Ex: São Paulo" value={cidade} onChange={(e) => setCidade(e.target.value)} />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label htmlFor="cpf" className="text-xs font-semibold text-foreground">
+                      CPF
+                    </label>
+                    <Input id="cpf" placeholder="Ex: 000.000.000-00" value={cpf} onChange={(e) => setCpf(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="doencas" className="text-xs font-semibold text-foreground">
+                    Doenças Atendidas
+                  </label>
+                  <Input id="doencas" placeholder="Ex: Hipertensão, Diabetes" value={doencasAtendidas} onChange={(e) => setDoencasAtendidas(e.target.value)} />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-foreground">Especialidades *</label>
+                    {!isAddingSpecialty && (
+                      <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs flex items-center gap-1 cursor-pointer" onClick={() => setIsAddingSpecialty(true)}>
+                        <Plus className="h-3 w-3" />
+                        Nova Especialidade
+                      </Button>
+                    )}
+                  </div>
+
+                  {!isAddingSpecialty ? (
+                    <div className="border border-border/80 rounded-lg p-3 max-h-32 overflow-y-auto space-y-1 bg-card/50 custom-scrollbar">
+                      {expertises.length === 0 ? (
+                        <span className="text-xs text-muted-foreground italic block p-1">Nenhuma especialidade cadastrada.</span>
+                      ) : (
+                        expertises.map((exp: Expertise) => {
+                          const isChecked = selectedExpertiseIds.includes(exp.id);
+                          const isDisabled = selectedExpertiseIds.length >= 2 && !isChecked;
+
+                          return (
+                            <label key={exp.id} className={`flex items-center gap-2.5 text-sm select-none py-1 rounded px-1.5 transition-all ${isDisabled ? "cursor-not-allowed opacity-40" : "cursor-pointer hover:bg-muted/40"}`}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                disabled={isDisabled}
+                                onChange={() => handleToggleExpertise(exp.id)}
+                                className="rounded border-border text-theme-primary focus:ring-theme-primary h-4 w-4 disabled:opacity-50 cursor-pointer"
+                              />
+                              <span className="text-xs font-medium text-foreground/90">{exp.especialidade}</span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
                   ) : (
-                    procedures.map((proc: any) => (
-                      <label key={proc.id} className="flex items-center gap-2.5 text-sm cursor-pointer select-none py-1">
-                        <input
-                          type="checkbox"
-                          checked={selectedProcedureIds.includes(proc.id)}
-                          onChange={() => handleToggleProcedure(proc.id)}
-                          className="rounded border-gray-300 text-theme-primary focus:ring-theme-primary h-4 w-4"
-                        />
-                        <span>{proc.nome}</span>
-                      </label>
-                    ))
+                    <div className="flex gap-2 items-center bg-muted/30 p-2 rounded-lg border border-border/60">
+                      <Input placeholder="Nova especialidade..." value={newSpecialtyName} onChange={(e) => setNewSpecialtyName(e.target.value)} className="flex-1 h-9 bg-background" autoFocus />
+                      <Button type="button" variant="ghost" size="icon" onClick={handleSaveSpecialty} disabled={isSavingSpecialty} className="h-9 w-9 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-500/10 shrink-0">
+                        {isSavingSpecialty ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setIsAddingSpecialty(false);
+                          setNewSpecialtyName("");
+                        }}
+                        className="h-9 w-9 text-destructive hover:text-destructive/80 hover:bg-destructive/10 shrink-0"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                   )}
                 </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">Procedimentos de Responsabilidade</label>
+                  <div className="border border-border/80 rounded-lg p-3 max-h-36 overflow-y-auto space-y-1 bg-card/50 custom-scrollbar">
+                    {procedures.length === 0 ? (
+                      <span className="text-xs text-muted-foreground italic block p-1">Nenhum procedimento cadastrado.</span>
+                    ) : (
+                      procedures.map((proc: SupabaseProcedure) => (
+                        <label key={proc.id} className="flex items-center gap-2.5 text-sm cursor-pointer select-none py-1 rounded px-1.5 hover:bg-muted/40 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={selectedProcedureIds.includes(proc.id)}
+                            onChange={() => handleToggleProcedure(proc.id)}
+                            className="rounded border-border text-theme-primary focus:ring-theme-primary h-4 w-4 cursor-pointer"
+                          />
+                          <span className="text-xs font-medium text-foreground/90">{proc.nome}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {error && <p className="text-xs font-medium text-destructive bg-destructive/10 p-2.5 rounded-lg border border-destructive/20 animate-fade-in">{error}</p>}
               </div>
 
-              {error && <p className="text-sm text-destructive bg-destructive/10 p-2.5 rounded-lg border border-destructive/25">{error}</p>}
-
-              <DialogFooter className="pt-2">
-                <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isSaving}>
-                  Cancelar
-                </Button>
-                <Button type="submit" disabled={isSaving}>
-                  {isSaving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                  Confirmar Cadastro
-                </Button>
+              <DialogFooter className="p-6 pt-4 border-t border-border bg-muted/20 shrink-0 flex flex-row items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isSaving} className="gap-2 h-9 text-xs font-medium">
+                    Cancelar
+                  </Button>
+                  <Button variant="primary" type="submit" disabled={isSaving || !hasChanges} className="gap-2 h-9 text-xs font-medium">
+                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    {editingProfessional ? "Salvar Alterações" : "Confirmar Cadastro"}
+                  </Button>
+                </div>
               </DialogFooter>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <Trash2 className="h-5 w-5" />
+                Excluir Profissional
+              </DialogTitle>
+              <DialogDescription className="pt-2">
+                Tem certeza que deseja excluir o profissional <strong>{editingProfessional?.name}</strong>? Esta ação não poderá ser desfeita.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex justify-end gap-2 pt-4">
+              <Button type="button" variant="outline" onClick={() => setIsDeleteConfirmOpen(false)} disabled={isDeleting} className="h-9 text-xs font-medium">
+                Cancelar
+              </Button>
+              <Button type="button" variant="destructive" onClick={handleDeleteProfessional} disabled={isDeleting} className="gap-2 h-9 text-xs font-medium">
+                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Confirmar Exclusão
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
@@ -322,17 +422,24 @@ export function Professionals({
         <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed rounded-xl bg-muted/20">
           <Stethoscope className="h-10 w-10 text-muted-foreground/60 mb-2" />
           <h3 className="font-medium text-foreground">Nenhum profissional cadastrado</h3>
-          <p className="text-sm text-muted-foreground max-w-sm mt-1">
-            Cadastre o primeiro profissional de saúde da clínica clicando no botão acima.
-          </p>
+          <p className="text-sm text-muted-foreground max-w-sm mt-1">Cadastre o primeiro profissional de saúde da clínica clicando no botão acima.</p>
         </div>
       ) : (
-        <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(320px,1fr))]">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {sortedProfessionals.map((professional) => (
-            <ProfessionalCard key={professional.id} professional={professional} />
+            <ProfessionalCard
+              key={professional.id}
+              professional={professional}
+              onEdit={() => handleOpenEdit(professional)}
+              onDelete={() => {
+                setEditingProfessional(professional);
+                setIsDeleteConfirmOpen(true);
+              }}
+            />
           ))}
         </div>
       )}
     </div>
   );
 }
+
