@@ -30,7 +30,7 @@ type SupabaseAssistantInfo = {
   avisar_encaminhamento: boolean;
 };
 
-type SupabaseProcedure = {
+export type SupabaseProcedure = {
   id: string;
   status: string;
   nome: string;
