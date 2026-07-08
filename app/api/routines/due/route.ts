@@ -15,10 +15,12 @@ const ROUTINES_WEBHOOK_SECRET = process.env.ROUTINES_WEBHOOK_SECRET;
 type RawRecord = Record<string, unknown>;
 
 function splitFields(value: string | undefined, fallback: string[]) {
-  return value
-    ?.split(",")
-    .map((item) => item.trim())
-    .filter(Boolean) ?? fallback;
+  return (
+    value
+      ?.split(",")
+      .map((item) => item.trim())
+      .filter(Boolean) ?? fallback
+  );
 }
 
 function getString(value: unknown) {
@@ -291,23 +293,26 @@ function renderTemplate(template: string, run: RawRecord) {
   const payload = getPayloadRecord(run);
   const contactName = getString(run.contact_name) || getString(payload.contactName) || getString(payload.contact_name);
   const firstName = contactName.split(/\s+/).filter(Boolean)[0] || contactName;
+  const phone = getString(run.contact_phone) || getString(payload.contactPhone) || getString(payload.contact_phone);
+  const today = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date());
   const values: RawRecord = {
     nome: contactName,
-    nome_contato: contactName,
     primeiro_nome: firstName,
-    telefone: getString(run.contact_phone) || getString(payload.contactPhone) || getString(payload.contact_phone),
-    chat_id: getString(run.chat_id) || getString(payload.chatId) || getString(payload.chat_id),
-    data: new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date()),
+    telefone: phone,
+    celular: phone,
+    hoje: today,
   };
 
-  return template.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (match, key: string) => {
+  function resolveDirective(match: string, key: string) {
     const normalizedKey = key.toLowerCase();
     const directValue = getString(values[normalizedKey]);
     if (directValue) return directValue;
 
     const payloadValue = getString(getNestedValue(payload, key));
     return payloadValue || match;
-  });
+  }
+
+  return template.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, resolveDirective).replace(/%([\w.-]+)%/g, resolveDirective);
 }
 
 async function resolveMessage(run: RawRecord, action: RawRecord) {

@@ -242,3 +242,18 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ message: getAirtableErrorMessage(error, "Não foi possível atualizar o template de mensagem.") }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id")?.trim() || "";
+
+    if (!/^rec[a-zA-Z0-9]+$/.test(id)) return NextResponse.json({ message: "Template invalido." }, { status: 400 });
+
+    await airtableRequest(`/${encodeURIComponent(id)}`, { method: "DELETE" });
+
+    return NextResponse.json({ id, message: "Template removido." });
+  } catch (error) {
+    return NextResponse.json({ message: getAirtableErrorMessage(error, "Nao foi possivel remover o template de mensagem.") }, { status: 500 });
+  }
+}

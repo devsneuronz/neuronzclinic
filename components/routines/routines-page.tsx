@@ -14,7 +14,7 @@ import { getReadableTextColor } from "@/lib/chat-tags";
 import { actionLabels, createEmptyAction, triggerColors, triggerOptions, type Routine, type RoutineAction, type RoutineActionType, type RoutineMessageTemplate, type RoutineTrigger } from "@/lib/routines";
 import { uploadSavedAttachmentFile, type SavedAttachmentKind } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
-import { Bot, Clock3, CopyPlus, CornerDownRight, FileText, Loader2, Paperclip, PenSquare, Play, Plus, RefreshCw, Save, Search, Sparkles, Target, Trash2, Upload, Wand2, Workflow, X, Zap } from "lucide-react";
+import { Bot, Clock3, CopyPlus, CornerDownRight, FileText, GitFork, Loader2, Paperclip, Pause, PenSquare, Play, Plus, RefreshCw, Save, Search, Target, Trash2, Upload, Wand2, Workflow, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Label } from "../ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
@@ -90,6 +90,13 @@ const templateTypeColors: Record<string, string> = {
   informacao: "#4f86d7",
 };
 const MAX_MESSAGE_TEMPLATES = 6;
+const messageDirectives = [
+  { key: "nome", label: "%nome%", description: "Nome completo do contato" },
+  { key: "primeiro_nome", label: "%primeiro_nome%", description: "Primeiro nome do contato" },
+  { key: "telefone", label: "%telefone%", description: "Telefone do contato" },
+  { key: "celular", label: "%celular%", description: "Telefone do contato" },
+  { key: "hoje", label: "%hoje%", description: "Data de hoje" },
+];
 const templateTypeOptions = ["Relacionamento", "Marketing", "Vendas", "Aviso", "Informação"];
 
 function cloneRoutine(routine: Routine): RoutineForm {
@@ -171,6 +178,46 @@ function parsePromptToActions(prompt: string): RoutineAction[] {
   return actions.length > 0 ? actions : [createEmptyAction(0)];
 }
 
+function MessageDirectiveTextarea({ value, onChange, placeholder, className }: { value: string; onChange: (value: string) => void; placeholder: string; className?: string }) {
+  const directiveMatch = value.match(/(^|[\s\n])%([\w.-]*)$/);
+  const directiveQuery = directiveMatch?.[2]?.toLowerCase() ?? "";
+  const directiveSuggestions = useMemo(() => {
+    if (!directiveMatch) return [];
+
+    return messageDirectives.filter((directive) => directive.key.toLowerCase().startsWith(directiveQuery) || directive.label.toLowerCase().includes(directiveQuery)).slice(0, 6);
+  }, [directiveMatch, directiveQuery]);
+
+  function insertDirective(key: string) {
+    if (!directiveMatch) return;
+
+    const matchStart = directiveMatch.index ?? 0;
+    const prefix = value.slice(0, matchStart + directiveMatch[1].length);
+    onChange(`${prefix}%${key}% `);
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="relative">
+        <Textarea value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className={className} />
+        {directiveSuggestions.length > 0 && (
+          <div className="absolute bottom-full left-0 z-30 mb-2 w-80 overflow-hidden rounded-md border border-border bg-popover p-1 text-sm shadow-xl backdrop-blur-md">
+            {directiveSuggestions.map((directive) => (
+              <button key={directive.key} type="button" className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-foreground transition hover:bg-accent" onClick={() => insertDirective(directive.key)}>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-theme-primary/10 text-[10px] font-bold text-theme-primary">%</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-medium">{directive.label}</span>
+                  <span className="block truncate text-[10px] text-muted-foreground">{directive.description}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <p className="text-[11px] text-muted-foreground">Para ver as diretivas disponiveis, digite %. Ex: %nome%.</p>
+    </div>
+  );
+}
+
 export function RoutinesPage() {
   const [activeTab, setActiveTab] = useState<RoutineTab>("routines");
   const [routines, setRoutines] = useState<Routine[]>([]);
@@ -183,6 +230,11 @@ export function RoutinesPage() {
   const [form, setForm] = useState<RoutineForm>(emptyRoutine);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
+  const [templatePendingDelete, setTemplatePendingDelete] = useState<RoutineMessageTemplate | null>(null);
+  const [isDeletingTemplate, setIsDeletingTemplate] = useState(false);
+  const [routinePendingDelete, setRoutinePendingDelete] = useState<Routine | null>(null);
+  const [isDeletingRoutine, setIsDeletingRoutine] = useState(false);
+  const [togglingRoutineId, setTogglingRoutineId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isTemplatesLoading, setIsTemplatesLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -362,20 +414,69 @@ export function RoutinesPage() {
     }
   }
 
-  async function deleteRoutine(routine: Routine) {
-    if (!routine.id.startsWith("rec")) {
-      setRoutines((current) => current.filter((item) => item.id !== routine.id));
-      return;
-    }
-
+  function openDeleteRoutineDialog(routine: Routine) {
     setError("");
-    const response = await fetch(`/api/airtable/routines?id=${encodeURIComponent(routine.id)}`, { method: "DELETE" });
-    if (!response.ok) {
-      setError(await readApiMessage(response, "Não foi possível remover a rotina."));
+    setRoutinePendingDelete(routine);
+  }
+
+  async function confirmDeleteRoutine() {
+    if (!routinePendingDelete) return;
+
+    setIsDeletingRoutine(true);
+
+    try {
+      if (!routinePendingDelete.id.startsWith("rec")) {
+        setRoutines((current) => current.filter((item) => item.id !== routinePendingDelete.id));
+        setRoutinePendingDelete(null);
+        return;
+      }
+
+      setError("");
+      const response = await fetch(`/api/airtable/routines?id=${encodeURIComponent(routinePendingDelete.id)}`, { method: "DELETE" });
+      if (!response.ok) {
+        setError(await readApiMessage(response, "Não foi possível remover a rotina."));
+        return;
+      }
+
+      setRoutines((current) => current.filter((item) => item.id !== routinePendingDelete.id));
+      setRoutinePendingDelete(null);
+    } finally {
+      setIsDeletingRoutine(false);
+    }
+  }
+
+  async function toggleRoutineActive(routine: Routine) {
+    const nextActive = !routine.active;
+
+    if (!routine.id.startsWith("rec")) {
+      setRoutines((current) => current.map((item) => (item.id === routine.id ? { ...item, active: nextActive } : item)));
       return;
     }
 
-    setRoutines((current) => current.filter((item) => item.id !== routine.id));
+    setTogglingRoutineId(routine.id);
+    setError("");
+
+    try {
+      const response = await fetch(`/api/airtable/routines?id=${encodeURIComponent(routine.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...routine, active: nextActive }),
+      });
+
+      if (!response.ok) {
+        setError(await readApiMessage(response, "Nao foi possivel alterar o status da rotina."));
+        return;
+      }
+
+      const data = (await response.json()) as { routine?: Routine };
+      if (data.routine) {
+        setRoutines((current) => current.map((item) => (item.id === routine.id ? data.routine! : item)));
+      } else {
+        setRoutines((current) => current.map((item) => (item.id === routine.id ? { ...item, active: nextActive } : item)));
+      }
+    } finally {
+      setTogglingRoutineId(null);
+    }
   }
 
   async function saveTemplate() {
@@ -422,6 +523,31 @@ export function RoutinesPage() {
     }
   }
 
+  function openDeleteTemplateDialog(template: RoutineMessageTemplate) {
+    setTemplateError("");
+    setTemplatePendingDelete(template);
+  }
+
+  async function confirmDeleteTemplate() {
+    if (!templatePendingDelete) return;
+
+    setIsDeletingTemplate(true);
+    setTemplateError("");
+
+    try {
+      const response = await fetch(`/api/airtable/message-templates?id=${encodeURIComponent(templatePendingDelete.id)}`, { method: "DELETE" });
+      if (!response.ok) {
+        setTemplateError(await readApiMessage(response, "Nao foi possivel remover o template de mensagem."));
+        return;
+      }
+
+      setMessageTemplates((current) => current.filter((item) => item.id !== templatePendingDelete.id));
+      setTemplatePendingDelete(null);
+    } finally {
+      setIsDeletingTemplate(false);
+    }
+  }
+
   function applyTarget(value: string) {
     const target = targetOptions.find((option) => option.id === value || option.label === value);
     updateForm({ targetId: target?.id ?? value, targetLabel: target?.label ?? value, targetColor: target?.color ?? "" });
@@ -452,8 +578,8 @@ export function RoutinesPage() {
                     value="routines"
                     className="data-[state=active]:border-theme-border group relative data-[state=active]:bg-theme-bg px-3.5 rounded-full text-xs font-medium transition-all gap-2 cursor-pointer data-[state=active]:shadow-xs data-[state=active]:text-theme-fg!"
                   >
-                    <Sparkles className="group-data-[state=active]:text-theme-primary h-2 w-2 transition-all duration-300" />
-                    <span className="truncate">Rotinas de IA</span>
+                    <GitFork className="group-data-[state=active]:text-theme-primary h-2 w-2 transition-all duration-300" />
+                    <span className="truncate">Rotinas</span>
                   </TabsTrigger>
                   <TabsTrigger
                     value="templates"
@@ -543,7 +669,7 @@ export function RoutinesPage() {
                       <div className="flex-1 overflow-y-auto min-h-0 w-full custom-scrollbar">
                         <div className="flex flex-col w-full divide-y divide-border">
                           {filteredRoutines.map((routine) => (
-                            <RoutineRow key={routine.id} routine={routine} onOpen={() => openRoutine(routine)} onDelete={() => void deleteRoutine(routine)} />
+                            <RoutineRow key={routine.id} routine={routine} isTogglingActive={togglingRoutineId === routine.id} onOpen={() => openRoutine(routine)} onToggleActive={() => void toggleRoutineActive(routine)} onDelete={() => openDeleteRoutineDialog(routine)} />
                           ))}
                         </div>
                       </div>
@@ -558,7 +684,15 @@ export function RoutinesPage() {
 
               <TabsContent value="templates" className="w-full flex-1 flex justify-center overflow-hidden p-4 md:p-6 data-[state=inactive]:hidden! [data-state=active]:flex">
                 <div className="w-full max-w-7xl flex flex-col flex-1 overflow-hidden">
-                  <MessageTemplatesPanel templates={messageTemplates} isLoading={isLoading || isTemplatesLoading} error={templateError} onRefresh={() => void loadMessageTemplates()} onCreate={openNewTemplate} onEdit={openTemplate} />
+                  <MessageTemplatesPanel
+                    templates={messageTemplates}
+                    isLoading={isLoading || isTemplatesLoading}
+                    error={templateError}
+                    onRefresh={() => void loadMessageTemplates()}
+                    onCreate={openNewTemplate}
+                    onEdit={openTemplate}
+                    onDelete={openDeleteTemplateDialog}
+                  />
                 </div>
               </TabsContent>
             </Tabs>
@@ -706,7 +840,7 @@ export function RoutinesPage() {
                       const isLast = index === form.actions.length - 1;
 
                       return (
-                        <div key={action.id} className="grid grid-cols-[40px_1fr] group">
+                        <div key={action.id} className="grid grid-cols-[40px_1fr] group ">
                           <div className="flex flex-col items-center">
                             <div className={cn("w-[3px] bg-theme-primary/30", isFirst ? "h-6 invisible" : "h-6")} />
 
@@ -738,7 +872,7 @@ export function RoutinesPage() {
                             <div className={cn("w-[3px] flex-1 bg-theme-primary/30", isLast ? "invisible" : "")} />
                           </div>
 
-                          <div className="pb-6 min-w-0">
+                          <div className="pb-6 min-w-0 ">
                             <ActionEditor
                               action={action}
                               index={index}
@@ -770,6 +904,44 @@ export function RoutinesPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <Dialog
+          open={Boolean(routinePendingDelete)}
+          onOpenChange={(open) => {
+            if (!open && !isDeletingRoutine) setRoutinePendingDelete(null);
+          }}
+        >
+          <DialogContent className="max-w-md p-0 overflow-hidden">
+            <DialogHeader className="border-b border-border px-6 py-4 bg-background">
+              <DialogTitle className="text-lg font-bold">Remover rotina</DialogTitle>
+              <DialogDescription>Está ação irá remover a rotina permanentemente.</DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 px-6 py-5">
+              <div className="rounded-lg border border-border bg-muted/20 px-4 py-3">
+                <p className="text-sm font-semibold text-foreground">{routinePendingDelete?.name}</p>
+                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{routinePendingDelete?.description || "Rotina sem descricao."}</p>
+                {routinePendingDelete ? (
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    {routinePendingDelete.actions.length} {routinePendingDelete.actions.length === 1 ? "acao configurada" : "acoes configuradas"}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            <DialogFooter className="border-t border-border px-6 py-4 bg-background">
+              <Button type="button" variant="outline" onClick={() => setRoutinePendingDelete(null)} disabled={isDeletingRoutine} className="gap-2 h-9 text-xs">
+                <X className="h-4 w-4" />
+                Cancelar
+              </Button>
+              <Button type="button" variant="destructive" onClick={() => void confirmDeleteRoutine()} disabled={isDeletingRoutine} className="gap-2 h-9 text-xs">
+                {isDeletingRoutine ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Remover rotina
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <Dialog
           open={isTemplateDialogOpen}
           onOpenChange={(open) => {
@@ -780,13 +952,13 @@ export function RoutinesPage() {
             }
           }}
         >
-          <DialogContent className="max-w-2xl p-0 overflow-hidden flex flex-col max-h-[85dvh]">
+          <DialogContent className="max-w-2xl p-0 flex flex-col max-h-[85dvh]">
             <DialogHeader className="border-b border-border px-6 py-4 bg-background shrink-0">
               <DialogTitle className="text-lg font-bold">{editingTemplateId ? "Editar template de mensagem" : "Novo template de mensagem"}</DialogTitle>
               <DialogDescription>{editingTemplateId ? "Atualize o template usado nas ações de envio das rotinas." : "Crie um template para usar nas ações de envio das rotinas."}</DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4 px-6 py-5 overflow-y-auto flex-1 min-h-0">
+            <div className="space-y-4 px-6 py-5 overflow-y-auto flex-1 min-h-0 overflow-visible!">
               {templateError && <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-xs font-medium text-destructive transition-all">{templateError}</div>}
 
               <div className="grid gap-4 grid-cols-1 md:grid-cols-[1fr_200px]">
@@ -823,9 +995,9 @@ export function RoutinesPage() {
 
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold text-muted-foreground">Mensagem do Template</Label>
-                <Textarea
+                <MessageDirectiveTextarea
                   value={templateForm.content}
-                  onChange={(event) => setTemplateForm((current) => ({ ...current, content: event.target.value }))}
+                  onChange={(content) => setTemplateForm((current) => ({ ...current, content }))}
                   placeholder="Escreva o conteúdo da mensagem. Dica: evite blocos muito densos de texto para melhorar a leitura."
                   className="min-h-36 max-h-80 resize-y bg-background text-sm leading-relaxed"
                 />
@@ -900,6 +1072,46 @@ export function RoutinesPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <Dialog
+          open={Boolean(templatePendingDelete)}
+          onOpenChange={(open) => {
+            if (!open && !isDeletingTemplate) setTemplatePendingDelete(null);
+          }}
+        >
+          <DialogContent className="max-w-md p-0 overflow-hidden">
+            <DialogHeader className="border-b border-border px-6 py-4 bg-background">
+              <DialogTitle className="text-lg font-bold">Remover template</DialogTitle>
+              <DialogDescription>Está ação irá remover o template permanentemente.</DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 px-6 py-5">
+              <div className="rounded-lg border border-border bg-muted/20 px-4 py-3">
+                <p className="text-sm font-semibold text-foreground">{templatePendingDelete?.label}</p>
+                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{templatePendingDelete?.description || templatePendingDelete?.content || "Template sem descricao."}</p>
+              </div>
+
+              {templatePendingDelete && routines.some((routine) => routine.actions.some((action) => action.templateId === templatePendingDelete.id)) ? (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                  Este template está em uso em {routines.filter((routine) => routine.actions.some((action) => action.templateId === templatePendingDelete.id)).length} rotina(s). As ações vinculadas precisarão de outro template.
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Você tem certeza que deseja remover este template?</p>
+              )}
+            </div>
+
+            <DialogFooter className="border-t border-border px-6 py-4 bg-background">
+              <Button type="button" variant="outline" onClick={() => setTemplatePendingDelete(null)} disabled={isDeletingTemplate} className="gap-2 h-9 text-xs">
+                <X className="h-4 w-4" />
+                Cancelar
+              </Button>
+              <Button type="button" variant="destructive" onClick={() => void confirmDeleteTemplate()} disabled={isDeletingTemplate} className="gap-2 h-9 text-xs">
+                {isDeletingTemplate ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Remover template
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
@@ -912,6 +1124,7 @@ function MessageTemplatesPanel({
   onRefresh,
   onCreate,
   onEdit,
+  onDelete,
 }: {
   templates: RoutineMessageTemplate[];
   isLoading: boolean;
@@ -919,6 +1132,7 @@ function MessageTemplatesPanel({
   onRefresh: () => void;
   onCreate: () => void;
   onEdit: (template: RoutineMessageTemplate) => void;
+  onDelete: (template: RoutineMessageTemplate) => void;
 }) {
   return (
     <section className="flex flex-col overflow-hidden gap-4 md:gap-5">
@@ -933,7 +1147,7 @@ function MessageTemplatesPanel({
       {error && <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive dynamic-fade-in shrink-0">{error}</div>}
 
       <div className="flex flex-col flex-1 bg-card rounded-xl border border-border shadow-sm overflow-hidden min-h-0">
-        <div className="grid grid-cols-[150px_minmax(0,1fr)_72px] border-b border-border bg-muted/20 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground max-md:hidden shrink-0 gap-3">
+        <div className="grid grid-cols-[150px_minmax(0,1fr)_96px] border-b border-border bg-muted/20 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground max-md:hidden shrink-0 gap-3">
           <span>Tipo</span>
           <span>Descrição</span>
           <span className="text-right">Ação</span>
@@ -953,7 +1167,7 @@ function MessageTemplatesPanel({
           <div className="flex-1 overflow-y-auto divide-y divide-border min-h-0 w-full custom-scrollbar">
             <div className="flex flex-col w-full divide-y divide-border">
               {templates.map((template) => (
-                <TemplateRow key={template.id} template={template} onEdit={() => onEdit(template)} />
+                <TemplateRow key={template.id} template={template} onEdit={() => onEdit(template)} onDelete={() => onDelete(template)} />
               ))}
             </div>
           </div>
@@ -968,13 +1182,13 @@ function MessageTemplatesPanel({
   );
 }
 
-function TemplateRow({ template, onEdit }: { template: RoutineMessageTemplate; onEdit: () => void }) {
+function TemplateRow({ template, onEdit, onDelete }: { template: RoutineMessageTemplate; onEdit: () => void; onDelete: () => void }) {
   const type = template.type?.trim() || "Mensagem";
   const color = template.color || templateTypeColors[type.toLowerCase()] || "#4b5563";
   const description = template.description || template.content || "Sem descrição cadastrada.";
 
   return (
-    <div className="relative grid gap-3 px-4 py-3 transition-colors hover:bg-muted/40 md:grid-cols-[150px_minmax(0,1fr)_72px] md:items-center">
+    <div className="relative grid gap-3 px-4 py-3 transition-colors hover:bg-muted/40 md:grid-cols-[150px_minmax(0,1fr)_96px] md:items-center">
       <Badge className="w-fit max-w-full border-0 px-3 py-1 text-white" style={{ backgroundColor: color, color: getReadableTextColor(color) }}>
         <span className="truncate">{type}</span>
       </Badge>
@@ -987,16 +1201,19 @@ function TemplateRow({ template, onEdit }: { template: RoutineMessageTemplate; o
         <p className="line-clamp-2 text-sm text-muted-foreground">{description}</p>
       </div>
 
-      <div className="absolute top-1 right-2 md:static md:flex md:justify-end">
+      <div className="absolute top-1 right-2 flex gap-1 md:static md:justify-end">
         <Button type="button" variant="ghost" size="icon" title="Editar template" onClick={onEdit}>
           <PenSquare className="h-4 w-4" />
+        </Button>
+        <Button type="button" variant="ghost" size="icon" title="Remover template" className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive" onClick={onDelete}>
+          <Trash2 className="h-4 w-4" />
         </Button>
       </div>
     </div>
   );
 }
 
-function RoutineRow({ routine, onOpen, onDelete }: { routine: Routine; onOpen: () => void; onDelete: () => void }) {
+function RoutineRow({ routine, isTogglingActive, onOpen, onToggleActive, onDelete }: { routine: Routine; isTogglingActive: boolean; onOpen: () => void; onToggleActive: () => void; onDelete: () => void }) {
   const color = getRoutineColor(routine);
   const currentTrigger = triggerOptions.find((opt) => opt.value === routine.trigger);
   const TriggerIcon = currentTrigger?.icon;
@@ -1059,11 +1276,9 @@ function RoutineRow({ routine, onOpen, onDelete }: { routine: Routine; onOpen: (
       </div>
 
       <div className="absolute top-1 right-1 md:static gap-1 flex md:justify-end">
-        {routine.trigger === "manual" ? (
-          <Button type="button" variant="ghost" size="icon" title="Executar manualmente">
-            <Play className="h-4 w-4" />
-          </Button>
-        ) : null}
+        <Button type="button" variant="ghost" size="icon" onClick={onToggleActive} disabled={isTogglingActive} title={routine.active ? "Pausar rotina" : "Ativar rotina"} className={routine.active ? "text-amber-600 hover:bg-amber-500/10 hover:text-amber-600" : "text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-600"}>
+          {isTogglingActive ? <Loader2 className="h-4 w-4 animate-spin" /> : routine.active ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+        </Button>
         <Button type="button" variant="ghost" size="icon" onClick={onOpen} title="Editar">
           <PenSquare className="h-4 w-4" />
         </Button>
@@ -1160,7 +1375,7 @@ function ActionEditor({
   const messageMode = action.templateId ? "template" : "custom";
 
   return (
-    <div className="overflow-hidden rounded-md border border-border bg-card">
+    <div className="rounded-md border border-border bg-card">
       <div className="flex items-center justify-between bg-theme-primary px-3 py-2 text-xs font-medium text-white">
         <span className="flex items-center gap-1">
           <Clock3 className="h-3.5 w-3.5" />
@@ -1236,7 +1451,7 @@ function ActionEditor({
                 </SelectContent>
               </Select>
             ) : (
-              <Textarea value={action.message ?? ""} onChange={(event) => onChange({ message: event.target.value, templateId: "", templateLabel: "" })} placeholder="Digite a mensagem que será enviada" className="min-h-24 resize-y" />
+              <MessageDirectiveTextarea value={action.message ?? ""} onChange={(message) => onChange({ message, templateId: "", templateLabel: "" })} placeholder="Digite a mensagem que será enviada" className="min-h-24 resize-y" />
             )}
           </div>
         ) : (
