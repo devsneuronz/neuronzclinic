@@ -78,11 +78,37 @@ function getMediaType(mimeType: string) {
 
 function isAuthorized(request: Request) {
   if (!ROUTINES_WEBHOOK_SECRET) return true;
+  if (isSameOriginRequest(request)) return true;
 
   const authorization = request.headers.get("authorization") || "";
   const secret = request.headers.get("x-routines-secret") || "";
 
   return authorization === `Bearer ${ROUTINES_WEBHOOK_SECRET}` || secret === ROUTINES_WEBHOOK_SECRET;
+}
+
+function isSameOriginRequest(request: Request) {
+  const origin = request.headers.get("origin");
+  const host = request.headers.get("host");
+  const fetchSite = request.headers.get("sec-fetch-site");
+
+  if (!origin || !host) return false;
+
+  try {
+    const originUrl = new URL(origin);
+    return originUrl.host === host && (!fetchSite || fetchSite === "same-origin");
+  } catch {
+    return false;
+  }
+}
+
+function getValidActionRunIds(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value.filter((item): item is string => typeof item === "string" && /^[0-9a-f-]{36}$/i.test(item));
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function getSupabaseRestUrl() {
@@ -402,13 +428,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
     }
 
-    const body = (await request.json().catch(() => ({}))) as { limit?: number };
+    const body = (await request.json().catch(() => ({}))) as { actionRunIds?: unknown; limit?: number };
+    const actionRunIds = getValidActionRunIds(body.actionRunIds);
     const limit = Math.min(Math.max(Number(body.limit) || 20, 1), 100);
     const now = new Date().toISOString();
-    const dueRuns = (await supabaseRequest(`routine_action_runs?status=eq.pending&execute_at=lte.${encodeURIComponent(now)}&order=execute_at.asc&limit=${limit}&select=*`)) as RawRecord[];
+    const dueRunsPath = actionRunIds.length
+      ? `routine_action_runs?status=eq.pending&execute_at=lte.${encodeURIComponent(now)}&id=in.(${actionRunIds.map(encodeURIComponent).join(",")})&order=execute_at.asc,action_index.asc&limit=${limit}&select=*`
+      : `routine_action_runs?status=eq.pending&execute_at=lte.${encodeURIComponent(now)}&order=execute_at.asc,action_index.asc&limit=${limit}&select=*`;
+    const dueRuns = (await supabaseRequest(dueRunsPath)) as RawRecord[];
     const results: RawRecord[] = [];
 
-    for (const actionRun of dueRuns) {
+    for (const [index, actionRun] of dueRuns.entries()) {
       const id = getString(actionRun.id);
 
       try {
@@ -429,6 +459,10 @@ export async function POST(request: Request) {
           body: JSON.stringify({ status: "failed", executed_at: new Date().toISOString(), last_error: message }),
         });
         results.push({ id, status: "failed", message });
+      }
+
+      if (index < dueRuns.length - 1) {
+        await wait(750);
       }
     }
 

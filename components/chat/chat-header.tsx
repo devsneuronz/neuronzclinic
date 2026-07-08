@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import type { ChatRecord } from "@/lib/supabase-rest";
-import { Bot, CheckCircle2, ChevronLeft, Forward, Info, RotateCcw, Trash2, X } from "lucide-react";
+import { Bot, CheckCircle2, ChevronLeft, Forward, Info, Play, RotateCcw, Trash2, X } from "lucide-react";
 import { getDisplayName } from "./message-utils";
 
 type ChatHeaderProps = {
@@ -21,6 +21,7 @@ type ChatHeaderProps = {
   isMobile?: boolean;
   onCloseChat?: () => void;
   onOpenIATraining: () => void;
+  onOpenManualRoutines: () => void;
 };
 
 export function ChatHeader({
@@ -37,6 +38,7 @@ export function ChatHeader({
   isMobile,
   onCloseChat,
   onOpenIATraining,
+  onOpenManualRoutines,
 }: ChatHeaderProps) {
   const hasContactPhoto = !!chat.url_foto_perfil;
 
@@ -98,6 +100,10 @@ export function ChatHeader({
           </div>
 
           <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" className="h-9 w-9 border-2 px-0 text-xs text-foreground shadow-sm transition-all md:w-auto md:px-4" onClick={onOpenManualRoutines} aria-label="Executar automacao manual">
+              <span className="hidden md:inline">Automacoes</span>
+              <Play className="h-4 w-4" />
+            </Button>
             {
               <Button type="button" variant="outline" className="w-9 h-9 md:w-fit md:px-4 md:py-2 border-2 shadow-sm transition-all text-xs text-foreground cursor-pointer gap-1.5" onClick={onOpenIATraining}>
                 <span className="hidden md:inline">Treinar IA</span>

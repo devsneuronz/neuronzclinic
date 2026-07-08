@@ -192,6 +192,12 @@ async function fetchRecordsByIds(table: string, ids: string[]) {
   return records;
 }
 
+async function fetchAirtableRecordById(table: string, id: string) {
+  if (!/^rec[a-zA-Z0-9]+$/.test(id)) throw new Error("Registro do Airtable invalido.");
+
+  return airtableRequest(table, `/${encodeURIComponent(id)}`) as Promise<AirtableRecord>;
+}
+
 function getTagLabel(record: AirtableRecord) {
   const fields = record.fields ?? {};
   return getStringField(fields, ["Tag", "tag", "Nome", "Name", "label"]) || record.id;
@@ -339,7 +345,9 @@ function getProcessFields(action: RoutineAction, routineId: string, index: numbe
 }
 
 async function syncProcesses(routineId: string, actions: RoutineAction[]) {
-  const existing = await fetchAirtableRecords(PROCESSES_TABLE, new URLSearchParams({ pageSize: "100", filterByFormula: `FIND("${routineId}", ARRAYJOIN({Rotina}))>0` }));
+  const routineRecord = await fetchAirtableRecordById(ROUTINES_TABLE, routineId);
+  const linkedProcessIds = getRecordIds(routineRecord.fields ?? {}, ["Processos"]);
+  const existing = linkedProcessIds.length ? await fetchRecordsByIds(PROCESSES_TABLE, linkedProcessIds) : [];
   const existingIds = new Set(existing.map((record) => record.id));
   const keptIds = new Set<string>();
   const synced: AirtableRecord[] = [];

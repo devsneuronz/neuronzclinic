@@ -2,6 +2,7 @@
 
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useManualRoutines } from "@/hooks/use-manual-routines";
 import { readChatDraft, writeChatDraft } from "@/lib/chat-drafts";
 import { createSupabaseRealtimeSubscription } from "@/lib/supabase-realtime";
 import {
@@ -36,6 +37,7 @@ import { ExpandedImageModal } from "./expanded-image-modal";
 import { ForwardMessageDialog } from "./forward-message-dialog";
 import { MessageList, type InternalNote, type TimelineItem } from "./message-list";
 import { getDateLabel, getMediaKind, getMessagePreviewText, isDeletedMessage } from "./message-utils";
+import { ManualRoutinesDialog } from "./manual-routines-dialog";
 
 const FORWARD_TARGET_PAGE_SIZE = 50;
 const MESSAGE_COMPOSER_MIN_SIZE = 65;
@@ -195,6 +197,7 @@ export function ChatWindow({
   const [isLoadingSavedAttachments, setIsLoadingSavedAttachments] = useState(false);
   const [noteMentionUsers, setNoteMentionUsers] = useState<MentionableUser[]>([]);
   const [isInternalNoteOpen, setIsInternalNoteOpen] = useState(false);
+  const [isManualRoutinesOpen, setIsManualRoutinesOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteLinkedMessage, setNoteLinkedMessage] = useState<MessageRecord | null>(null);
   const [isDraggingAttachment, setIsDraggingAttachment] = useState(false);
@@ -222,6 +225,7 @@ export function ChatWindow({
 
   const { user } = useCurrentUser();
   const userName = user?.name ?? "Usuário";
+  const manualRoutines = useManualRoutines(chat);
 
   const composerMinSize = isInternalNoteOpen ? NOTE_COMPOSER_MIN_SIZE : MESSAGE_COMPOSER_MIN_SIZE;
   const composerMaxSize = isInternalNoteOpen ? NOTE_COMPOSER_MAX_SIZE : MESSAGE_COMPOSER_MAX_SIZE;
@@ -842,6 +846,12 @@ export function ChatWindow({
     setNoteLinkedMessage(null);
   }
 
+  function openManualRoutines() {
+    setIsManualRoutinesOpen(true);
+    manualRoutines.clearRunStatus();
+    void manualRoutines.loadManualRoutines();
+  }
+
   async function saveInternalNote() {
     if (!chat?.chat_id) return;
 
@@ -1240,6 +1250,7 @@ export function ChatWindow({
           isMobile={isMobile}
           onCloseChat={onCloseChat}
           onOpenIATraining={onOpenIATraining}
+          onOpenManualRoutines={openManualRoutines}
         />
         <Group elementRef={messageGroupElementRef} groupRef={messageGroupRef} orientation="vertical">
           <Panel id={MESSAGE_LIST_PANEL_ID}>
@@ -1342,6 +1353,18 @@ export function ChatWindow({
       )}
 
       {expandedImage && <ExpandedImageModal image={expandedImage} onClose={() => setExpandedImage(null)} />}
+
+      <ManualRoutinesDialog
+        open={isManualRoutinesOpen}
+        onOpenChange={setIsManualRoutinesOpen}
+        routines={manualRoutines.manualRoutines}
+        isLoading={manualRoutines.isLoading}
+        loadingError={manualRoutines.loadingError}
+        runningRoutineId={manualRoutines.runningRoutineId}
+        runError={manualRoutines.runError}
+        runSuccess={manualRoutines.runSuccess}
+        onRunRoutine={(routine) => void manualRoutines.triggerManualRoutine(routine)}
+      />
 
       <ForwardMessageDialog
         chat={chat}

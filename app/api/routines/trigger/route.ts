@@ -13,6 +13,8 @@ type RawRecord = Record<string, unknown>;
 type AirtableRecord = { id: string; createdTime?: string; fields?: Record<string, unknown> };
 
 type TriggerBody = {
+  routineId?: unknown;
+  routineAirtableId?: unknown;
   trigger?: unknown;
   contactId?: unknown;
   contactAirtableId?: unknown;
@@ -32,8 +34,31 @@ function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function isAuthorized(request: Request) {
+function isSameOriginRequest(request: Request) {
+  const origin = request.headers.get("origin");
+  const host = request.headers.get("host");
+  const fetchSite = request.headers.get("sec-fetch-site");
+
+  if (!origin || !host) return false;
+
+  try {
+    const originUrl = new URL(origin);
+    return originUrl.host === host && (!fetchSite || fetchSite === "same-origin");
+  } catch {
+    return false;
+  }
+}
+
+function isManualAppRequest(request: Request, body: TriggerBody) {
+  const trigger = normalizeTrigger(getString(body.trigger));
+  const routineId = getString(body.routineId) || getString(body.routineAirtableId);
+
+  return trigger === "manual" && Boolean(routineId) && isSameOriginRequest(request);
+}
+
+function isAuthorized(request: Request, body: TriggerBody) {
   if (!ROUTINES_WEBHOOK_SECRET) return true;
+  if (isManualAppRequest(request, body)) return true;
 
   const authorization = request.headers.get("authorization") || "";
   const secret = request.headers.get("x-routines-secret") || "";
@@ -226,10 +251,12 @@ async function fetchRoutines(): Promise<Routine[]> {
 
 function matchesRoutine(routine: Routine, body: TriggerBody) {
   const trigger = normalizeTrigger(getString(body.trigger));
+  const routineId = getString(body.routineId) || getString(body.routineAirtableId);
   const targetId = getString(body.targetId);
   const targetLabel = getString(body.targetLabel);
 
   if (!routine.active || routine.trigger !== trigger) return false;
+  if (routineId && routine.id !== routineId) return false;
   if (trigger === "manual" || trigger === "birthday") return true;
   if (trigger === "tag") return Boolean(targetId && routine.targetId === targetId);
   if (trigger === "status") return Boolean(targetLabel && routine.targetLabel.toLowerCase() === targetLabel.toLowerCase());
@@ -240,11 +267,12 @@ function matchesRoutine(routine: Routine, body: TriggerBody) {
 
 export async function POST(request: Request) {
   try {
-    if (!isAuthorized(request)) {
+    const body = await parseTriggerBody(request);
+
+    if (!isAuthorized(request, body)) {
       return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
     }
 
-    const body = await parseTriggerBody(request);
     const contactId = getString(body.contactId) || getString(body.chatId) || getString(body.contactAirtableId);
 
     if (!contactId) {
@@ -295,14 +323,17 @@ export async function POST(request: Request) {
       }
     }
 
+    let createdActionRuns: RawRecord[] = [];
+
     if (actionRuns.length > 0) {
-      await supabaseRequest("routine_action_runs", {
+      createdActionRuns = (await supabaseRequest("routine_action_runs?select=*", {
         method: "POST",
+        headers: { Prefer: "return=representation" },
         body: JSON.stringify(actionRuns),
-      });
+      })) as RawRecord[];
     }
 
-    return NextResponse.json({ matched: routines.length, runs, actionRuns: actionRuns.length });
+    return NextResponse.json({ matched: routines.length, runs, actionRuns: createdActionRuns.length, actionRunIds: createdActionRuns.map((actionRun) => actionRun.id).filter(Boolean) });
   } catch (error) {
     return NextResponse.json({ message: error instanceof Error ? error.message : "Não foi possível disparar rotinas." }, { status: 500 });
   }
