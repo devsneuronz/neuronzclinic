@@ -1,5 +1,6 @@
 "use client";
 
+import { ProfessionalAgendaPreview } from "@/components/agenda/professional-agenda-preview";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -123,7 +124,8 @@ export function ProfessionalCard({ professional, onEdit, onDelete }: Professiona
           <p className="text-[11px] text-muted-foreground/60 italic">Nenhum procedimento atribuído</p>
         )}
       </div>
+
+      <ProfessionalAgendaPreview professionalId={professional.id} />
     </Card>
   );
 }
-

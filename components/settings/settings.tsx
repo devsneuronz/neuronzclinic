@@ -6,6 +6,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { cn } from "@/lib/utils";
 import { Bolt, Building2, CalendarClock, CopyPlus, Loader2, Sparkles, Stethoscope, Tags, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { ProfessionalAgendaPreview } from "../agenda/professional-agenda-preview";
 import { BackgroundOptions } from "./background-options";
 import { ClinicInfoManager, SupabaseProcedure } from "./clinic-info-manager";
 import ColorScheme from "./color-scheme";
@@ -27,6 +28,13 @@ type SettingsUser = {
   tagIds: string[];
 };
 
+export type ProfessionalUserOption = {
+  id: string;
+  name: string;
+  email: string;
+  source: "supabase" | "airtable";
+};
+
 export default function SettingsPage() {
   const [users, setUsers] = useState<SettingsUser[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
@@ -34,6 +42,7 @@ export default function SettingsPage() {
   const [sectors, setSectors] = useState<Sector[]>([]);
 
   const [professionals, setProfessionals] = useState<SettingsProfessional[]>([]);
+  const [professionalUsers, setProfessionalUsers] = useState<ProfessionalUserOption[]>([]);
   const [isLoadingProfessionals, setIsLoadingProfessionals] = useState(true);
   const [professionalError, setProfessionalError] = useState<string | null>(null);
   const [expertises, setExpertises] = useState<Expertise[]>([]);
@@ -69,10 +78,13 @@ export default function SettingsPage() {
     fetch("/api/professionals", { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("Não foi possível carregar os profissionais.");
-        return (await response.json()) as { professionals?: any[] };
+        return (await response.json()) as { professionals?: SettingsProfessional[]; users?: ProfessionalUserOption[] };
       })
       .then((data) => {
-        if (isMounted) setProfessionals(data.professionals ?? []);
+        if (isMounted) {
+          setProfessionals(data.professionals ?? []);
+          setProfessionalUsers(data.users ?? []);
+        }
       })
       .catch((error) => {
         if (isMounted) setProfessionalError(error instanceof Error ? error.message : "Não foi possível carregar os profissionais.");
@@ -114,12 +126,25 @@ export default function SettingsPage() {
   const handleProfessionalAdded = () => {
     fetch("/api/professionals", { cache: "no-store" })
       .then((res) => res.json())
-      .then((data) => setProfessionals(data.professionals ?? []))
+      .then((data: { professionals?: SettingsProfessional[]; users?: ProfessionalUserOption[] }) => {
+        setProfessionals(data.professionals ?? []);
+        setProfessionalUsers(data.users ?? []);
+      })
       .catch(() => {});
   };
 
-  const handleExpertiseAdded = (newExpertise: any) => {
+  const handleExpertiseAdded = (newExpertise: Expertise) => {
     setExpertises((current) => [...current, newExpertise].sort((a, b) => a.especialidade.localeCompare(b.especialidade, "pt-BR")));
+  };
+
+  const handleExpertiseDeleted = (expertiseId: string) => {
+    setExpertises((current) => current.filter((expertise) => expertise.id !== expertiseId));
+    setProfessionals((current) =>
+      current.map((professional) => ({
+        ...professional,
+        expertises: professional.expertises.filter((expertise) => expertise.id !== expertiseId),
+      })),
+    );
   };
 
   const sortedUsers = useMemo(() => users.slice().sort((a, b) => a.name.localeCompare(b.name, "pt-BR")), [users]);
@@ -150,6 +175,13 @@ export default function SettingsPage() {
                       <Bolt className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
                       <span>Geral</span>
                     </TabsTrigger>
+
+                    {!isAdmin && (
+                      <TabsTrigger value="minha-agenda" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
+                        <CalendarClock className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
+                        <span>Minha agenda</span>
+                      </TabsTrigger>
+                    )}
 
                     {isAdmin && (
                       <>
@@ -203,6 +235,19 @@ export default function SettingsPage() {
                     </CardContent>
                   </Card>
                 </TabsContent>
+                {!isAdmin && (
+                  <TabsContent value="minha-agenda" className="w-full flex-1 flex justify-center overflow-hidden p-6 data-[state=inactive]:hidden! data-[state=active]:flex">
+                    <Card className="w-full max-w-7xl border border-border bg-card shadow-sm flex flex-col">
+                      <CardHeader className="space-y-1 shrink-0">
+                        <CardTitle className="text-xl font-semibold text-foreground">Minha agenda</CardTitle>
+                        <CardDescription className="text-sm text-muted-foreground">Configure seus horários e veja os procedimentos vinculados ao seu cadastro profissional.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex min-h-0 flex-1 overflow-hidden">
+                        <ProfessionalAgendaPreview />
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                )}
                 <TabsContent value="usuarios" className="w-full flex-1 flex justify-center overflow-hidden p-6 data-[state=inactive]:hidden! data-[state=active]:flex">
                   <Card className="w-full max-w-7xl border border-border bg-card shadow-sm flex flex-col min-h-0 overflow-hidden">
                     <CardHeader className="space-y-1 shrink-0">
@@ -235,8 +280,10 @@ export default function SettingsPage() {
                         professionalError={professionalError}
                         procedures={procedures}
                         expertises={expertises}
+                        users={professionalUsers}
                         onProfessionalAdded={handleProfessionalAdded}
                         onExpertiseAdded={handleExpertiseAdded}
+                        onExpertiseDeleted={handleExpertiseDeleted}
                       />
                     </CardContent>
                   </Card>

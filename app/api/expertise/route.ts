@@ -24,7 +24,7 @@ async function supabaseRequest(path: string, init?: RequestInit) {
   });
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const response = await supabaseRequest("especialidade?select=*&order=especialidade.asc");
 
@@ -75,6 +75,36 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ expertise: data[0] });
   } catch (error) {
     return NextResponse.json({ message: error instanceof Error ? error.message : "Não foi possível criar a especialidade." }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const id = request.nextUrl.searchParams.get("id")?.trim();
+
+    if (!id) {
+      return NextResponse.json({ message: "O ID da especialidade é obrigatório para exclusão." }, { status: 400 });
+    }
+
+    const linkResponse = await supabaseRequest(`professional_especialidades?id_especialidade=eq.${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+
+    if (!linkResponse.ok) {
+      return NextResponse.json({ message: await linkResponse.text() }, { status: linkResponse.status });
+    }
+
+    const response = await supabaseRequest(`especialidade?id=eq.${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      return NextResponse.json({ message: await response.text() }, { status: response.status });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ message: error instanceof Error ? error.message : "Não foi possível excluir a especialidade." }, { status: 500 });
   }
 }
 

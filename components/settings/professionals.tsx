@@ -5,8 +5,17 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Check, Loader2, Plus, Save, Stethoscope, Trash2, UserCog, UserPlus, X } from "lucide-react";
 import { useState } from "react";
 import { Input } from "../ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { SupabaseProcedure } from "./clinic-info-manager";
 import { ProfessionalCard } from "./professional-card";
+import type { ProfessionalUserOption } from "./settings";
+
+const MAX_SELECTED_EXPERTISES = 2;
+const NO_LINKED_USER = "__none__";
+
+function getUserOptionKey(user: ProfessionalUserOption) {
+  return `${user.source}:${user.id}`;
+}
 
 export type SettingsProfessional = {
   id: string;
@@ -15,6 +24,7 @@ export type SettingsProfessional = {
   cidade?: string;
   cpf?: string;
   doencas_atendidas?: string;
+  user_id?: string | null;
   expertises: Expertise[];
   procedures: SupabaseProcedure[];
 };
@@ -30,11 +40,13 @@ interface ProfessionalsProps {
   professionalError: string | null;
   procedures: SupabaseProcedure[];
   expertises: Expertise[];
+  users: ProfessionalUserOption[];
   onProfessionalAdded: () => void;
   onExpertiseAdded: (newExpertise: Expertise) => void;
+  onExpertiseDeleted: (expertiseId: string) => void;
 }
 
-export function Professionals({ sortedProfessionals, isLoadingProfessionals, professionalError, procedures, expertises, onProfessionalAdded, onExpertiseAdded }: ProfessionalsProps) {
+export function Professionals({ sortedProfessionals, isLoadingProfessionals, professionalError, procedures, expertises, users, onProfessionalAdded, onExpertiseAdded, onExpertiseDeleted }: ProfessionalsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,12 +60,15 @@ export function Professionals({ sortedProfessionals, isLoadingProfessionals, pro
   const [cidade, setCidade] = useState("");
   const [cpf, setCpf] = useState("");
   const [doencasAtendidas, setDoencasAtendidas] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState(NO_LINKED_USER);
   const [selectedExpertiseIds, setSelectedExpertiseIds] = useState<string[]>([]);
   const [selectedProcedureIds, setSelectedProcedureIds] = useState<string[]>([]);
 
   const [isAddingSpecialty, setIsAddingSpecialty] = useState(false);
   const [newSpecialtyName, setNewSpecialtyName] = useState("");
   const [isSavingSpecialty, setIsSavingSpecialty] = useState(false);
+  const [deletingExpertiseId, setDeletingExpertiseId] = useState<string | null>(null);
+  const [confirmingDeleteExpertiseId, setConfirmingDeleteExpertiseId] = useState<string | null>(null);
 
   const hasChanges = (() => {
     if (!editingProfessional) {
@@ -65,6 +80,8 @@ export function Professionals({ sortedProfessionals, isLoadingProfessionals, pro
 
     const expertisesChanged = origExpertiseIds.length !== selectedExpertiseIds.length || !selectedExpertiseIds.every((id) => origExpertiseIds.includes(id));
     const proceduresChanged = origProcedures.length !== selectedProcedureIds.length || !selectedProcedureIds.every((id) => origProcedures.includes(id));
+    const originalUserKey = editingProfessional.user_id ? `supabase:${editingProfessional.user_id}` : NO_LINKED_USER;
+    const userChanged = selectedUserId !== originalUserKey;
 
     return (
       name.trim() !== (editingProfessional.name || "") ||
@@ -72,10 +89,16 @@ export function Professionals({ sortedProfessionals, isLoadingProfessionals, pro
       cidade.trim() !== (editingProfessional.cidade || "") ||
       cpf.trim() !== (editingProfessional.cpf || "") ||
       doencasAtendidas.trim() !== (editingProfessional.doencas_atendidas || "") ||
+      userChanged ||
       expertisesChanged ||
       proceduresChanged
     );
   })();
+
+  const selectedUser = users.find((user) => getUserOptionKey(user) === selectedUserId);
+  const hasLinkedUser = Boolean(selectedUser);
+  const linkedSupabaseUserIds = new Set(sortedProfessionals.map((professional) => professional.user_id).filter((userId): userId is string => Boolean(userId && userId !== editingProfessional?.user_id)));
+  const linkedEmails = new Set(sortedProfessionals.filter((professional) => professional.id !== editingProfessional?.id).map((professional) => professional.email.trim().toLowerCase()).filter(Boolean));
 
   const resetForm = () => {
     setEditingProfessional(null);
@@ -84,6 +107,7 @@ export function Professionals({ sortedProfessionals, isLoadingProfessionals, pro
     setCidade("");
     setCpf("");
     setDoencasAtendidas("");
+    setSelectedUserId(NO_LINKED_USER);
     setSelectedExpertiseIds([]);
     setSelectedProcedureIds([]);
     setError(null);
@@ -102,11 +126,28 @@ export function Professionals({ sortedProfessionals, isLoadingProfessionals, pro
     setCidade(professional.cidade || "");
     setCpf(professional.cpf || "");
     setDoencasAtendidas(professional.doencas_atendidas || "");
+    setSelectedUserId(professional.user_id ? `supabase:${professional.user_id}` : NO_LINKED_USER);
 
     setSelectedExpertiseIds(professional.expertises?.map((e) => e.id) || []);
     setSelectedProcedureIds(professional.procedures?.map((p) => p.id) || []);
 
     setIsOpen(true);
+  };
+
+  const handleSelectUser = (value: string) => {
+    setSelectedUserId(value);
+
+    if (value === NO_LINKED_USER) {
+      return;
+    }
+
+    const user = users.find((item) => getUserOptionKey(item) === value);
+    if (!user) {
+      return;
+    }
+
+    setName(user.name || "");
+    setEmail(user.email || "");
   };
 
   const handleSaveProfessional = async (e: React.FormEvent) => {
@@ -124,6 +165,8 @@ export function Professionals({ sortedProfessionals, isLoadingProfessionals, pro
 
       const payload = {
         ...(isEditing && { id: editingProfessional.id }),
+        user_id: selectedUser?.source === "supabase" ? selectedUser.id : null,
+        linked_user_source: selectedUser?.source || null,
         nome: name.trim(),
         email: email.trim(),
         cidade: cidade.trim(),
@@ -166,7 +209,13 @@ export function Professionals({ sortedProfessionals, isLoadingProfessionals, pro
       if (!response.ok) throw new Error(data.message || "Erro ao salvar especialidade");
 
       onExpertiseAdded(data.expertise);
-      setSelectedExpertiseIds((current) => [...current, data.expertise.id]);
+      setSelectedExpertiseIds((current) => {
+        if (current.includes(data.expertise.id) || current.length >= MAX_SELECTED_EXPERTISES) {
+          return current;
+        }
+
+        return [...current, data.expertise.id];
+      });
       setNewSpecialtyName("");
       setIsAddingSpecialty(false);
     } catch (err) {
@@ -182,12 +231,37 @@ export function Professionals({ sortedProfessionals, isLoadingProfessionals, pro
         return current.filter((eId) => eId !== id);
       }
 
-      if (current.length >= 2) {
+      if (current.length >= MAX_SELECTED_EXPERTISES) {
         return current;
       }
 
       return [...current, id];
     });
+  };
+
+  const handleDeleteExpertise = async (id: string) => {
+    setDeletingExpertiseId(id);
+    setConfirmingDeleteExpertiseId(null);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/expertise?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Erro ao excluir especialidade");
+      }
+
+      setSelectedExpertiseIds((current) => current.filter((expertiseId) => expertiseId !== id));
+      onExpertiseDeleted(id);
+      onProfessionalAdded();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível excluir especialidade.");
+    } finally {
+      setDeletingExpertiseId(null);
+    }
   };
 
   const handleToggleProcedure = (id: string) => {
@@ -261,19 +335,44 @@ export function Professionals({ sortedProfessionals, isLoadingProfessionals, pro
 
             <form onSubmit={handleSaveProfessional} className="flex flex-1 flex-col overflow-hidden">
               <div className="flex-1 overflow-y-auto p-6 pt-2 space-y-4 min-h-0 custom-scrollbar">
+                <div className="space-y-2">
+                  <label htmlFor="professional-user" className="text-xs font-semibold text-foreground">
+                    Usuario vinculado
+                  </label>
+                  <Select value={selectedUserId} onValueChange={handleSelectUser}>
+                    <SelectTrigger id="professional-user" className="w-full">
+                      <SelectValue placeholder="Selecione um usuario" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_LINKED_USER}>Sem usuario vinculado</SelectItem>
+                      {users.map((user) => {
+                        const userKey = getUserOptionKey(user);
+                        const isLinkedToAnotherProfessional = user.source === "supabase" ? linkedSupabaseUserIds.has(user.id) : linkedEmails.has(user.email.trim().toLowerCase());
+
+                        return (
+                          <SelectItem key={userKey} value={userKey} disabled={isLinkedToAnotherProfessional}>
+                            {user.name} - {user.email} ({user.source === "supabase" ? "Supabase" : "Airtable"})
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                  {hasLinkedUser && <p className="text-[11px] text-muted-foreground">Nome e e-mail serao herdados do usuario selecionado.</p>}
+                </div>
+
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <label htmlFor="name" className="text-xs font-semibold text-foreground">
                       Nome completo *
                     </label>
-                    <Input id="name" placeholder="Ex: Dr. João Silva" value={name} onChange={(e) => setName(e.target.value)} required />
+                    <Input id="name" placeholder="Ex: Dr. João Silva" value={name} onChange={(e) => setName(e.target.value)} disabled={hasLinkedUser} required />
                   </div>
 
                   <div className="space-y-2">
                     <label htmlFor="email" className="text-xs font-semibold text-foreground">
                       E-mail *
                     </label>
-                    <Input id="email" type="email" placeholder="Ex: joao.silva@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                    <Input id="email" type="email" placeholder="Ex: joao.silva@email.com" value={email} onChange={(e) => setEmail(e.target.value)} disabled={hasLinkedUser} required />
                   </div>
 
                   <div className="space-y-2">
@@ -316,19 +415,52 @@ export function Professionals({ sortedProfessionals, isLoadingProfessionals, pro
                       ) : (
                         expertises.map((exp: Expertise) => {
                           const isChecked = selectedExpertiseIds.includes(exp.id);
-                          const isDisabled = selectedExpertiseIds.length >= 2 && !isChecked;
+                          const isDisabled = selectedExpertiseIds.length >= MAX_SELECTED_EXPERTISES && !isChecked;
+                          const isConfirmingDelete = confirmingDeleteExpertiseId === exp.id;
 
                           return (
-                            <label key={exp.id} className={`flex items-center gap-2.5 text-sm select-none py-1 rounded px-1.5 transition-all ${isDisabled ? "cursor-not-allowed opacity-40" : "cursor-pointer hover:bg-muted/40"}`}>
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                disabled={isDisabled}
-                                onChange={() => handleToggleExpertise(exp.id)}
-                                className="rounded border-border text-theme-primary focus:ring-theme-primary h-4 w-4 disabled:opacity-50 cursor-pointer"
-                              />
-                              <span className="text-xs font-medium text-foreground/90">{exp.especialidade}</span>
-                            </label>
+                            <div key={exp.id} className={`flex items-center gap-2 rounded px-1.5 py-1 transition-all ${isDisabled ? "opacity-40" : "hover:bg-muted/40"}`}>
+                              <label className={`flex min-w-0 flex-1 items-center gap-2.5 text-sm select-none ${isDisabled ? "cursor-not-allowed" : "cursor-pointer"}`}>
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  disabled={isDisabled}
+                                  onChange={() => handleToggleExpertise(exp.id)}
+                                  className="rounded border-border text-theme-primary focus:ring-theme-primary h-4 w-4 disabled:opacity-50 cursor-pointer"
+                                />
+                                <span className="truncate text-xs font-medium text-foreground/90">{exp.especialidade}</span>
+                              </label>
+                              {isConfirmingDelete && <span className="shrink-0 text-[11px] font-medium text-destructive">Deseja mesmo excluir?</span>}
+                              <Button
+                                type="button"
+                                variant={isConfirmingDelete ? "destructive" : "ghost"}
+                                size="icon"
+                                onClick={() => {
+                                  if (isConfirmingDelete) {
+                                    handleDeleteExpertise(exp.id);
+                                    return;
+                                  }
+
+                                  setConfirmingDeleteExpertiseId(exp.id);
+                                }}
+                                disabled={deletingExpertiseId === exp.id}
+                                className="h-6 w-6 shrink-0"
+                                title={isConfirmingDelete ? "Confirmar exclusao" : "Excluir especialidade"}
+                              >
+                                {deletingExpertiseId === exp.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : isConfirmingDelete ? <Check className="h-3.5 w-3.5 text-destructive" /> : <X className="h-3.5 w-3.5" />}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setConfirmingDeleteExpertiseId(null)}
+                                disabled={deletingExpertiseId === exp.id}
+                                className={`h-6 w-6 shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground ${isConfirmingDelete ? "" : "hidden"}`}
+                                title="Cancelar exclusao"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
                           );
                         })
                       )}

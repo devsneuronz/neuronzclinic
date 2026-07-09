@@ -28,9 +28,11 @@ export interface AppointmentDialogProps {
   isSaving?: boolean;
   initialPatient?: { id: string; label: string } | null;
   isLoading: boolean;
+  professionalBookingMode?: boolean;
+  fixedProfessionalId?: string;
 }
 
-export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ open, onOpenChange, appointment, startDate, endDate, options, onCreate, onUpdate, isSaving = false, initialPatient = null, isLoading }) => {
+export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ open, onOpenChange, appointment, startDate, endDate, options, onCreate, onUpdate, isSaving = false, initialPatient = null, isLoading, professionalBookingMode = false, fixedProfessionalId = "" }) => {
   const isEdit = Boolean(appointment);
 
   const [appointmentStatus, setAppointmentStatus] = useState("");
@@ -41,6 +43,7 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
   const [appointmentProfessionalId, setAppointmentProfessionalId] = useState("");
   const [appointmentPatientId, setAppointmentPatientId] = useState("");
   const [appointmentPatientSearch, setAppointmentPatientSearch] = useState("");
+  const [appointmentPatientPhone, setAppointmentPatientPhone] = useState("");
   const [appointmentObservations, setAppointmentObservations] = useState("");
 
   const [isPatientSearchOpen, setIsPatientSearchOpen] = useState(false);
@@ -60,27 +63,33 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
   };
 
   useEffect(() => {
-    if (isEdit && appointment) {
-      setAppointmentStatus(appointment.status);
-      setAppointmentType(appointment.type);
-      setAppointmentStartDateTime(formatDateTimeLocal(startDate));
-      setAppointmentEndDateTime(formatDateTimeLocal(endDate));
-      setAppointmentAttendanceMode(appointment.attendanceMode);
-      setAppointmentProfessionalId(appointment.professionalId);
-      setAppointmentPatientId(appointment.patientId ?? "");
-      setAppointmentObservations(appointment.observations ?? "");
-    } else if (open) {
-      setAppointmentStatus("");
-      setAppointmentType("");
-      setAppointmentStartDateTime(formatDateTimeLocal(startDate));
-      setAppointmentEndDateTime(formatDateTimeLocal(endDate));
-      setAppointmentAttendanceMode("");
-      setAppointmentProfessionalId("");
-      setAppointmentPatientId(initialPatient?.id ?? "");
-      setAppointmentPatientSearch(initialPatient?.label ?? "");
-      setAppointmentObservations("");
-    }
-  }, [isEdit, appointment, open, startDate, endDate, initialPatient?.id, initialPatient?.label]);
+    const timer = window.setTimeout(() => {
+      if (isEdit && appointment) {
+        setAppointmentStatus(appointment.status);
+        setAppointmentType(appointment.type);
+        setAppointmentStartDateTime(formatDateTimeLocal(startDate));
+        setAppointmentEndDateTime(formatDateTimeLocal(endDate));
+        setAppointmentAttendanceMode(appointment.attendanceMode);
+        setAppointmentProfessionalId(appointment.professionalId);
+        setAppointmentPatientId(appointment.patientId ?? "");
+        setAppointmentPatientPhone(appointment.phone ?? "");
+        setAppointmentObservations(appointment.observations ?? "");
+      } else if (open) {
+        setAppointmentStatus(professionalBookingMode ? (options.status[0] ?? "scheduled") : "");
+        setAppointmentType(professionalBookingMode ? (options.types[0] ?? "Consulta") : "");
+        setAppointmentStartDateTime(formatDateTimeLocal(startDate));
+        setAppointmentEndDateTime(formatDateTimeLocal(endDate));
+        setAppointmentAttendanceMode(professionalBookingMode ? (options.attendanceModes[0] ?? "Manual") : "");
+        setAppointmentProfessionalId(fixedProfessionalId);
+        setAppointmentPatientId(initialPatient?.id ?? "");
+        setAppointmentPatientSearch(initialPatient?.label ?? "");
+        setAppointmentPatientPhone("");
+        setAppointmentObservations("");
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [fixedProfessionalId, isEdit, appointment, open, options.attendanceModes, options.status, options.types, professionalBookingMode, startDate, endDate, initialPatient?.id, initialPatient?.label]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -93,6 +102,8 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
     if (appointmentEndDateTime) formData.append("endDateTime", appointmentEndDateTime);
     formData.append("professionalId", appointmentProfessionalId);
     if (appointmentPatientId) formData.append("patientId", appointmentPatientId);
+    if (professionalBookingMode && appointmentPatientSearch) formData.append("patientName", appointmentPatientSearch);
+    if (professionalBookingMode && appointmentPatientPhone) formData.append("patientPhone", appointmentPatientPhone);
     if (appointmentObservations) formData.append("observations", appointmentObservations);
 
     try {
@@ -179,7 +190,8 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
                 </Select>
               </div>
 
-              <div className="space-y-2">
+              {!professionalBookingMode && (
+                <div className="space-y-2">
                 <label className="text-xs font-semibold text-foreground">Profissional</label>
                 <Select value={appointmentProfessionalId} onValueChange={setAppointmentProfessionalId} required disabled={isLoading}>
                   <SelectTrigger className={cn("w-full", isLoading && "animate-shimmer")}>
@@ -194,6 +206,7 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
                   </SelectContent>
                 </Select>
               </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -205,19 +218,20 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
                   value={appointmentPatientSearch}
                   disabled={isLoading}
                   placeholder={isLoading ? "Carregando..." : selectedAppointmentPatient?.label || "Digite o nome do paciente"}
+                  required={professionalBookingMode}
                   onBlur={() => {
                     window.setTimeout(() => setIsPatientSearchOpen(false), 120);
                   }}
                   onChange={(event) => {
                     setAppointmentPatientSearch(event.target.value);
                     setAppointmentPatientId("");
-                    setIsPatientSearchOpen(true);
+                    setIsPatientSearchOpen(!professionalBookingMode);
                   }}
                   onFocus={() => {
-                    if (appointmentPatientSearch.trim()) setIsPatientSearchOpen(true);
+                    if (!professionalBookingMode && appointmentPatientSearch.trim()) setIsPatientSearchOpen(true);
                   }}
                 />
-                {isPatientSearchOpen && appointmentPatientSearch.trim() && (
+                {!professionalBookingMode && isPatientSearchOpen && appointmentPatientSearch.trim() && (
                   <div className="absolute z-50 mt-1 max-h-33 w-full overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md custom-scrollbar">
                     {patientSearchResults.length > 0 ? (
                       patientSearchResults.map((patient) => (
@@ -245,6 +259,13 @@ export const AppointmentCreationDialog: React.FC<AppointmentDialogProps> = ({ op
                 )}
               </div>
             </div>
+
+            {professionalBookingMode && (
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground">Telefone</label>
+                <Input value={appointmentPatientPhone} onChange={(event) => setAppointmentPatientPhone(event.target.value)} placeholder="Telefone do paciente" />
+              </div>
+            )}
 
             <div className="space-y-2">
               <label className="text-xs font-semibold text-foreground">Observações</label>
