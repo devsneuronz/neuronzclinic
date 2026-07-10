@@ -848,8 +848,8 @@ export function ChatWindow({
 
   function openManualRoutines() {
     setIsManualRoutinesOpen(true);
-    manualRoutines.clearRunStatus();
     void manualRoutines.loadManualRoutines();
+    void manualRoutines.loadRunningRoutineStatus();
   }
 
   async function saveInternalNote() {
@@ -1363,7 +1363,9 @@ export function ChatWindow({
         runningRoutineId={manualRoutines.runningRoutineId}
         runError={manualRoutines.runError}
         runSuccess={manualRoutines.runSuccess}
+        runStatus={manualRoutines.runStatus}
         onRunRoutine={(routine) => void manualRoutines.triggerManualRoutine(routine)}
+        onCancelStartedRoutine={() => void manualRoutines.cancelStartedRoutine()}
       />
 
       <ForwardMessageDialog

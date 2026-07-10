@@ -129,12 +129,25 @@ function getDelayMinutes(fields: Record<string, unknown>) {
   const amount = getNumber(fields.numero);
 
   if (!amount || interval.includes("nenhum")) return 0;
+  if (interval.includes("segundo")) return amount / 60;
   if (interval.includes("hora")) return amount * 60;
   if (interval.includes("dia")) return amount * 1440;
+  if (interval.includes("semana")) return amount * 10080;
+  if (interval.includes("mes")) return amount * 43200;
+  if (interval.includes("mês")) return amount * 43200;
   return amount;
 }
 
-function getIntervalFields(delayMinutes: number) {
+function getIntervalFields(action: RoutineAction) {
+  const intervalLabel = getString(action.intervalLabel);
+  const intervalAmount = getNumber(action.intervalAmount);
+
+  if (intervalLabel && intervalLabel !== "Nenhum" && intervalAmount > 0) {
+    return { Intervalo: intervalLabel, numero: intervalAmount };
+  }
+  if (intervalLabel === "Nenhum") return { Intervalo: "Nenhum" };
+
+  const delayMinutes = Number(action.delayMinutes);
   if (!delayMinutes) return { Intervalo: "Nenhum" };
   if (delayMinutes % 1440 === 0) return { Intervalo: "Dias", numero: delayMinutes / 1440 };
   if (delayMinutes % 60 === 0) return { Intervalo: "Horas", numero: delayMinutes / 60 };
@@ -218,6 +231,7 @@ function mapProcessRecord(record: AirtableRecord): RoutineAction {
     type,
     label,
     delayMinutes: getDelayMinutes(fields),
+    intervalAmount: getNumber(fields.numero),
     intervalLabel: getStringField(fields, ["Intervalo"]),
     order: getNumber(fields.ordem),
     responsibleUserId: getRecordIds(fields, ["Responsavel", "Responsável"])[0] || "",
@@ -334,7 +348,7 @@ function getProcessFields(action: RoutineAction, routineId: string, index: numbe
     ordem: index,
     Assunto: action.subject || "",
     "Descrição": isMessageAction ? action.message || "" : action.notes || "",
-    ...getIntervalFields(action.delayMinutes),
+    ...getIntervalFields(action),
   };
 
   if (action.responsibleUserId && /^rec[a-zA-Z0-9]+$/.test(action.responsibleUserId)) fields.Responsavel = [action.responsibleUserId];

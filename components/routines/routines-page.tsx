@@ -14,8 +14,8 @@ import { getReadableTextColor } from "@/lib/chat-tags";
 import { actionLabels, createEmptyAction, triggerColors, triggerOptions, type Routine, type RoutineAction, type RoutineActionType, type RoutineMessageTemplate, type RoutineTrigger } from "@/lib/routines";
 import { uploadSavedAttachmentFile, type SavedAttachmentKind } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
-import { Bot, Clock3, CopyPlus, CornerDownRight, FileText, GitFork, Loader2, Paperclip, Pause, PenSquare, Play, Plus, RefreshCw, Save, Search, Target, Trash2, Upload, Wand2, Workflow, X, Zap } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Clock3, CopyPlus, CornerDownRight, FileText, GitFork, Loader2, Paperclip, Pause, PenSquare, Play, Plus, RefreshCw, Save, Search, Target, Trash2, Upload, Workflow, X, Zap } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Label } from "../ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
@@ -90,6 +90,15 @@ const templateTypeColors: Record<string, string> = {
   informacao: "#4f86d7",
 };
 const MAX_MESSAGE_TEMPLATES = 6;
+const intervalOptions = [
+  { label: "Nenhum", minutes: 0 },
+  { label: "Segundos", minutes: 1 / 60 },
+  { label: "Minutos", minutes: 1 },
+  { label: "Horas", minutes: 60 },
+  { label: "Dias", minutes: 1440 },
+  { label: "Semanas", minutes: 10080 },
+  { label: "Meses", minutes: 43200 },
+];
 const messageDirectives = [
   { key: "nome", label: "%nome%", description: "Nome completo do contato" },
   { key: "primeiro_nome", label: "%primeiro_nome%", description: "Primeiro nome do contato" },
@@ -98,6 +107,28 @@ const messageDirectives = [
   { key: "hoje", label: "%hoje%", description: "Data de hoje" },
 ];
 const templateTypeOptions = ["Relacionamento", "Marketing", "Vendas", "Aviso", "Informação"];
+
+function getIntervalOption(label?: string) {
+  return intervalOptions.find((option) => option.label === label) ?? intervalOptions[2];
+}
+
+function getIntervalAmount(action: RoutineAction) {
+  if (action.intervalLabel === "Nenhum") return 0;
+  if (typeof action.intervalAmount === "number" && Number.isFinite(action.intervalAmount)) return action.intervalAmount;
+
+  const option = getIntervalOption(action.intervalLabel);
+  if (!option.minutes) return 0;
+
+  return Number.isFinite(action.delayMinutes) ? action.delayMinutes / option.minutes : 0;
+}
+
+function formatInterval(action: RoutineAction) {
+  const label = action.intervalLabel || (action.delayMinutes ? "Minutos" : "Nenhum");
+  const amount = getIntervalAmount({ ...action, intervalLabel: label });
+
+  if (label === "Nenhum" || !amount) return "Nenhum intervalo";
+  return `${amount} ${label.toLowerCase()}`;
+}
 
 function cloneRoutine(routine: Routine): RoutineForm {
   return {
@@ -179,7 +210,10 @@ function parsePromptToActions(prompt: string): RoutineAction[] {
 }
 
 function MessageDirectiveTextarea({ value, onChange, placeholder, className }: { value: string; onChange: (value: string) => void; placeholder: string; className?: string }) {
-  const directiveMatch = value.match(/(^|[\s\n])%([\w.-]*)$/);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [caretPosition, setCaretPosition] = useState(value.length);
+  const textBeforeCaret = value.slice(0, caretPosition);
+  const directiveMatch = textBeforeCaret.match(/(^|[\s\n])%([\w.-]*)$/);
   const directiveQuery = directiveMatch?.[2]?.toLowerCase() ?? "";
   const directiveSuggestions = useMemo(() => {
     if (!directiveMatch) return [];
@@ -187,18 +221,44 @@ function MessageDirectiveTextarea({ value, onChange, placeholder, className }: {
     return messageDirectives.filter((directive) => directive.key.toLowerCase().startsWith(directiveQuery) || directive.label.toLowerCase().includes(directiveQuery)).slice(0, 6);
   }, [directiveMatch, directiveQuery]);
 
+  function updateCaretPosition(element: HTMLTextAreaElement) {
+    setCaretPosition(element.selectionStart ?? element.value.length);
+  }
+
   function insertDirective(key: string) {
     if (!directiveMatch) return;
 
     const matchStart = directiveMatch.index ?? 0;
-    const prefix = value.slice(0, matchStart + directiveMatch[1].length);
-    onChange(`${prefix}%${key}% `);
+    const directiveStart = matchStart + directiveMatch[1].length;
+    const prefix = value.slice(0, directiveStart);
+    const suffix = value.slice(caretPosition);
+    const insertedDirective = `%${key}% `;
+    const nextCaretPosition = prefix.length + insertedDirective.length;
+
+    onChange(`${prefix}${insertedDirective}${suffix}`);
+    setCaretPosition(nextCaretPosition);
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(nextCaretPosition, nextCaretPosition);
+    });
   }
 
   return (
     <div className="space-y-1.5">
       <div className="relative">
-        <Textarea value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className={className} />
+        <Textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(event) => {
+            onChange(event.target.value);
+            updateCaretPosition(event.target);
+          }}
+          onClick={(event) => updateCaretPosition(event.currentTarget)}
+          onKeyUp={(event) => updateCaretPosition(event.currentTarget)}
+          onSelect={(event) => updateCaretPosition(event.currentTarget)}
+          placeholder={placeholder}
+          className={className}
+        />
         {directiveSuggestions.length > 0 && (
           <div className="absolute bottom-full left-0 z-30 mb-2 w-80 overflow-hidden rounded-md border border-border bg-popover p-1 text-sm shadow-xl backdrop-blur-md">
             {directiveSuggestions.map((directive) => (
@@ -669,7 +729,14 @@ export function RoutinesPage() {
                       <div className="flex-1 overflow-y-auto min-h-0 w-full custom-scrollbar">
                         <div className="flex flex-col w-full divide-y divide-border">
                           {filteredRoutines.map((routine) => (
-                            <RoutineRow key={routine.id} routine={routine} isTogglingActive={togglingRoutineId === routine.id} onOpen={() => openRoutine(routine)} onToggleActive={() => void toggleRoutineActive(routine)} onDelete={() => openDeleteRoutineDialog(routine)} />
+                            <RoutineRow
+                              key={routine.id}
+                              routine={routine}
+                              isTogglingActive={togglingRoutineId === routine.id}
+                              onOpen={() => openRoutine(routine)}
+                              onToggleActive={() => void toggleRoutineActive(routine)}
+                              onDelete={() => openDeleteRoutineDialog(routine)}
+                            />
                           ))}
                         </div>
                       </div>
@@ -786,7 +853,7 @@ export function RoutinesPage() {
                 </div>
               </div>
 
-              <section className="rounded-xl border border-dashed border-theme-primary/30 bg-theme-primary/2 p-4">
+              {/* <section className="rounded-xl border border-dashed border-theme-primary/30 bg-theme-primary/2 p-4">
                 <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-theme-primary">
                   <Bot className="h-4 w-4" />
                   Assistente de ações
@@ -804,7 +871,7 @@ export function RoutinesPage() {
                     Interpretar
                   </Button>
                 </div>
-              </section>
+              </section> */}
 
               <hr className="border-border/60" />
 
@@ -1276,7 +1343,15 @@ function RoutineRow({ routine, isTogglingActive, onOpen, onToggleActive, onDelet
       </div>
 
       <div className="absolute top-1 right-1 md:static gap-1 flex md:justify-end">
-        <Button type="button" variant="ghost" size="icon" onClick={onToggleActive} disabled={isTogglingActive} title={routine.active ? "Pausar rotina" : "Ativar rotina"} className={routine.active ? "text-amber-600 hover:bg-amber-500/10 hover:text-amber-600" : "text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-600"}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onToggleActive}
+          disabled={isTogglingActive}
+          title={routine.active ? "Pausar rotina" : "Ativar rotina"}
+          className={routine.active ? "text-amber-600 hover:bg-amber-500/10 hover:text-amber-600" : "text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-600"}
+        >
           {isTogglingActive ? <Loader2 className="h-4 w-4 animate-spin" /> : routine.active ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
         </Button>
         <Button type="button" variant="ghost" size="icon" onClick={onOpen} title="Editar">
@@ -1373,18 +1448,31 @@ function ActionEditor({
   const selectedTemplate = messageTemplates.find((template) => template.id === action.templateId);
   const usableMessageTemplates = messageTemplates.filter((template) => template.content || template.media);
   const messageMode = action.templateId ? "template" : "custom";
+  const intervalLabel = action.intervalLabel || (action.delayMinutes ? "Minutos" : "Nenhum");
+  const intervalAmount = getIntervalAmount({ ...action, intervalLabel });
+
+  function updateInterval(label: string, amount = intervalAmount) {
+    const option = getIntervalOption(label);
+    const normalizedAmount = label === "Nenhum" ? 0 : Math.max(0, Number(amount) || 0);
+
+    onChange({
+      delayMinutes: normalizedAmount * option.minutes,
+      intervalAmount: normalizedAmount,
+      intervalLabel: label,
+    });
+  }
 
   return (
-    <div className="rounded-md border border-border bg-card">
+    <div className="rounded-md border border-border bg-card overflow-clip">
       <div className="flex items-center justify-between bg-theme-primary px-3 py-2 text-xs font-medium text-white">
         <span className="flex items-center gap-1">
           <Clock3 className="h-3.5 w-3.5" />
-          {action.delayMinutes ? `${action.delayMinutes} ${action.delayMinutes === 1 ? "minuto" : "minutos"}` : "Nenhum intervalo"}
+          {formatInterval(action)}
         </span>
         <span>{index + 1}ª ação</span>
       </div>
 
-      <div className={cn("grid gap-2 p-2 md:grid-cols-[170px_120px_minmax(0,1fr)_160px_auto] md:items-center", !canRemove && " last:-mr-2 ")}>
+      <div className={cn("grid gap-2 p-2 md:grid-cols-[170px_180px_minmax(0,1fr)_160px_auto] md:items-center", !canRemove && " last:-mr-2 ")}>
         <Select
           value={action.type}
           onValueChange={(type) => {
@@ -1410,9 +1498,28 @@ function ActionEditor({
           </SelectContent>
         </Select>
 
-        <div className="relative">
-          <Input type="number" min={0} value={action.delayMinutes} onChange={(event) => onChange({ delayMinutes: Math.max(0, Number(event.target.value)) })} className="pr-10" />
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">min</span>
+        <div className="grid grid-cols-[minmax(0,1fr)_120px] gap-2">
+          <Input
+            type="number"
+            min={5}
+            step="1"
+            value={intervalAmount}
+            onChange={(event) => updateInterval(intervalLabel, event.target.valueAsNumber)}
+            disabled={intervalLabel === "Nenhum"}
+            className="text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          />
+          <Select value={intervalLabel} onValueChange={(label) => updateInterval(label)}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {intervalOptions.map((option) => (
+                <SelectItem key={option.label} value={option.label}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {action.type === "send_message" ? (

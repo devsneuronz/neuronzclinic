@@ -9,6 +9,8 @@ export interface RoutineAction {
   type: RoutineActionType;
   label: string;
   delayMinutes: number;
+  intervalAmount?: number;
+  intervalLabel?: string;
   responsibleUserId?: string;
   subject?: string;
   message?: string;
@@ -18,7 +20,6 @@ export interface RoutineAction {
   templateLabel?: string;
   tagId?: string;
   tagLabel?: string;
-  intervalLabel?: string;
   order?: number;
 }
 

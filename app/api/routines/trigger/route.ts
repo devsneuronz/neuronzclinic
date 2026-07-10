@@ -183,8 +183,12 @@ function getDelayMinutes(fields: Record<string, unknown>) {
   const amount = Number(fields.numero);
 
   if (!Number.isFinite(amount) || !amount || interval.includes("nenhum")) return 0;
+  if (interval.includes("segundo")) return amount / 60;
   if (interval.includes("hora")) return amount * 60;
   if (interval.includes("dia")) return amount * 1440;
+  if (interval.includes("semana")) return amount * 10080;
+  if (interval.includes("mes")) return amount * 43200;
+  if (interval.includes("mês")) return amount * 43200;
   return amount;
 }
 
@@ -223,6 +227,8 @@ async function fetchRoutines(): Promise<Routine[]> {
           type,
           label: getStringField(processFields, "Tipo") || type,
           delayMinutes: getDelayMinutes(processFields),
+          intervalAmount: Number(processFields.numero) || 0,
+          intervalLabel: getStringField(processFields, "Intervalo"),
           order: Number(processFields.ordem) || index,
           responsibleUserId: getRecordIds(processFields, "Responsavel")[0] || "",
           subject: getStringField(processFields, "Assunto"),

@@ -27,6 +27,11 @@ function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function getNumber(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
 function getNestedValue(record: RawRecord, path: string) {
   return path.split(".").reduce<unknown>((current, key) => {
     if (!current || typeof current !== "object" || Array.isArray(current)) return undefined;
@@ -427,6 +432,67 @@ async function executeAction(actionRun: RawRecord) {
   return { skipped: true, actionType };
 }
 
+function getActionDelayMinutes(actionRun: RawRecord) {
+  const payload = actionRun.payload && typeof actionRun.payload === "object" && !Array.isArray(actionRun.payload) ? (actionRun.payload as RawRecord) : {};
+  return Math.max(0, getNumber(payload.delayMinutes));
+}
+
+function getOneDueActionPerRoutineRun(actionRuns: RawRecord[]) {
+  const seenRoutineRuns = new Set<string>();
+  const runnable: RawRecord[] = [];
+
+  for (const actionRun of actionRuns) {
+    const routineRunId = getString(actionRun.routine_run_id);
+    if (!routineRunId || seenRoutineRuns.has(routineRunId)) continue;
+
+    seenRoutineRuns.add(routineRunId);
+    runnable.push(actionRun);
+  }
+
+  return runnable;
+}
+
+async function reschedulePendingActionsAfter(actionRun: RawRecord, executedAt: Date) {
+  const routineRunId = getString(actionRun.routine_run_id);
+  const actionIndex = getNumber(actionRun.action_index);
+  if (!routineRunId) return 0;
+
+  const pendingActions = (await supabaseRequest(
+    `routine_action_runs?routine_run_id=eq.${encodeURIComponent(routineRunId)}&status=eq.pending&action_index=gt.${actionIndex}&order=action_index.asc&select=id,payload,action_index`,
+  )) as RawRecord[];
+
+  let nextExecuteAt = executedAt.getTime();
+
+  for (const pendingAction of pendingActions) {
+    nextExecuteAt += getActionDelayMinutes(pendingAction) * 60_000;
+
+    await supabaseRequest(`routine_action_runs?id=eq.${encodeURIComponent(getString(pendingAction.id))}`, {
+      method: "PATCH",
+      body: JSON.stringify({ execute_at: new Date(nextExecuteAt).toISOString() }),
+    });
+  }
+
+  return pendingActions.length;
+}
+
+async function finishRoutineRunIfComplete(actionRun: RawRecord) {
+  const routineRunId = getString(actionRun.routine_run_id);
+  if (!routineRunId) return false;
+
+  const unfinishedActions = (await supabaseRequest(
+    `routine_action_runs?routine_run_id=eq.${encodeURIComponent(routineRunId)}&status=in.(pending,processing)&limit=1&select=id`,
+  )) as RawRecord[];
+
+  if (unfinishedActions.length > 0) return false;
+
+  await supabaseRequest(`routine_runs?id=eq.${encodeURIComponent(routineRunId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status: "done", finished_at: new Date().toISOString() }),
+  });
+
+  return true;
+}
+
 export async function POST(request: Request) {
   try {
     if (!isAuthorized(request)) {
@@ -441,9 +507,10 @@ export async function POST(request: Request) {
       ? `routine_action_runs?status=eq.pending&execute_at=lte.${encodeURIComponent(now)}&id=in.(${actionRunIds.map(encodeURIComponent).join(",")})&order=execute_at.asc,action_index.asc&limit=${limit}&select=*`
       : `routine_action_runs?status=eq.pending&execute_at=lte.${encodeURIComponent(now)}&order=execute_at.asc,action_index.asc&limit=${limit}&select=*`;
     const dueRuns = (await supabaseRequest(dueRunsPath)) as RawRecord[];
+    const runnableDueRuns = getOneDueActionPerRoutineRun(dueRuns);
     const results: RawRecord[] = [];
 
-    for (const [index, actionRun] of dueRuns.entries()) {
+    for (const [index, actionRun] of runnableDueRuns.entries()) {
       const id = getString(actionRun.id);
 
       try {
@@ -452,11 +519,14 @@ export async function POST(request: Request) {
           body: JSON.stringify({ status: "processing" }),
         });
         const result = await executeAction(actionRun);
+        const executedAt = new Date();
         await supabaseRequest(`routine_action_runs?id=eq.${encodeURIComponent(id)}`, {
           method: "PATCH",
-          body: JSON.stringify({ status: "done", executed_at: new Date().toISOString(), result }),
+          body: JSON.stringify({ status: "done", executed_at: executedAt.toISOString(), result }),
         });
-        results.push({ id, status: "done", result });
+        const rescheduledActions = await reschedulePendingActionsAfter(actionRun, executedAt);
+        const routineFinished = await finishRoutineRunIfComplete(actionRun);
+        results.push({ id, status: "done", result, rescheduledActions, routineFinished });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Falha ao executar ação.";
         await supabaseRequest(`routine_action_runs?id=eq.${encodeURIComponent(id)}`, {
@@ -466,12 +536,12 @@ export async function POST(request: Request) {
         results.push({ id, status: "failed", message });
       }
 
-      if (index < dueRuns.length - 1) {
+      if (index < runnableDueRuns.length - 1) {
         await wait(750);
       }
     }
 
-    return NextResponse.json({ processed: results.length, results });
+    return NextResponse.json({ processed: results.length, deferred: dueRuns.length - runnableDueRuns.length, results });
   } catch (error) {
     return NextResponse.json({ message: error instanceof Error ? error.message : "Não foi possível processar ações." }, { status: 500 });
   }
