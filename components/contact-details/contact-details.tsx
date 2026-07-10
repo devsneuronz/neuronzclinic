@@ -7,7 +7,7 @@ import { getChatStatusColor, type ChatStatusOption } from "@/lib/chat-status";
 import type { ChatTag } from "@/lib/chat-tags";
 import { ChatRecord } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
-import { Bot, Check, CheckCheck, ChevronDown, ChevronLeft, Copy, Loader2, MessageSquareDashed, Pencil, Phone, Trash2, X } from "lucide-react";
+import { Bot, Check, CheckCheck, ChevronDown, ChevronLeft, Copy, Inbox, Loader2, MessageSquareDashed, Pencil, Phone, Send, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ExpandedImageModal } from "../chat/expanded-image-modal";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
@@ -23,6 +23,7 @@ interface ContactDetailsProps {
   onClose?: () => void;
   onToggleStatus: () => void;
   onToggleIA: () => void;
+  onChangeQueueState?: (state: "entrada" | "aguardando" | null) => void;
   statusOptions?: ChatStatusOption[];
   tagOptions?: ChatTag[];
   interestOptions?: ChatTag[];
@@ -57,6 +58,7 @@ export function ContactDetails({
   onClose,
   onToggleStatus,
   onToggleIA,
+  onChangeQueueState,
   statusOptions,
   tagOptions,
   interestOptions,
@@ -87,6 +89,10 @@ export function ContactDetails({
   const [deleteChatError, setDeleteChatError] = useState("");
   const hasContactPhoto = !!chat?.url_foto_perfil;
   const canShowDeleteChat = canDeleteChat && !!chat && !!onDeleteChat;
+  const automaticQueueState = chat?.last_message_fromMe === true ? "aguardando" : "entrada";
+  const queueState = chat?.chat_state_override || automaticQueueState;
+  const queueLabel = queueState === "aguardando" ? "Aguardando" : "Entrada";
+  const hasQueueOverride = chat?.chat_state_override === "entrada" || chat?.chat_state_override === "aguardando";
 
   const [copied, setCopied] = useState(false);
 
@@ -169,13 +175,12 @@ export function ContactDetails({
       <div className="flex-1 overflow-y-auto">
         <div className="w-full h-18 rounded-b-3xl bg-radial-[80%_480%_at_17%_100%] from-transparent to-background/60" style={{ backgroundColor: getChatStatusColor(chat) }}></div>
         <div className="flex flex-col p-4">
-          <div className="flex flex-row justify-between w-full -mt-12">
+          <div className="flex flex-row justify-between -mt-12 gap-3">
             {/* Avatar e Status */}
-            <div className="flex flex-row gap-3 items-center ">
-              {/* AVatar */}
+            <div className="flex flex-row gap-3 items-center min-w-0">
               <button
                 type="button"
-                className={cn("rounded-full bg-neutral-800", hasContactPhoto && "cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2")}
+                className={cn("rounded-full bg-neutral-800 shrink-0", hasContactPhoto && "cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2")}
                 aria-label={hasContactPhoto ? `Ampliar foto de ${getDisplayName(chat)}` : "Foto do contato"}
                 disabled={!hasContactPhoto}
                 onClick={() => {
@@ -188,23 +193,55 @@ export function ContactDetails({
                   <AvatarFallback className="bg-(--chat-muted) text-(--chat-muted-foreground)">{chat?.nome_contato?.charAt(0) || "U"}</AvatarFallback>
                 </Avatar>
               </button>
-              {/* Status */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    className="flex h-fit items-center justify-between rounded-full px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 shadow-sm"
-                    style={{ backgroundColor: chat?.finalizada ? "#6b7280" : "#2b7fff" }}
-                  >
-                    {chat?.finalizada ? "Finalizada" : "Aberta"}
-                    <ChevronDown className="h-3 w-3" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-48 shadow-xl z-[100]">
-                  <DropdownMenuItem className="cursor-pointer" onClick={() => onToggleStatus()}>
-                    {chat?.finalizada ? "Reabrir Conversa" : "Finalizar Conversa"}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+
+              <div className="flex flex-row gap-2 min-w-0 flex-1 items-center">
+                {/* Status*/}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className="flex h-fit items-center justify-between rounded-full px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 shadow-sm shrink-0"
+                      style={{ backgroundColor: chat?.finalizada ? "#6b7280" : "#2b7fff" }}
+                    >
+                      {chat?.finalizada ? "Finalizada" : "Aberta"}
+                      <ChevronDown className="h-3 w-3 ml-1" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-48 shadow-xl z-[100]">
+                    <DropdownMenuItem className="cursor-pointer" onClick={() => onToggleStatus()}>
+                      {chat?.finalizada ? "Reabrir Conversa" : "Finalizar Conversa"}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* O botão problemático */}
+                {!chat?.finalizada && onChangeQueueState && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="flex h-fit min-w-0 flex-1 items-center justify-between gap-1 rounded-full border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted">
+                        <div className="shrink-0 flex items-center">{queueState === "aguardando" ? <Send className="h-3.5 w-3.5" /> : <Inbox className="h-3.5 w-3.5" />}</div>
+
+                        <span className="truncate text-left block w-full min-w-0">{queueLabel}</span>
+
+                        <ChevronDown className="h-3 w-3 shrink-0" />
+                      </button>
+                    </DropdownMenuTrigger>
+
+                    <DropdownMenuContent align="start" className="w-52 shadow-xl z-[100]">
+                      <DropdownMenuItem className="cursor-pointer" onClick={() => onChangeQueueState(null)}>
+                        Automático ({automaticQueueState === "aguardando" ? "Aguardando" : "Entrada"}){!hasQueueOverride && <Check className="ml-auto h-3.5 w-3.5" />}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="cursor-pointer" onClick={() => onChangeQueueState("entrada")}>
+                        Entrada
+                        {chat?.chat_state_override === "entrada" && <Check className="ml-auto h-3.5 w-3.5" />}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="cursor-pointer" onClick={() => onChangeQueueState("aguardando")}>
+                        Aguardando
+                        {chat?.chat_state_override === "aguardando" && <Check className="ml-auto h-3.5 w-3.5" />}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
             </div>
             {onMarkAsRead && (
               <div className="flex items-center gap-1.5 shrink-0">

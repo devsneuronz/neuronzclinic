@@ -24,6 +24,7 @@ export interface ChatRecord {
   pinned: boolean | null
   archived: boolean | null
   finalizada: boolean | null
+  chat_state_override?: "entrada" | "aguardando" | null
   ia_responde: boolean | null
   last_message_fromMe: boolean | null
   Status_chat: string | null
@@ -160,6 +161,7 @@ export interface UpdateChatDetailsInput {
   Status_chat?: string | null
   hex_status?: string | null
   finalizada?: boolean | null
+  chat_state_override?: "entrada" | "aguardando" | null
   ia_responde?: boolean | null
   archived?: boolean | null
   unread_count?: number | null

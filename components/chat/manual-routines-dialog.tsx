@@ -69,8 +69,8 @@ export function ManualRoutinesDialog({ open, onOpenChange, routines, isLoading, 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl p-0 gap-0 overflow-hidden">
         <DialogHeader className="border-b border-border px-5 py-4">
-          <DialogTitle className="text-base">Executar automação manual</DialogTitle>
-          <DialogDescription>Escolha uma automação para iniciar neste atendimento.</DialogDescription>
+          <DialogTitle className="text-base">Executar rotina manual</DialogTitle>
+          <DialogDescription>Escolha uma rotina para iniciar neste atendimento.</DialogDescription>
         </DialogHeader>
 
         <TooltipProvider>
@@ -97,7 +97,7 @@ export function ManualRoutinesDialog({ open, onOpenChange, routines, isLoading, 
             ) : loadingError ? (
               <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{loadingError}</div>
             ) : routines.length === 0 ? (
-              <div className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">Nenhuma automação manual ativa foi encontrada.</div>
+              <div className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">Nenhuma rotina manual ativa foi encontrada.</div>
             ) : (
               <div className="space-y-2">
                 {routines.map((routine) => {

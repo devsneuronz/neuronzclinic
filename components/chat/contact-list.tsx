@@ -101,6 +101,11 @@ function getDisplayName(chat: ChatRecord) {
   return chat.nome_contato || chat.pushname || chat.chat_id?.replace("@s.whatsapp.net", "") || "Contato sem nome";
 }
 
+function getChatQueueState(chat: ChatRecord): Exclude<StateTab, "finalizados"> {
+  if (chat.chat_state_override === "entrada" || chat.chat_state_override === "aguardando") return chat.chat_state_override;
+  return chat.last_message_fromMe === true ? "aguardando" : "entrada";
+}
+
 const saoPauloDatePartsFormatter = new Intl.DateTimeFormat("pt-BR", {
   day: "2-digit",
   month: "2-digit",
@@ -516,9 +521,9 @@ export function ContactList({
 
       if (stateTab === "finalizados") return chat.finalizada === true;
       if (chat.finalizada === true) return false;
-      if (stateTab === "aguardando") return chat.last_message_fromMe === true;
+      if (stateTab === "aguardando") return getChatQueueState(chat) === "aguardando";
 
-      return chat.last_message_fromMe !== true;
+      return getChatQueueState(chat) === "entrada";
     });
 
     return stateFilteredChats;
@@ -540,7 +545,7 @@ export function ContactList({
     chatsInScope.forEach((chat) => {
       if (chat.finalizada === true) {
         counts.finalizados += 1;
-      } else if (chat.last_message_fromMe === true) {
+      } else if (getChatQueueState(chat) === "aguardando") {
         counts.aguardando += 1;
       } else {
         counts.entrada += 1;

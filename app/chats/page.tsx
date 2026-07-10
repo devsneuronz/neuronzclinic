@@ -1408,6 +1408,30 @@ export default function ChatsPage() {
     }
   }, [restoreSelectedChat, selectedChat, selectedChatId]);
 
+  const handleChangeQueueState = useCallback(
+    async (state: "entrada" | "aguardando" | null) => {
+      if (!selectedChat || !selectedChatId) return;
+
+      const previousChat = selectedChat;
+      const updateQueueState = (list: ChatRecord[]) => list.map((chat) => (chat.id === selectedChatId ? { ...chat, chat_state_override: state } : chat));
+
+      setChats((current) => updateQueueState(current));
+      setSearchChats((current) => updateQueueState(current));
+      setError(undefined);
+
+      try {
+        await updateChatDetails({
+          id: selectedChat.id,
+          chat_state_override: state,
+        });
+      } catch (err) {
+        restoreSelectedChat(previousChat);
+        setError(err instanceof Error ? err.message : "Não foi possível salvar a fila da conversa.");
+      }
+    },
+    [restoreSelectedChat, selectedChat, selectedChatId],
+  );
+
   const handleToggleIA = useCallback(async () => {
     if (!selectedChat || !selectedChatId) return;
 
@@ -1835,6 +1859,7 @@ export default function ChatsPage() {
           onClose={() => setShowDetails(false)}
           onToggleStatus={handleToggleStatus}
           onToggleIA={handleToggleIA}
+          onChangeQueueState={handleChangeQueueState}
           statusOptions={contactStatusOptions}
           tagOptions={contactTagOptions}
           onChangeStatus={handleChangeContactStatus}
@@ -1873,6 +1898,7 @@ export default function ChatsPage() {
         onToggleDetails={() => setShowDetails(!showDetails)}
         isDetailsOpen={showDetails}
         onToggleStatus={handleToggleStatus}
+        onChangeQueueState={handleChangeQueueState}
         isMobile={true}
         isSignatureMode={effectiveSignatureMode}
         onOpenIATraining={handleOpenIATraining}
@@ -1926,6 +1952,7 @@ export default function ChatsPage() {
             onToggleDetails={() => [setShowDetails(!showDetails), handleOpenIATraining]}
             isDetailsOpen={showDetails}
             onToggleStatus={handleToggleStatus}
+            onChangeQueueState={handleChangeQueueState}
             isSignatureMode={effectiveSignatureMode}
             onOpenIATraining={handleOpenIATraining}
           />
@@ -1940,6 +1967,7 @@ export default function ChatsPage() {
                 onClose={() => setShowDetails(false)}
                 onToggleStatus={handleToggleStatus}
                 onToggleIA={handleToggleIA}
+                onChangeQueueState={handleChangeQueueState}
                 statusOptions={contactStatusOptions}
                 tagOptions={contactTagOptions}
                 onChangeStatus={handleChangeContactStatus}

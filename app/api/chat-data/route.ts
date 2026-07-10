@@ -5,7 +5,7 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_P
 const CHAT_ID_BATCH_SIZE = 40
 const SUPABASE_TIMEOUT_MS = 12000
 const SUPABASE_RETRY_DELAYS_MS = [300, 800]
-const CHAT_SELECT = [
+const CHAT_SELECT_FIELDS = [
   "id",
   "chat_id",
   "nome_contato",
@@ -37,7 +37,9 @@ const CHAT_SELECT = [
   "draft",
   "lid_id",
   "updated_at",
-].join(",")
+]
+const CHAT_SELECT = [...CHAT_SELECT_FIELDS, "chat_state_override"].join(",")
+const CHAT_SELECT_FALLBACK = CHAT_SELECT_FIELDS.join(",")
 const MESSAGE_SELECT = [
   "id",
   "message_id",
@@ -276,6 +278,17 @@ async function fetchLatestMessagesForChats(chatIds: string[]): Promise<Record<st
   return latestMessages
 }
 
+async function fetchChats(path: string) {
+  try {
+    return await supabaseGet<Record<string, unknown>[]>(path.replace("__CHAT_SELECT__", CHAT_SELECT))
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ""
+    if (!message.includes("chat_state_override")) throw error
+
+    return supabaseGet<Record<string, unknown>[]>(path.replace("__CHAT_SELECT__", CHAT_SELECT_FALLBACK))
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const resource = getString(request.nextUrl.searchParams.get("resource"))
@@ -285,8 +298,8 @@ export async function GET(request: NextRequest) {
       const offset = getNumberParam(request, "offset", 0)
       const search = getString(request.nextUrl.searchParams.get("search"))
       const searchFilter = search ? buildChatSearchFilter(search) : ""
-      const chats = await supabaseGet<Record<string, unknown>[]>(
-        `chats?select=${CHAT_SELECT}&archived=is.false${searchFilter}&order=last_message_time.desc.nullslast&limit=${limit}&offset=${offset}`,
+      const chats = await fetchChats(
+        `chats?select=__CHAT_SELECT__&archived=is.false${searchFilter}&order=last_message_time.desc.nullslast&limit=${limit}&offset=${offset}`,
       )
 
       return NextResponse.json({ chats })

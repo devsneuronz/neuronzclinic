@@ -160,6 +160,15 @@ function buildPatch(body: RawChat, currentChat: RawChat) {
     patch.finalizada = getBoolean(body.finalizada)
   }
 
+  if ("chat_state_override" in body) {
+    const override = getString(body.chat_state_override).toLowerCase()
+    if (override && !["entrada", "aguardando"].includes(override)) {
+      throw new Error("chat_state_override precisa ser entrada, aguardando ou vazio.")
+    }
+
+    patch.chat_state_override = override || null
+  }
+
   if ("ia_responde" in body) {
     patch.ia_responde = getBoolean(body.ia_responde)
   }

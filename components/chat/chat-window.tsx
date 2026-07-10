@@ -65,6 +65,7 @@ interface ChatWindowProps {
   error?: string;
   onToggleDetails: () => void;
   onToggleStatus: () => void;
+  onChangeQueueState: (state: "entrada" | "aguardando" | null) => void;
   isDetailsOpen: boolean;
   isMobile?: boolean;
   onOpenIATraining: () => void;
@@ -163,6 +164,7 @@ export function ChatWindow({
   error,
   onToggleDetails,
   onToggleStatus,
+  onChangeQueueState,
   isDetailsOpen,
   isMobile,
   isSignatureMode,
@@ -1243,6 +1245,7 @@ export function ChatWindow({
           onDeleteSelected={beginDeleteSelected}
           onToggleDetails={onToggleDetails}
           onToggleStatus={onToggleStatus}
+          onChangeQueueState={onChangeQueueState}
           onOpenContactPhoto={() => {
             if (!chat.url_foto_perfil) return;
             setExpandedImage({ url: chat.url_foto_perfil, alt: `Foto de ${chat.nome_contato || chat.pushname || "contato"}` });
