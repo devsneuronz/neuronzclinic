@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Switch } from "@/components/ui/switch";
 import { getChatStatusColor, type ChatStatusOption } from "@/lib/chat-status";
 import type { ChatTag } from "@/lib/chat-tags";
-import { ChatRecord } from "@/lib/supabase-rest";
+import { ChatRecord, type ChatStateOverride } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 import { Bot, Check, CheckCheck, ChevronDown, ChevronLeft, Copy, Inbox, Loader2, MessageSquareDashed, Pencil, Phone, Send, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -23,7 +23,7 @@ interface ContactDetailsProps {
   onClose?: () => void;
   onToggleStatus: () => void;
   onToggleIA: () => void;
-  onChangeQueueState?: (state: "entrada" | "aguardando" | null) => void;
+  onChangeQueueState?: (state: ChatStateOverride | null) => void;
   statusOptions?: ChatStatusOption[];
   tagOptions?: ChatTag[];
   interestOptions?: ChatTag[];
@@ -90,9 +90,9 @@ export function ContactDetails({
   const hasContactPhoto = !!chat?.url_foto_perfil;
   const canShowDeleteChat = canDeleteChat && !!chat && !!onDeleteChat;
   const automaticQueueState = chat?.last_message_fromMe === true ? "aguardando" : "entrada";
-  const queueState = chat?.chat_state_override || automaticQueueState;
+  const queueState = chat?.chat_state_override === "entrada_temporario" ? "entrada" : chat?.chat_state_override === "aguardando_temporario" ? "aguardando" : chat?.chat_state_override || automaticQueueState;
   const queueLabel = queueState === "aguardando" ? "Aguardando" : "Entrada";
-  const hasQueueOverride = chat?.chat_state_override === "entrada" || chat?.chat_state_override === "aguardando";
+  const hasQueueOverride = !!chat?.chat_state_override;
 
   const [copied, setCopied] = useState(false);
 
@@ -231,12 +231,20 @@ export function ContactDetails({
                         Automático ({automaticQueueState === "aguardando" ? "Aguardando" : "Entrada"}){!hasQueueOverride && <Check className="ml-auto h-3.5 w-3.5" />}
                       </DropdownMenuItem>
                       <DropdownMenuItem className="cursor-pointer" onClick={() => onChangeQueueState("entrada")}>
-                        Entrada
+                        Entrada fixo
                         {chat?.chat_state_override === "entrada" && <Check className="ml-auto h-3.5 w-3.5" />}
                       </DropdownMenuItem>
                       <DropdownMenuItem className="cursor-pointer" onClick={() => onChangeQueueState("aguardando")}>
-                        Aguardando
+                        Aguardando fixo
                         {chat?.chat_state_override === "aguardando" && <Check className="ml-auto h-3.5 w-3.5" />}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="cursor-pointer" onClick={() => onChangeQueueState("entrada_temporario")}>
+                        Entrada até próxima mensagem
+                        {chat?.chat_state_override === "entrada_temporario" && <Check className="ml-auto h-3.5 w-3.5" />}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="cursor-pointer" onClick={() => onChangeQueueState("aguardando_temporario")}>
+                        Aguardando até próxima mensagem
+                        {chat?.chat_state_override === "aguardando_temporario" && <Check className="ml-auto h-3.5 w-3.5" />}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

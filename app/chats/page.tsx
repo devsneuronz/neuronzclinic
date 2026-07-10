@@ -12,6 +12,7 @@ import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, type 
 import { createSupabaseRealtimeSubscription, type SupabasePostgresChangePayload } from "@/lib/supabase-realtime";
 import {
   ChatRecord,
+  type ChatStateOverride,
   deleteMessage,
   deleteMessages,
   fetchChats,
@@ -223,18 +224,27 @@ function mergeChats(currentChats: ChatRecord[], incomingChats: ChatRecord[]) {
       text_last_message: chat.text_last_message || currentChat?.text_last_message || null,
       unread_count: chat.unread_count ?? currentChat?.unread_count ?? null,
     };
+    const mergedChatWithQueueState = {
+      ...mergedChat,
+      chat_state_override:
+        currentChat &&
+        isTemporaryQueueState(currentChat.chat_state_override) &&
+        (currentChat.last_message_time !== mergedChat.last_message_time || currentChat.last_message_fromMe !== mergedChat.last_message_fromMe)
+          ? null
+          : mergedChat.chat_state_override,
+    };
 
     indexedChats.set(
       chat.id,
       shouldKeepCurrentLatestMessage
         ? {
-            ...mergedChat,
+            ...mergedChatWithQueueState,
             text_last_message: currentChat.text_last_message,
             last_message_time: currentChat.last_message_time,
             last_time_formatado: currentChat.last_time_formatado,
             last_message_fromMe: currentChat.last_message_fromMe,
           }
-        : mergedChat,
+        : mergedChatWithQueueState,
     );
   }
 
@@ -277,7 +287,12 @@ function updateChatPreview(chat: ChatRecord, message: ChatPreviewMessage) {
     text_last_message: getLatestChatMessagePreviewText(message),
     last_message_time: message.timestamp_msg,
     last_message_fromMe: message.from_me,
+    chat_state_override: isTemporaryQueueState(chat.chat_state_override) ? null : chat.chat_state_override,
   };
+}
+
+function isTemporaryQueueState(value: ChatRecord["chat_state_override"]) {
+  return value === "entrada_temporario" || value === "aguardando_temporario";
 }
 
 function updateChatPreviewFromMessages(chat: ChatRecord, messages: MessageRecord[]) {
@@ -1409,7 +1424,7 @@ export default function ChatsPage() {
   }, [restoreSelectedChat, selectedChat, selectedChatId]);
 
   const handleChangeQueueState = useCallback(
-    async (state: "entrada" | "aguardando" | null) => {
+    async (state: ChatStateOverride | null) => {
       if (!selectedChat || !selectedChatId) return;
 
       const previousChat = selectedChat;

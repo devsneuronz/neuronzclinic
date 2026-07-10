@@ -5,6 +5,7 @@ const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
 const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 const CHAT_ID_BATCH_SIZE = 40
 const supabaseRestUrl = SUPABASE_REST_URL
+export type ChatStateOverride = "entrada" | "aguardando" | "entrada_temporario" | "aguardando_temporario"
 
 export interface ChatRecord {
   id: string
@@ -24,7 +25,7 @@ export interface ChatRecord {
   pinned: boolean | null
   archived: boolean | null
   finalizada: boolean | null
-  chat_state_override?: "entrada" | "aguardando" | null
+  chat_state_override?: ChatStateOverride | null
   ia_responde: boolean | null
   last_message_fromMe: boolean | null
   Status_chat: string | null
@@ -161,7 +162,7 @@ export interface UpdateChatDetailsInput {
   Status_chat?: string | null
   hex_status?: string | null
   finalizada?: boolean | null
-  chat_state_override?: "entrada" | "aguardando" | null
+  chat_state_override?: ChatStateOverride | null
   ia_responde?: boolean | null
   archived?: boolean | null
   unread_count?: number | null

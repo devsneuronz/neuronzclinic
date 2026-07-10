@@ -18,7 +18,7 @@ import { ChatRecord, LatestMessageStatus } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 import { formatBoldText } from "@/utils/utils";
 import { motion, Variants } from "framer-motion";
-import { Building2, ChevronDown, ChevronUp, Feather, FilterX, HatGlasses, Loader2, Search, Send, SquarePlus, Star, TagsIcon } from "lucide-react";
+import { Building2, ChevronDown, ChevronUp, CircleCheckBig, Feather, FilterX, HatGlasses, Inbox, Loader2, Search, Send, SendIcon, SquarePlus, Star, TagsIcon } from "lucide-react";
 import type { FormEvent, UIEvent } from "react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { DropdownMenuSeparator } from "../ui/dropdown-menu";
@@ -60,9 +60,9 @@ const scopeTabs = [
   { id: "mine", label: "Meus Chats" },
 ] as const;
 const stateTabs = [
-  { id: "entrada", label: "Entrada" },
-  { id: "aguardando", label: "Aguardando" },
-  { id: "finalizados", label: "Finalizados" },
+  { id: "entrada", label: "Entrada", icon: Inbox },
+  { id: "aguardando", label: "Aguardando", icon: SendIcon },
+  { id: "finalizados", label: "Finalizados", icon: CircleCheckBig },
 ] as const;
 
 type ScopeTab = (typeof scopeTabs)[number]["id"];
@@ -103,6 +103,8 @@ function getDisplayName(chat: ChatRecord) {
 
 function getChatQueueState(chat: ChatRecord): Exclude<StateTab, "finalizados"> {
   if (chat.chat_state_override === "entrada" || chat.chat_state_override === "aguardando") return chat.chat_state_override;
+  if (chat.chat_state_override === "entrada_temporario") return "entrada";
+  if (chat.chat_state_override === "aguardando_temporario") return "aguardando";
   return chat.last_message_fromMe === true ? "aguardando" : "entrada";
 }
 
@@ -985,28 +987,37 @@ export function ContactList({
               ))}
             </div>
             {scopeTab !== "all" && (
-              <div className="grid grid-cols-3 gap-1 border-t border-border/60 bg-secondary/60 p-1.5">
-                {stateTabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    className={cn(
-                      "h-8 rounded-md text-xs font-medium text-muted-foreground transition-colors flex flex-row items-center justify-center gap-1",
-                      stateTab === tab.id ? "bg-theme-primary text-white shadow-sm ring-1 ring-border/70" : "hover:bg-theme-accent hover:text-foreground dark:hover:bg-theme-primary/20",
-                    )}
-                    onClick={() => setStateTab(tab.id)}
-                  >
-                    <span>{tab.label}</span>
-                    <span
+              <div className="flex flex-row justify-between gap-1 border-t border-border/60 bg-secondary/60 p-1.5">
+                {stateTabs.map((tab) => {
+                  const Icon = tab.icon;
+                  const isSelected = stateTab === tab.id;
+
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
                       className={cn(
-                        "inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[8px] font-semibold transition-colors",
-                        stateTab === tab.id ? "bg-white/20 text-white" : "bg-muted-foreground/15 text-muted-foreground",
+                        "px-2 h-8 rounded-md text-xs font-medium text-muted-foreground transition-colors flex flex-row items-center justify-center gap-1",
+                        isSelected ? "bg-theme-primary text-white shadow-sm ring-1 ring-border/70" : "hover:bg-theme-accent hover:text-foreground dark:hover:bg-theme-primary/20",
                       )}
+                      onClick={() => setStateTab(tab.id)}
                     >
-                      {tabCounts[tab.id]}
-                    </span>
-                  </button>
-                ))}
+                      {/* O ícone agora sempre renderiza, mas sua largura e opacidade transitam */}
+                      <Icon className={cn("h-3 shrink-0 overflow-hidden transition-all duration-300 ease-in-out", isSelected ? "w-3 opacity-100" : "w-0 opacity-0")} />
+
+                      <span>{tab.label}</span>
+
+                      <span
+                        className={cn(
+                          "inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[8px] font-semibold transition-colors",
+                          isSelected ? "bg-white/20 text-white" : "bg-muted-foreground/15 text-muted-foreground",
+                        )}
+                      >
+                        {tabCounts[tab.id]}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

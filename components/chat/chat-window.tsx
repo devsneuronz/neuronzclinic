@@ -7,6 +7,7 @@ import { readChatDraft, writeChatDraft } from "@/lib/chat-drafts";
 import { createSupabaseRealtimeSubscription } from "@/lib/supabase-realtime";
 import {
   ChatRecord,
+  type ChatStateOverride,
   MessageRecord,
   cancelScheduledMessage,
   createChatNote,
@@ -65,7 +66,7 @@ interface ChatWindowProps {
   error?: string;
   onToggleDetails: () => void;
   onToggleStatus: () => void;
-  onChangeQueueState?: (state: "entrada" | "aguardando" | null) => void;
+  onChangeQueueState?: (state: ChatStateOverride | null) => void;
   isDetailsOpen: boolean;
   isMobile?: boolean;
   onOpenIATraining: () => void;

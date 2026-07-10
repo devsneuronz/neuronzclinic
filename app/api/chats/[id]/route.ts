@@ -162,8 +162,8 @@ function buildPatch(body: RawChat, currentChat: RawChat) {
 
   if ("chat_state_override" in body) {
     const override = getString(body.chat_state_override).toLowerCase()
-    if (override && !["entrada", "aguardando"].includes(override)) {
-      throw new Error("chat_state_override precisa ser entrada, aguardando ou vazio.")
+    if (override && !["entrada", "aguardando", "entrada_temporario", "aguardando_temporario"].includes(override)) {
+      throw new Error("chat_state_override precisa ser entrada, aguardando, temporario ou vazio.")
     }
 
     patch.chat_state_override = override || null
