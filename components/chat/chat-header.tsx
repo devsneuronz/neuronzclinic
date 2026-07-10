@@ -2,10 +2,9 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import type { ChatRecord } from "@/lib/supabase-rest";
-import { Bot, CheckCircle2, ChevronDown, ChevronLeft, Forward, Play, Inbox, Info, RotateCcw, Send, Trash2, X } from "lucide-react";
+import { Bot, CheckCircle2, ChevronLeft, Forward, Info, Play, RotateCcw, Trash2, X } from "lucide-react";
 import { getDisplayName } from "./message-utils";
 
 type ChatHeaderProps = {
@@ -18,7 +17,6 @@ type ChatHeaderProps = {
   onDeleteSelected: () => void;
   onToggleDetails: () => void;
   onToggleStatus: () => void;
-  onChangeQueueState: (state: "entrada" | "aguardando" | null) => void;
   onOpenContactPhoto?: () => void;
   isMobile?: boolean;
   onCloseChat?: () => void;
@@ -36,7 +34,6 @@ export function ChatHeader({
   onDeleteSelected,
   onToggleDetails,
   onToggleStatus,
-  onChangeQueueState,
   onOpenContactPhoto,
   isMobile,
   onCloseChat,
@@ -44,10 +41,6 @@ export function ChatHeader({
   onOpenManualRoutines,
 }: ChatHeaderProps) {
   const hasContactPhoto = !!chat.url_foto_perfil;
-  const automaticQueueState = chat.last_message_fromMe === true ? "aguardando" : "entrada";
-  const queueState = chat.chat_state_override || automaticQueueState;
-  const queueLabel = queueState === "aguardando" ? "Aguardando" : "Entrada";
-  const hasQueueOverride = chat.chat_state_override === "entrada" || chat.chat_state_override === "aguardando";
 
   return (
     <div className="flex items-center justify-between border-b border-border bg-card px-4 min-h-15.25">
