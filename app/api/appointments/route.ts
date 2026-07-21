@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DEFAULT_STATUS_ID = "30ab85a3-b35d-4065-b173-a6a029a4b58f";
+const APPOINTMENT_SELECT =
+  "id,appointment_status_id,modality,appointment_procedure_type_id,dataHoraInicio,dataHoraFim,professional_id,chat_id,observacoes,appointment_status:appointment_status_id(id,status,hex),appointment_procedure_type:appointment_procedure_type_id(id,tipo),professional:professional_id(id_profissional,nome,email,users:user_id(name,email)),chats:chat_id(id,nome_contato,phone_contact,chat_id)";
 
 type ProfessionalRow = {
   id_profissional: string;
@@ -34,6 +36,13 @@ type AppointmentRow = {
   chats?: { id: string; nome_contato: string | null; phone_contact: string | null; chat_id: string | null } | null;
 };
 
+type ChatRow = {
+  id: string;
+  nome_contato: string | null;
+  phone_contact: string | null;
+  chat_id: string | null;
+};
+
 type StatusRow = {
   id: string;
   status: string;
@@ -46,6 +55,21 @@ type TypeRow = {
 
 function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function getBrazilPhoneVariants(value: string) {
+  const digits = onlyDigits(value);
+  const variants = new Set<string>();
+
+  if (digits) variants.add(digits);
+  if (digits.startsWith("55")) variants.add(digits.slice(2));
+  if (digits.length >= 10 && !digits.startsWith("55")) variants.add(`55${digits}`);
+
+  return Array.from(variants).filter(Boolean);
 }
 
 function getSupabaseConfig() {
@@ -77,6 +101,11 @@ async function selectRows<T>(table: string, query: Record<string, string | numbe
   return response.json() as Promise<T[]>;
 }
 
+async function getRows<T>(path: string) {
+  const response = await supabaseRequest(path);
+  return response.json() as Promise<T[]>;
+}
+
 function getProfessionalEmail(professional: ProfessionalRow) {
   return professional.users?.email || professional.email || "";
 }
@@ -97,6 +126,33 @@ async function getProfessionals() {
     order: "created_at.desc",
     limit: 1000,
   });
+}
+
+async function findChat({ patientId, chatId, contactPhone }: { patientId: string; chatId: string; contactPhone: string }) {
+  if (patientId) {
+    const rows = await selectRows<ChatRow>("chats", {
+      select: "id,nome_contato,phone_contact,chat_id",
+      id: `eq.${patientId}`,
+      limit: 1,
+    });
+    if (rows[0]) return rows[0];
+  }
+
+  const filters: string[] = [];
+  if (chatId) {
+    filters.push(`chat_id.eq.${encodeURIComponent(chatId)}`);
+    filters.push(`id.eq.${encodeURIComponent(chatId)}`);
+  }
+
+  for (const phone of getBrazilPhoneVariants(contactPhone || chatId)) {
+    filters.push(`phone_contact.eq.${encodeURIComponent(phone)}`);
+    filters.push(`chat_id.ilike.*${encodeURIComponent(phone)}*`);
+  }
+
+  if (filters.length === 0) return null;
+
+  const rows = await getRows<ChatRow>(`chats?select=id,nome_contato,phone_contact,chat_id&or=(${filters.join(",")})&limit=1`);
+  return rows[0] ?? null;
 }
 
 async function getAgenda(professionalId: string) {
@@ -163,12 +219,25 @@ async function syncBooking(appointment: AppointmentRow) {
 }
 
 async function getContext(request: NextRequest, requestedProfessionalId = "") {
-  const role = normalizeUserRole(request.nextUrl.searchParams.get("role"));
+  const rawRole = request.nextUrl.searchParams.get("role");
   const email = getString(request.nextUrl.searchParams.get("email")).toLowerCase();
+  const role = !rawRole && !email ? "admin" : normalizeUserRole(rawRole);
   const professionals = await getProfessionals();
   const allowedProfessionals = professionals.filter((professional) => canUseProfessional({ role, email }, professional));
   const selectedProfessional = allowedProfessionals.find((professional) => professional.id_profissional === requestedProfessionalId) ?? allowedProfessionals[0] ?? null;
   return { role, email, allowedProfessionals, selectedProfessional };
+}
+
+async function getAppointmentsForChat(chat: ChatRow) {
+  const rows = await selectRows<AppointmentRow>("appointments", {
+    select: APPOINTMENT_SELECT,
+    chat_id: `eq.${chat.id}`,
+    deleted_at: "is.null",
+    order: "dataHoraInicio.desc",
+    limit: 1000,
+  });
+
+  return rows.map(mapAppointment);
 }
 
 export async function GET(request: NextRequest) {
@@ -177,8 +246,20 @@ export async function GET(request: NextRequest) {
     const start = getString(searchParams.get("start"));
     const end = getString(searchParams.get("end"));
     const requestedProfessionalId = getString(searchParams.get("professionalId"));
+    const chatId = getString(searchParams.get("chatId"));
+    const contactPhone = getString(searchParams.get("contactPhone"));
+    const contactIdParam = getString(searchParams.get("contactId"));
     const status = getString(searchParams.get("status"));
     const type = getString(searchParams.get("type"));
+
+    if (chatId || contactPhone || contactIdParam) {
+      const chat = await findChat({ patientId: contactIdParam, chatId, contactPhone });
+      if (!chat) return NextResponse.json({ appointments: [], latestAppointment: null });
+
+      const appointments = await getAppointmentsForChat(chat);
+      return NextResponse.json({ appointments, latestAppointment: appointments[0] ?? null });
+    }
+
     const context = await getContext(request, requestedProfessionalId);
     const selectedProfessionalId = context.selectedProfessional?.id_profissional ?? "";
     const requestedProfessionalAllowed =
@@ -190,8 +271,8 @@ export async function GET(request: NextRequest) {
       context.role === "admin" || context.role === "manager" ? context.allowedProfessionals.map((professional) => professional.id_profissional) : context.selectedProfessional ? [context.selectedProfessional.id_profissional] : [];
 
     const query: Record<string, string | number> = {
-      select:
-        "id,appointment_status_id,modality,appointment_procedure_type_id,dataHoraInicio,dataHoraFim,professional_id,chat_id,observacoes,appointment_status:appointment_status_id(id,status,hex),appointment_procedure_type:appointment_procedure_type_id(id,tipo),professional:professional_id(id_profissional,nome,email,users:user_id(name,email)),chats:chat_id(id,nome_contato,phone_contact,chat_id)",
+      select: APPOINTMENT_SELECT,
+      deleted_at: "is.null",
       order: "dataHoraInicio.asc",
       limit: 1000,
     };
@@ -217,7 +298,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     const professionalId = getString(body?.professionalId);
-    const chatId = getString(body?.patientId);
+    const patientId = getString(body?.patientId);
+    const chatId = getString(body?.chatId);
+    const contactPhone = getString(body?.contactPhone) || getString(body?.patientPhone);
     const startsAt = getString(body?.startDateTime);
     const endsAt = getString(body?.endDateTime);
     const modality = getString(body?.attendanceMode) || "Presencial";
@@ -225,8 +308,9 @@ export async function POST(request: NextRequest) {
     const statusId = await resolveStatusId(getString(body?.status));
     const typeId = await resolveTypeId(getString(body?.type));
     const context = await getContext(request, professionalId);
+    const chat = await findChat({ patientId, chatId, contactPhone });
 
-    if (!professionalId || !chatId || !startsAt) return NextResponse.json({ message: "Informe profissional, paciente e horario." }, { status: 400 });
+    if (!professionalId || !chat || !startsAt) return NextResponse.json({ message: "Informe profissional, paciente e horario." }, { status: 400 });
     if (!context.allowedProfessionals.some((professional) => professional.id_profissional === professionalId)) {
       return NextResponse.json({ message: "Voce nao pode criar agendamento para este profissional." }, { status: 403 });
     }
@@ -238,7 +322,7 @@ export async function POST(request: NextRequest) {
     }
 
     const response = await supabaseRequest(
-      "appointments?select=id,appointment_status_id,modality,appointment_procedure_type_id,dataHoraInicio,dataHoraFim,professional_id,chat_id,observacoes,appointment_status:appointment_status_id(id,status,hex),appointment_procedure_type:appointment_procedure_type_id(id,tipo),professional:professional_id(id_profissional,nome,email,users:user_id(name,email)),chats:chat_id(id,nome_contato,phone_contact,chat_id)",
+      `appointments?select=${APPOINTMENT_SELECT}`,
       {
         method: "POST",
         headers: { Prefer: "return=representation" },
@@ -249,7 +333,7 @@ export async function POST(request: NextRequest) {
           dataHoraInicio: startDate.toISOString(),
           dataHoraFim: endDate.toISOString(),
           professional_id: professionalId,
-          chat_id: chatId,
+          chat_id: chat.id,
           observacoes: observations || null,
         }),
       },
@@ -267,7 +351,9 @@ export async function PATCH(request: NextRequest) {
     const id = getString(request.nextUrl.searchParams.get("id"));
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     const professionalId = getString(body?.professionalId);
-    const chatId = getString(body?.patientId);
+    const patientId = getString(body?.patientId);
+    const chatId = getString(body?.chatId);
+    const contactPhone = getString(body?.contactPhone) || getString(body?.patientPhone);
     const startsAt = getString(body?.startDateTime);
     const endsAt = getString(body?.endDateTime);
     const modality = getString(body?.attendanceMode) || "Presencial";
@@ -275,8 +361,9 @@ export async function PATCH(request: NextRequest) {
     const statusId = await resolveStatusId(getString(body?.status));
     const typeId = await resolveTypeId(getString(body?.type));
     const context = await getContext(request, professionalId);
+    const chat = await findChat({ patientId, chatId, contactPhone });
 
-    if (!id || !professionalId || !chatId || !startsAt) return NextResponse.json({ message: "Informe os dados obrigatorios." }, { status: 400 });
+    if (!id || !professionalId || !chat || !startsAt) return NextResponse.json({ message: "Informe os dados obrigatorios." }, { status: 400 });
     if (!context.allowedProfessionals.some((professional) => professional.id_profissional === professionalId)) {
       return NextResponse.json({ message: "Voce nao pode editar agendamento deste profissional." }, { status: 403 });
     }
@@ -288,7 +375,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const response = await supabaseRequest(
-      `appointments?id=eq.${id}&select=id,appointment_status_id,modality,appointment_procedure_type_id,dataHoraInicio,dataHoraFim,professional_id,chat_id,observacoes,appointment_status:appointment_status_id(id,status,hex),appointment_procedure_type:appointment_procedure_type_id(id,tipo),professional:professional_id(id_profissional,nome,email,users:user_id(name,email)),chats:chat_id(id,nome_contato,phone_contact,chat_id)`,
+      `appointments?id=eq.${id}&select=${APPOINTMENT_SELECT}`,
       {
         method: "PATCH",
         headers: { Prefer: "return=representation" },
@@ -299,7 +386,7 @@ export async function PATCH(request: NextRequest) {
           dataHoraInicio: startDate.toISOString(),
           dataHoraFim: endDate.toISOString(),
           professional_id: professionalId,
-          chat_id: chatId,
+          chat_id: chat.id,
           observacoes: observations || null,
         }),
       },
@@ -326,6 +413,7 @@ export async function DELETE(request: NextRequest) {
     }
     const allowedIds = context.allowedProfessionals.map((professional) => professional.id_profissional).filter(Boolean);
     const filter = professionalId ? `id=eq.${id}&professional_id=eq.${professionalId}` : `id=eq.${id}&professional_id=in.(${allowedIds.join(",")})`;
+    await supabaseRequest(`professional_agenda_bookings?appointment_id=eq.${encodeURIComponent(id)}`, { method: "DELETE" });
     await supabaseRequest(`appointments?${filter}`, { method: "DELETE" });
     return NextResponse.json({ id, message: "Agendamento excluido." });
   } catch (error) {

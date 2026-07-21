@@ -132,15 +132,16 @@ function getProcedureInterestKeys(
 
 export async function GET(request: NextRequest) {
   try {
-    const role = normalizeUserRole(request.nextUrl.searchParams.get("role"));
+    const rawRole = request.nextUrl.searchParams.get("role");
     const email = getString(request.nextUrl.searchParams.get("email")).toLowerCase();
+    const role = !rawRole && !email ? "admin" : normalizeUserRole(rawRole);
     const requestedProfessionalId = getString(request.nextUrl.searchParams.get("professionalId"));
 
     const [professionals, statuses, types, chats, tags] = await Promise.all([
       getProfessionals(),
       selectRows<StatusRow>("appointment_status", { select: "id,status,hex", order: "status.asc", limit: 1000 }),
       selectRows<TypeRow>("appointment_procedure_type", { select: "id,tipo", order: "tipo.asc", limit: 1000 }),
-      selectRows<ChatRow>("chats", { select: "id,nome_contato,phone_contact,chat_id,json_interesses", order: "last_message_time.desc", limit: 1000 }),
+      selectRows<ChatRow>("chats", { select: "id,nome_contato,phone_contact,chat_id,json_interesses", archived: "is.false", order: "last_message_time.desc", limit: 1000 }),
       selectRows<TagRow>("tags", { select: "id,airtable_record_id,label", status: "eq.active", limit: 1000 }),
     ]);
 

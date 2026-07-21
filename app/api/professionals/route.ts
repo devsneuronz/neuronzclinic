@@ -8,6 +8,7 @@ function getString(value: unknown) {
 }
 
 type LinkedExpertise = {
+  id_professional: string;
   especialidade?: {
     id: string;
     especialidade: string;
@@ -15,6 +16,7 @@ type LinkedExpertise = {
 };
 
 type LinkedProcedure = {
+  id_professional: string;
   procedimentos?: {
     id: string;
     nome: string;
@@ -22,19 +24,20 @@ type LinkedProcedure = {
 };
 
 type ProfessionalRow = {
-  id_profissional: string;
-  nome: string | null;
+  id: string;
+  legacy_professional_id: string | null;
+  airtable_record_id: string | null;
+  name: string | null;
   email: string | null;
-  cidade: string | null;
-  cpf: string | null;
-  doencas_atendidas: string | null;
+  city: string | null;
+  tax_id: string | null;
+  treated_conditions: string | null;
   user_id: string | null;
+  status: string | null;
   users?: {
     name: string | null;
     email: string | null;
   } | null;
-  professional_especialidades?: LinkedExpertise[];
-  professional_procedimentos?: LinkedProcedure[];
 };
 
 type UserRow = {
@@ -54,6 +57,15 @@ type SupabaseUserRef = {
   id: string;
 };
 
+type ProfessionalPayload = {
+  name: string;
+  email: string;
+  city: string;
+  taxId: string;
+  treatedConditions: string;
+  userId: string | null;
+};
+
 async function supabaseRequest(path: string, init?: RequestInit) {
   if (!SUPABASE_REST_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error("Missing Supabase REST configuration for professionals. Add SUPABASE_SERVICE_ROLE_KEY to .env.local and restart the dev server.");
@@ -69,26 +81,6 @@ async function supabaseRequest(path: string, init?: RequestInit) {
     },
     cache: "no-store",
   });
-}
-
-async function getAirtableUsers(origin: string) {
-  try {
-    const response = await fetch(`${origin}/api/airtable/users`, { cache: "no-store" });
-    if (!response.ok) return [];
-
-    const payload = (await response.json()) as { users?: Array<{ id?: string; name?: string; email?: string }> };
-
-    return (payload.users ?? [])
-      .filter((user) => user.id && user.email)
-      .map((user) => ({
-        id: user.id as string,
-        name: user.name || user.email || "Usuario",
-        email: user.email || "",
-        source: "airtable" as const,
-      }));
-  } catch {
-    return [];
-  }
 }
 
 async function findSupabaseUserByEmail(email: string) {
@@ -136,39 +128,175 @@ async function ensureSupabaseUserByEmail(email: string, name: string) {
   return null;
 }
 
-export async function GET(request: NextRequest) {
-  try {
-    const select = ["*", "users:user_id(id,name,email)", "professional_especialidades(especialidade:id_especialidade(id,especialidade))", "professional_procedimentos(procedimentos:id_procedimento(id,nome))"].join(",");
+function getLegacyProfessionalId(professional: Pick<ProfessionalRow, "id" | "legacy_professional_id">) {
+  return professional.legacy_professional_id || professional.id;
+}
 
-    const [response, usersResponse] = await Promise.all([supabaseRequest(`professional?select=${select}&order=created_at.desc`), supabaseRequest("users?select=id,name,email&order=name.asc")]);
+function mapProfessional(
+  prof: ProfessionalRow,
+  expertisesByProfessionalId: Map<string, LinkedExpertise[]>,
+  proceduresByProfessionalId: Map<string, LinkedProcedure[]>,
+) {
+  const isUser = !!prof.users;
+  const name = isUser ? prof.users?.name || prof.name : prof.name;
+  const email = isUser ? prof.users?.email || prof.email : prof.email;
+  const legacyProfessionalId = getLegacyProfessionalId(prof);
+
+  const expertises = (expertisesByProfessionalId.get(legacyProfessionalId) || []).map((pe) => pe.especialidade).filter(Boolean);
+  const procedures = (proceduresByProfessionalId.get(legacyProfessionalId) || []).map((pp) => pp.procedimentos).filter(Boolean);
+
+  return {
+    id: prof.id,
+    legacy_professional_id: legacyProfessionalId,
+    airtable_record_id: prof.airtable_record_id,
+    email: email || "",
+    name: name || "",
+    cidade: prof.city || "",
+    cpf: prof.tax_id || "",
+    doencas_atendidas: prof.treated_conditions || "",
+    user_id: prof.user_id,
+    status: prof.status || "active",
+    expertises,
+    procedures,
+  };
+}
+
+async function getProfessionalLinks(professionalIds: string[]) {
+  if (professionalIds.length === 0) {
+    return {
+      expertisesByProfessionalId: new Map<string, LinkedExpertise[]>(),
+      proceduresByProfessionalId: new Map<string, LinkedProcedure[]>(),
+    };
+  }
+
+  const filter = professionalIds.map(encodeURIComponent).join(",");
+  const [expertisesResponse, proceduresResponse] = await Promise.all([
+    supabaseRequest(`professional_especialidades?select=id_professional,especialidade:id_especialidade(id,especialidade)&id_professional=in.(${filter})`),
+    supabaseRequest(`professional_procedimentos?select=id_professional,procedimentos:id_procedimento(id,nome)&id_professional=in.(${filter})`),
+  ]);
+
+  const expertises = expertisesResponse.ok ? ((await expertisesResponse.json()) as LinkedExpertise[]) : [];
+  const procedures = proceduresResponse.ok ? ((await proceduresResponse.json()) as LinkedProcedure[]) : [];
+  const expertisesByProfessionalId = new Map<string, LinkedExpertise[]>();
+  const proceduresByProfessionalId = new Map<string, LinkedProcedure[]>();
+
+  for (const expertise of expertises) {
+    const list = expertisesByProfessionalId.get(expertise.id_professional) || [];
+    list.push(expertise);
+    expertisesByProfessionalId.set(expertise.id_professional, list);
+  }
+
+  for (const procedure of procedures) {
+    const list = proceduresByProfessionalId.get(procedure.id_professional) || [];
+    list.push(procedure);
+    proceduresByProfessionalId.set(procedure.id_professional, list);
+  }
+
+  return { expertisesByProfessionalId, proceduresByProfessionalId };
+}
+
+async function resolveUserId(payload: ProfessionalPayload, linkedUserSource: string) {
+  if (payload.userId) return findSupabaseUserById(payload.userId);
+  if (linkedUserSource === "airtable" && payload.email) return ensureSupabaseUserByEmail(payload.email, payload.name);
+  if (payload.email) return findSupabaseUserByEmail(payload.email);
+  return null;
+}
+
+function getProfessionalPayload(body: Record<string, unknown>, userId: string | null): ProfessionalPayload {
+  return {
+    name: getString(body.nome),
+    email: getString(body.email),
+    city: getString(body.cidade),
+    taxId: getString(body.cpf),
+    treatedConditions: getString(body.doencas_atendidas),
+    userId,
+  };
+}
+
+async function mirrorLegacyProfessional(professionalId: string, payload: ProfessionalPayload) {
+  const body = {
+    id_profissional: professionalId,
+    nome: payload.userId ? null : payload.name,
+    email: payload.userId ? null : payload.email,
+    cidade: payload.city || null,
+    cpf: payload.taxId || null,
+    doencas_atendidas: payload.treatedConditions || null,
+    user_id: payload.userId,
+  };
+
+  const response = await supabaseRequest("professional?on_conflict=id_profissional&select=id_profissional", {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=representation",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) throw new Error(await response.text());
+
+  await supabaseRequest(`professionals?id=eq.${encodeURIComponent(professionalId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ legacy_professional_id: professionalId }),
+  });
+}
+
+async function replaceProfessionalLinks(professionalId: string, expertises: unknown[], procedures: unknown[]) {
+  await supabaseRequest(`professional_especialidades?id_professional=eq.${encodeURIComponent(professionalId)}`, {
+    method: "DELETE",
+  });
+
+  if (expertises.length > 0) {
+    const expertisePayload = expertises
+      .map((id_especialidade) => (typeof id_especialidade === "string" ? id_especialidade : ""))
+      .filter(Boolean)
+      .map((id_especialidade) => ({
+        id_professional: professionalId,
+        id_especialidade,
+      }));
+
+    if (expertisePayload.length > 0) {
+      await supabaseRequest("professional_especialidades", {
+        method: "POST",
+        body: JSON.stringify(expertisePayload),
+      });
+    }
+  }
+
+  await supabaseRequest(`professional_procedimentos?id_professional=eq.${encodeURIComponent(professionalId)}`, {
+    method: "DELETE",
+  });
+
+  if (procedures.length > 0) {
+    const procedurePayload = procedures
+      .map((id_procedimento) => (typeof id_procedimento === "string" ? id_procedimento : ""))
+      .filter(Boolean)
+      .map((id_procedimento) => ({
+        id_professional: professionalId,
+        id_procedimento,
+      }));
+
+    if (procedurePayload.length > 0) {
+      await supabaseRequest("professional_procedimentos", {
+        method: "POST",
+        body: JSON.stringify(procedurePayload),
+      });
+    }
+  }
+}
+
+export async function GET() {
+  try {
+    const select = "id,legacy_professional_id,airtable_record_id,name,email,city,tax_id,treated_conditions,user_id,status,users:user_id(id,name,email)";
+    const [response, usersResponse] = await Promise.all([supabaseRequest(`professionals?select=${select}&order=created_at.desc`), supabaseRequest("users?select=id,name,email&order=name.asc")]);
 
     if (!response.ok) {
       return NextResponse.json({ message: await response.text() }, { status: response.status });
     }
 
     const data = (await response.json()) as ProfessionalRow[];
-
-    const professionals = data.map((prof) => {
-      const isUser = !!prof.users;
-      const name = isUser ? prof.users?.name || prof.nome : prof.nome;
-      const email = isUser ? prof.users?.email || prof.email : prof.email;
-
-      const expertises = (prof.professional_especialidades || []).map((pe) => pe.especialidade).filter(Boolean);
-
-      const procedures = (prof.professional_procedimentos || []).map((pp) => pp.procedimentos).filter(Boolean);
-
-      return {
-        id: prof.id_profissional,
-        email: email || "",
-        name: name || "",
-        cidade: prof.cidade || "",
-        cpf: prof.cpf || "",
-        doencas_atendidas: prof.doencas_atendidas || "",
-        user_id: prof.user_id,
-        expertises,
-        procedures,
-      };
-    });
+    const legacyIds = Array.from(new Set(data.map(getLegacyProfessionalId).filter(Boolean)));
+    const { expertisesByProfessionalId, proceduresByProfessionalId } = await getProfessionalLinks(legacyIds);
+    const professionals = data.map((prof) => mapProfessional(prof, expertisesByProfessionalId, proceduresByProfessionalId));
 
     const supabaseUsers: ProfessionalUserOption[] = usersResponse.ok
       ? ((await usersResponse.json()) as UserRow[]).map((user) => ({
@@ -179,13 +307,11 @@ export async function GET(request: NextRequest) {
         }))
       : [];
 
-    const supabaseEmails = new Set(supabaseUsers.map((user) => user.email.trim().toLowerCase()).filter(Boolean));
-    const airtableUsers = (await getAirtableUsers(request.nextUrl.origin)).filter((user) => !supabaseEmails.has(user.email.trim().toLowerCase()));
-    const users = [...supabaseUsers, ...airtableUsers].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    const users = supabaseUsers.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
     return NextResponse.json({ professionals, users });
   } catch (error) {
-    return NextResponse.json({ message: error instanceof Error ? error.message : "Não foi possível carregar os profissionais." }, { status: 500 });
+    return NextResponse.json({ message: error instanceof Error ? error.message : "Nao foi possivel carregar os profissionais." }, { status: 500 });
   }
 }
 
@@ -193,84 +319,59 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== "object") {
-      return NextResponse.json({ message: "Payload inválido." }, { status: 400 });
+      return NextResponse.json({ message: "Payload invalido." }, { status: 400 });
     }
 
-    const email = getString(body.email);
-    const nome = getString(body.nome);
-    const cidade = getString(body.cidade);
-    const cpf = getString(body.cpf);
-    const doencas_atendidas = getString(body.doencas_atendidas);
     const requestedUserId = getString(body.user_id);
     const linkedUserSource = getString(body.linked_user_source);
-    const expertises = Array.isArray(body.expertises) ? body.expertises : []; // IDs of specialties
-    const procedures = Array.isArray(body.procedures) ? body.procedures : []; // IDs of procedures
+    const userId = await resolveUserId(
+      {
+        name: getString(body.nome),
+        email: getString(body.email),
+        city: getString(body.cidade),
+        taxId: getString(body.cpf),
+        treatedConditions: getString(body.doencas_atendidas),
+        userId: requestedUserId || null,
+      },
+      linkedUserSource,
+    );
+    const payload = getProfessionalPayload(body as Record<string, unknown>, userId);
+    const expertises = Array.isArray(body.expertises) ? body.expertises : [];
+    const procedures = Array.isArray(body.procedures) ? body.procedures : [];
 
-    if (!email && !requestedUserId) {
-      return NextResponse.json({ message: "O e-mail é obrigatório." }, { status: 400 });
+    if (!payload.email && !requestedUserId) {
+      return NextResponse.json({ message: "O e-mail e obrigatorio." }, { status: 400 });
     }
 
-    let user_id: string | null = null;
-    if (requestedUserId) {
-      user_id = await findSupabaseUserById(requestedUserId);
-    } else if (linkedUserSource === "airtable" && email) {
-      user_id = await ensureSupabaseUserByEmail(email, nome);
-    } else {
-      user_id = await findSupabaseUserByEmail(email);
-    }
-
-    const professionalPayload = {
-      nome: user_id ? null : nome,
-      email: user_id ? null : email,
-      cidade: cidade || null,
-      cpf: cpf || null,
-      doencas_atendidas: doencas_atendidas || null,
-      user_id: user_id,
-    };
-
-    const profResponse = await supabaseRequest("professional?select=*", {
+    const profResponse = await supabaseRequest("professionals?select=*", {
       method: "POST",
       headers: {
         Prefer: "return=representation",
       },
-      body: JSON.stringify(professionalPayload),
+      body: JSON.stringify({
+        name: payload.userId ? "" : payload.name,
+        email: payload.userId ? null : payload.email,
+        city: payload.city || null,
+        tax_id: payload.taxId || null,
+        treated_conditions: payload.treatedConditions || null,
+        user_id: payload.userId,
+        status: "active",
+        source: "supabase",
+      }),
     });
 
     if (!profResponse.ok) {
       return NextResponse.json({ message: await profResponse.text() }, { status: profResponse.status });
     }
 
-    const profData = await profResponse.json();
+    const profData = (await profResponse.json()) as ProfessionalRow[];
     const newProf = profData[0];
-    const id_profissional = newProf.id_profissional;
-
-    if (expertises.length > 0) {
-      const expertisePayload = expertises.map((id_especialidade: string) => ({
-        id_professional: id_profissional,
-        id_especialidade,
-      }));
-
-      await supabaseRequest("professional_especialidades", {
-        method: "POST",
-        body: JSON.stringify(expertisePayload),
-      });
-    }
-
-    if (procedures.length > 0) {
-      const procedurePayload = procedures.map((id_procedimento: string) => ({
-        id_professional: id_profissional,
-        id_procedimento,
-      }));
-
-      await supabaseRequest("professional_procedimentos", {
-        method: "POST",
-        body: JSON.stringify(procedurePayload),
-      });
-    }
+    await mirrorLegacyProfessional(newProf.id, payload);
+    await replaceProfessionalLinks(newProf.id, expertises, procedures);
 
     return NextResponse.json({ success: true, professional: newProf });
   } catch (error) {
-    return NextResponse.json({ message: error instanceof Error ? error.message : "Não foi possível salvar o profissional." }, { status: 500 });
+    return NextResponse.json({ message: error instanceof Error ? error.message : "Nao foi possivel salvar o profissional." }, { status: 500 });
   }
 }
 
@@ -278,131 +379,105 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== "object") {
-      return NextResponse.json({ message: "Payload inválido." }, { status: 400 });
-    }
-    const id_profissional = getString(body.id);
-    if (!id_profissional) {
-      return NextResponse.json({ message: "O ID do profissional é obrigatório para edição." }, { status: 400 });
+      return NextResponse.json({ message: "Payload invalido." }, { status: 400 });
     }
 
-    const email = getString(body.email);
-    const nome = getString(body.nome);
-    const cidade = getString(body.cidade);
-    const cpf = getString(body.cpf);
-    const doencas_atendidas = getString(body.doencas_atendidas);
+    const id = getString(body.id);
+    if (!id) {
+      return NextResponse.json({ message: "O ID do profissional e obrigatorio para edicao." }, { status: 400 });
+    }
+
     const requestedUserId = getString(body.user_id);
     const linkedUserSource = getString(body.linked_user_source);
+    const userId = await resolveUserId(
+      {
+        name: getString(body.nome),
+        email: getString(body.email),
+        city: getString(body.cidade),
+        taxId: getString(body.cpf),
+        treatedConditions: getString(body.doencas_atendidas),
+        userId: requestedUserId || null,
+      },
+      linkedUserSource,
+    );
+    const payload = getProfessionalPayload(body as Record<string, unknown>, userId);
     const expertises = Array.isArray(body.expertises) ? body.expertises : [];
     const procedures = Array.isArray(body.procedures) ? body.procedures : [];
 
-    let user_id: string | null = null;
-    if (requestedUserId) {
-      user_id = await findSupabaseUserById(requestedUserId);
-    } else if (linkedUserSource === "airtable" && email) {
-      user_id = await ensureSupabaseUserByEmail(email, nome);
-    } else if (email) {
-      user_id = await findSupabaseUserByEmail(email);
-    }
-
-    const professionalPayload = {
-      nome: user_id ? null : nome,
-      email: user_id ? null : email,
-      cidade: cidade || null,
-      cpf: cpf || null,
-      doencas_atendidas: doencas_atendidas || null,
-      user_id: user_id,
-    };
-
-    const profResponse = await supabaseRequest(`professional?id_profissional=eq.${id_profissional}`, {
+    const profResponse = await supabaseRequest(`professionals?id=eq.${encodeURIComponent(id)}&select=*`, {
       method: "PATCH",
       headers: {
         Prefer: "return=representation",
       },
-      body: JSON.stringify(professionalPayload),
+      body: JSON.stringify({
+        name: payload.userId ? "" : payload.name,
+        email: payload.userId ? null : payload.email,
+        city: payload.city || null,
+        tax_id: payload.taxId || null,
+        treated_conditions: payload.treatedConditions || null,
+        user_id: payload.userId,
+      }),
     });
 
     if (!profResponse.ok) {
       return NextResponse.json({ message: await profResponse.text() }, { status: profResponse.status });
     }
 
-    const profData = await profResponse.json();
+    const profData = (await profResponse.json()) as ProfessionalRow[];
     const updatedProf = profData[0];
+    if (!updatedProf) return NextResponse.json({ message: "Profissional nao encontrado." }, { status: 404 });
 
-    await supabaseRequest(`professional_especialidades?id_professional=eq.${id_profissional}`, {
-      method: "DELETE",
-    });
-
-    if (expertises.length > 0) {
-      const expertisePayload = expertises.map((id_especialidade: string) => ({
-        id_professional: id_profissional,
-        id_especialidade,
-      }));
-
-      await supabaseRequest("professional_especialidades", {
-        method: "POST",
-        body: JSON.stringify(expertisePayload),
-      });
-    }
-
-    await supabaseRequest(`professional_procedimentos?id_professional=eq.${id_profissional}`, {
-      method: "DELETE",
-    });
-
-    if (procedures.length > 0) {
-      const procedurePayload = procedures.map((id_procedimento: string) => ({
-        id_professional: id_profissional,
-        id_procedimento,
-      }));
-
-      await supabaseRequest("professional_procedimentos", {
-        method: "POST",
-        body: JSON.stringify(procedurePayload),
-      });
-    }
+    const legacyProfessionalId = getLegacyProfessionalId(updatedProf);
+    await mirrorLegacyProfessional(legacyProfessionalId, payload);
+    await replaceProfessionalLinks(legacyProfessionalId, expertises, procedures);
 
     return NextResponse.json({ success: true, professional: updatedProf });
   } catch (error) {
-    return NextResponse.json({ message: error instanceof Error ? error.message : "Não foi possível atualizar o profissional." }, { status: 500 });
+    return NextResponse.json({ message: error instanceof Error ? error.message : "Nao foi possivel atualizar o profissional." }, { status: 500 });
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    const id_profissional = request.nextUrl.searchParams.get("id");
+    const id = request.nextUrl.searchParams.get("id");
 
-    if (!id_profissional) {
-      return NextResponse.json({ message: "O ID do profissional é obrigatório para exclusão." }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ message: "O ID do profissional e obrigatorio para exclusao." }, { status: 400 });
     }
 
-    console.log("Deletando profissional ID:", id_profissional);
+    const profResponse = await supabaseRequest(`professionals?id=eq.${encodeURIComponent(id)}&select=id,legacy_professional_id`);
+    if (!profResponse.ok) return NextResponse.json({ message: await profResponse.text() }, { status: profResponse.status });
 
-    const espRes = await supabaseRequest(`professional_especialidades?id_professional=eq.${id_profissional}`, {
-      method: "DELETE",
-    });
-    if (!espRes.ok) {
-      console.error("Erro ao deletar especialidades do profissional:", await espRes.text());
-    }
+    const rows = (await profResponse.json()) as ProfessionalRow[];
+    const professional = rows[0];
+    const legacyProfessionalId = professional ? getLegacyProfessionalId(professional) : id;
 
-    const procRes = await supabaseRequest(`professional_procedimentos?id_professional=eq.${id_profissional}`, {
-      method: "DELETE",
-    });
-    if (!procRes.ok) {
-      console.error("Erro ao deletar procedimentos do profissional:", await procRes.text());
-    }
-
-    const response = await supabaseRequest(`professional?id_profissional=eq.${id_profissional}`, {
+    await supabaseRequest(`professional_especialidades?id_professional=eq.${encodeURIComponent(legacyProfessionalId)}`, {
       method: "DELETE",
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("Erro ao deletar profissional no Supabase:", errText);
-      return NextResponse.json({ message: errText }, { status: response.status });
+    await supabaseRequest(`professional_procedimentos?id_professional=eq.${encodeURIComponent(legacyProfessionalId)}`, {
+      method: "DELETE",
+    });
+
+    const deleteProfessionalResponse = await supabaseRequest(`professionals?id=eq.${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+
+    if (!deleteProfessionalResponse.ok) {
+      return NextResponse.json({ message: await deleteProfessionalResponse.text() }, { status: deleteProfessionalResponse.status });
+    }
+
+    const deleteLegacyResponse = await supabaseRequest(`professional?id_profissional=eq.${encodeURIComponent(legacyProfessionalId)}`, {
+      method: "DELETE",
+    });
+
+    if (!deleteLegacyResponse.ok) {
+      return NextResponse.json({ message: await deleteLegacyResponse.text() }, { status: deleteLegacyResponse.status });
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Erro na rota DELETE /api/professionals:", error);
-    return NextResponse.json({ message: error instanceof Error ? error.message : "Não foi possível excluir o profissional." }, { status: 500 });
+    return NextResponse.json({ message: error instanceof Error ? error.message : "Nao foi possivel excluir o profissional." }, { status: 500 });
   }
 }
