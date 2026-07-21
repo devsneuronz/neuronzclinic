@@ -34,6 +34,12 @@ function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function getSupabaseTemplateMarker(value: unknown) {
+  const text = getString(value);
+  const match = text.match(/^supabase_template:([0-9a-f-]{36})$/i);
+  return match?.[1] ?? "";
+}
+
 function isSameOriginRequest(request: Request) {
   const origin = request.headers.get("origin");
   const host = request.headers.get("host");
@@ -220,6 +226,7 @@ async function fetchRoutines(): Promise<Routine[]> {
       .map((process, index) => {
         const processFields = process.fields ?? {};
         const type = getActionType(getStringField(processFields, "Tipo"));
+        const templateId = getRecordIds(processFields, "Template_mensagem")[0] || getSupabaseTemplateMarker(processFields.Assunto);
         const description = getStringField(processFields, "Descrição");
 
         return {
@@ -231,10 +238,10 @@ async function fetchRoutines(): Promise<Routine[]> {
           intervalLabel: getStringField(processFields, "Intervalo"),
           order: Number(processFields.ordem) || index,
           responsibleUserId: getRecordIds(processFields, "Responsavel")[0] || "",
-          subject: getStringField(processFields, "Assunto"),
+          subject: templateId ? "" : getStringField(processFields, "Assunto"),
           message: type === "send_message" ? description : "",
           notes: type === "send_message" ? "" : description,
-          templateId: getRecordIds(processFields, "Template_mensagem")[0] || "",
+          templateId,
           tagId: getRecordIds(processFields, "Tags")[0] || "",
         };
       })

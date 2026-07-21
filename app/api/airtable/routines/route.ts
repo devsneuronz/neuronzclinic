@@ -80,6 +80,12 @@ function getFirstArrayString(fields: Record<string, unknown>, candidates: string
   return "";
 }
 
+function getSupabaseTemplateMarker(value: unknown) {
+  const text = getString(value);
+  const match = text.match(/^supabase_template:([0-9a-f-]{36})$/i);
+  return match?.[1] ?? "";
+}
+
 function getBooleanField(fields: Record<string, unknown>, candidates: string[], fallback: boolean) {
   for (const candidate of candidates) {
     const value = fields[candidate];
@@ -224,6 +230,8 @@ function mapProcessRecord(record: AirtableRecord): RoutineAction {
   const fields = record.fields ?? {};
   const type = normalizeActionType(getStringField(fields, ["Tipo"]));
   const label = getStringField(fields, ["Tipo"]) || actionLabels[type];
+  const linkedTemplateId = getRecordIds(fields, ["Template_mensagem"])[0] || "";
+  const supabaseTemplateId = getSupabaseTemplateMarker(fields.Assunto);
   const description = getStringField(fields, ["Descrição", "Descricao"]);
 
   return {
@@ -235,10 +243,10 @@ function mapProcessRecord(record: AirtableRecord): RoutineAction {
     intervalLabel: getStringField(fields, ["Intervalo"]),
     order: getNumber(fields.ordem),
     responsibleUserId: getRecordIds(fields, ["Responsavel", "Responsável"])[0] || "",
-    subject: getStringField(fields, ["Assunto"]),
+    subject: supabaseTemplateId ? "" : getStringField(fields, ["Assunto"]),
     message: type === "send_message" ? description : "",
     notes: type === "send_message" ? "" : description,
-    templateId: getRecordIds(fields, ["Template_mensagem"])[0] || "",
+    templateId: linkedTemplateId || supabaseTemplateId,
     templateLabel: getFirstArrayString(fields, ["Template"]),
     tagId: getRecordIds(fields, ["Tags"])[0] || "",
     tagLabel: getFirstArrayString(fields, ["nome_tag"]),
@@ -342,11 +350,12 @@ function getRoutineFields(payload: RoutinePayload) {
 
 function getProcessFields(action: RoutineAction, routineId: string, index: number) {
   const isMessageAction = action.type === "send_message";
+  const hasSupabaseTemplate = isMessageAction && /^[0-9a-f-]{36}$/i.test(action.templateId || "");
   const fields: Record<string, unknown> = {
     Rotina: [routineId],
     Tipo: getAirtableActionType(action.type),
     ordem: index,
-    Assunto: action.subject || "",
+    Assunto: hasSupabaseTemplate ? `supabase_template:${action.templateId}` : action.subject || "",
     "Descrição": isMessageAction ? action.message || "" : action.notes || "",
     ...getIntervalFields(action),
   };

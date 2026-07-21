@@ -7,12 +7,21 @@ const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KE
 const TASK_TABLE = process.env.AIRTABLE_TASKS_TABLE || "Encaminhamentos";
 const CONTACTS_TABLE = process.env.AIRTABLE_CONTACTS_TABLE || "Contatos";
 const MESSAGE_TEMPLATES_TABLE = process.env.AIRTABLE_MESSAGE_TEMPLATES_TABLE || "Templates mensagens";
+const MESSAGE_TEMPLATES_READ_SOURCE = process.env.MESSAGE_TEMPLATES_READ_SOURCE || "supabase";
 const TEMPLATE_CONTENT_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_CONTENT_FIELDS, ["Mensagem", "Conteudo", "Conteúdo", "Texto", "Message", "Content"]);
 const TEMPLATE_MEDIA_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_MEDIA_FIELDS, ["Midia", "Mídia", "Media"]);
 const SEND_MESSAGE_WEBHOOK_URL = process.env.SEND_MESSAGE_WEBHOOK_URL || "https://n8n.srv1150529.hstgr.cloud/webhook/send-message";
 const ROUTINES_WEBHOOK_SECRET = process.env.ROUTINES_WEBHOOK_SECRET;
 
 type RawRecord = Record<string, unknown>;
+type SupabaseTemplateRecord = {
+  content: string | null;
+  media: {
+    url?: string;
+    fileName?: string;
+    mimeType?: string;
+  } | null;
+};
 
 function splitFields(value: string | undefined, fallback: string[]) {
   return (
@@ -171,6 +180,29 @@ async function fetchAirtableRecordById(table: string, id: string) {
   return airtableRequest(table, `/${encodeURIComponent(id)}`) as Promise<{ id: string; fields?: RawRecord }>;
 }
 
+async function fetchSupabaseTemplateById(templateId: string) {
+  const idFilter = /^rec[a-zA-Z0-9]+$/.test(templateId) ? `airtable_record_id=eq.${encodeURIComponent(templateId)}` : `id=eq.${encodeURIComponent(templateId)}`;
+  const templates = (await supabaseRequest(
+    `message_templates?select=content,media&${idFilter}&is_active=is.true&deleted_at=is.null&limit=1`,
+  )) as SupabaseTemplateRecord[] | null;
+  const template = templates?.[0];
+
+  if (!template) return null;
+
+  const media = template.media?.url
+    ? {
+        url: getString(template.media.url),
+        fileName: getString(template.media.fileName) || "midia",
+        mimeType: getString(template.media.mimeType) || "application/octet-stream",
+      }
+    : null;
+
+  return {
+    content: getString(template.content),
+    media,
+  };
+}
+
 function onlyDigits(value: string) {
   return value.replace(/\D/g, "");
 }
@@ -278,6 +310,16 @@ async function createTask(run: RawRecord, action: RawRecord, type: "Aviso" | "Ta
 }
 
 async function fetchTemplate(templateId: string) {
+  if (MESSAGE_TEMPLATES_READ_SOURCE === "supabase") {
+    const template = await fetchSupabaseTemplateById(templateId);
+
+    if (!template?.content && !template?.media) {
+      throw new Error(`Template de mensagem sem conteudo ou midia configurada no Supabase: ${templateId}.`);
+    }
+
+    return template;
+  }
+
   const template = await fetchAirtableRecordById(MESSAGE_TEMPLATES_TABLE, templateId);
   const fields = template.fields ?? {};
   const content = getStringField(fields, TEMPLATE_CONTENT_FIELDS);
