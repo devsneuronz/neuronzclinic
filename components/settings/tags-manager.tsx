@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { getReadableTextColor, type ChatTag } from "@/lib/chat-tags";
 import { Check, Info, Loader2, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -40,6 +41,7 @@ async function readApiError(response: Response, fallback: string) {
 }
 
 export function TagsManager() {
+  const { user } = useCurrentUser();
   const [tags, setTags] = useState<EditableTag[]>([]);
   const [sectors, setSectors] = useState<TagSectorRecord[]>([]);
   const [newLabel, setNewLabel] = useState("");
@@ -51,6 +53,15 @@ export function TagsManager() {
 
   const sortedTags = useMemo(() => tags.slice().sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" })), [tags]);
   const sectorTagIds = useMemo(() => new Set(sectors.flatMap((sector) => (Array.isArray(sector.tagIds) ? sector.tagIds : []))), [sectors]);
+  const userEmail = user?.email ?? "";
+  const userRole = user?.role ?? "user";
+  const accessPayload = useMemo(() => ({ email: userEmail, role: userRole }), [userEmail, userRole]);
+  const accessQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (userEmail) params.set("email", userEmail);
+    if (userRole) params.set("role", userRole);
+    return params.toString();
+  }, [userEmail, userRole]);
 
   async function loadTags() {
     setIsLoading(true);
@@ -115,7 +126,7 @@ export function TagsManager() {
       const response = await fetch("/api/airtable/tags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label, color: newColor }),
+        body: JSON.stringify({ label, color: newColor, ...accessPayload }),
       });
 
       if (!response.ok) throw new Error(await readApiError(response, "Nao foi possivel criar a tag."));
@@ -154,7 +165,7 @@ export function TagsManager() {
       const response = await fetch(`/api/airtable/tags?id=${encodeURIComponent(tag.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label, color: tag.draftColor }),
+        body: JSON.stringify({ label, color: tag.draftColor, ...accessPayload }),
       });
 
       if (!response.ok) throw new Error(await readApiError(response, "Nao foi possivel atualizar a tag."));
@@ -176,7 +187,7 @@ export function TagsManager() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/airtable/tags?id=${encodeURIComponent(tag.id)}`, {
+      const response = await fetch(`/api/airtable/tags?id=${encodeURIComponent(tag.id)}${accessQuery ? `&${accessQuery}` : ""}`, {
         method: "DELETE",
       });
 

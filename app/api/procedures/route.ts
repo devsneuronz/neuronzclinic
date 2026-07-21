@@ -1,9 +1,39 @@
+import { isFallbackAdminEmail, normalizeUserRole } from "@/lib/user-roles";
 import { NextRequest, NextResponse } from "next/server";
 
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 type RawProcedure = Record<string, unknown>;
+
+type SupabaseTagRow = {
+  id: string;
+  airtable_record_id: string | null;
+  label: string;
+};
+
+const DEFAULT_SELECT = [
+  "id",
+  "status",
+  "nome",
+  "modo_resposta_ia",
+  "info_resposta_ia",
+  "modo_agendamento_ia",
+  "modalidade",
+  "informar_valor_avaliacao",
+  "informar_valor_consulta",
+  "informar_valor_procedimento",
+  "valor_avaliacao",
+  "valor_consulta",
+  "valor_procedimento",
+  "agendas_contexto_ia",
+  "regra_multiplos_profissionais",
+  "config_agendamento_contexto_ia",
+  "interest_tag_id",
+  "interesse",
+  "created_at"
+].join(",");
+const ALLOWED_SELECT_FIELDS = new Set(DEFAULT_SELECT.split(","));
 
 function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -12,6 +42,39 @@ function getString(value: unknown) {
 function getNullableString(value: unknown) {
   const text = getString(value);
   return text || null;
+}
+
+function normalizeText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function getViewer(request: NextRequest, body?: RawProcedure | null) {
+  const role = normalizeUserRole(request.nextUrl.searchParams.get("role") ?? body?.role);
+  const email = getString(request.nextUrl.searchParams.get("email") ?? body?.email).toLowerCase();
+  return { role, email };
+}
+
+function requireAdmin(request: NextRequest, body?: RawProcedure | null) {
+  const viewer = getViewer(request, body);
+  if (viewer.role !== "admin" && !isFallbackAdminEmail(viewer.email)) {
+    return NextResponse.json({ message: "Apenas administradores podem alterar procedimentos." }, { status: 403 });
+  }
+  return null;
+}
+
+function getAllowedSelect(fields: string) {
+  if (!fields) return DEFAULT_SELECT;
+
+  const requested = fields
+    .split(",")
+    .map((field) => field.trim())
+    .filter((field) => ALLOWED_SELECT_FIELDS.has(field));
+
+  return requested.length > 0 ? requested.join(",") : DEFAULT_SELECT;
 }
 
 async function supabaseRequest(path: string, init?: RequestInit) {
@@ -31,33 +94,44 @@ async function supabaseRequest(path: string, init?: RequestInit) {
   });
 }
 
+async function resolveInterestTag(body: RawProcedure) {
+  const requestedId = getString(body.interest_tag_id);
+  const requestedLabel = getString(body.interesse);
+
+  if ("interest_tag_id" in body && !requestedId) {
+    return { interest_tag_id: null, interesse: requestedLabel || null };
+  }
+
+  if (!requestedId && !requestedLabel) {
+    return { interest_tag_id: null, interesse: null };
+  }
+
+  const response = await supabaseRequest("tags?select=id,airtable_record_id,label&status=eq.active&limit=1000");
+  if (!response.ok) throw new Error(await response.text());
+
+  const rows = (await response.json()) as SupabaseTagRow[];
+  const normalizedLabel = normalizeText(requestedLabel);
+  const tag = rows.find((row) => {
+    if (requestedId && (row.id === requestedId || row.airtable_record_id === requestedId)) return true;
+    return Boolean(normalizedLabel && normalizeText(row.label) === normalizedLabel);
+  });
+
+  if (!tag && requestedId) {
+    throw new Error("Tag de interesse nao encontrada no Supabase.");
+  }
+
+  return {
+    interest_tag_id: tag?.id ?? null,
+    interesse: tag?.label ?? (requestedLabel || null),
+  };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const id = getString(request.nextUrl.searchParams.get("id"));
     const fields = getString(request.nextUrl.searchParams.get("fields"));
 
-    const defaultSelect = [
-      "id",
-      "status",
-      "nome",
-      "modo_resposta_ia",
-      "info_resposta_ia",
-      "modo_agendamento_ia",
-      "modalidade",
-      "informar_valor_avaliacao",
-      "informar_valor_consulta",
-      "informar_valor_procedimento",
-      "valor_avaliacao",
-      "valor_consulta",
-      "valor_procedimento",
-      "agendas_contexto_ia",
-      "regra_multiplos_profissionais",
-      "config_agendamento_contexto_ia",
-      "interesse",
-      "created_at"
-    ].join(",");
-
-    const select = fields || defaultSelect;
+    const select = getAllowedSelect(fields);
 
     if (id) {
       const response = await supabaseRequest(`procedimentos?select=${select}&id=eq.${encodeURIComponent(id)}`);
@@ -86,6 +160,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => null)) as RawProcedure | null;
+    const unauthorized = requireAdmin(request, body);
+    if (unauthorized) return unauthorized;
 
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       return NextResponse.json({ message: "Payload inválido." }, { status: 400 });
@@ -96,6 +172,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "O nome do procedimento é obrigatório." }, { status: 400 });
     }
 
+    const interest = await resolveInterestTag(body);
     const procedure = {
       nome,
       status: getNullableString(body.status) || "ativo",
@@ -112,7 +189,8 @@ export async function POST(request: NextRequest) {
       agendas_contexto_ia: getNullableString(body.agendas_contexto_ia),
       regra_multiplos_profissionais: getNullableString(body.regra_multiplos_profissionais),
       config_agendamento_contexto_ia: getNullableString(body.config_agendamento_contexto_ia),
-      interesse: getNullableString(body.interesse),
+      interest_tag_id: interest.interest_tag_id,
+      interesse: interest.interesse,
     };
 
     const response = await supabaseRequest("procedimentos?select=*", {
@@ -137,6 +215,8 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => null)) as RawProcedure | null;
+    const unauthorized = requireAdmin(request, body);
+    if (unauthorized) return unauthorized;
 
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       return NextResponse.json({ message: "Payload inválido." }, { status: 400 });
@@ -164,8 +244,7 @@ export async function PATCH(request: NextRequest) {
       "valor_procedimento",
       "agendas_contexto_ia",
       "regra_multiplos_profissionais",
-      "config_agendamento_contexto_ia",
-      "interesse"
+      "config_agendamento_contexto_ia"
     ];
 
     for (const field of textFields) {
@@ -176,6 +255,12 @@ export async function PATCH(request: NextRequest) {
 
     if ("nome" in patch && patch.nome === null) {
       return NextResponse.json({ message: "O nome não pode ser vazio." }, { status: 400 });
+    }
+
+    if ("interest_tag_id" in body || "interesse" in body) {
+      const interest = await resolveInterestTag(body);
+      patch.interest_tag_id = interest.interest_tag_id;
+      patch.interesse = interest.interesse;
     }
 
     if (Object.keys(patch).length === 0) {
@@ -209,6 +294,9 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const unauthorized = requireAdmin(request);
+    if (unauthorized) return unauthorized;
+
     const id = getString(request.nextUrl.searchParams.get("id"));
 
     if (!id) {

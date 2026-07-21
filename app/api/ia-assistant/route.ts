@@ -1,9 +1,13 @@
+import { isFallbackAdminEmail, normalizeUserRole } from "@/lib/user-roles";
 import { NextRequest, NextResponse } from "next/server";
 
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 type RawAssistant = Record<string, unknown>;
+
+const DEFAULT_SELECT = ["id", "name", "gender", "emoji", "dados_empresa", "msg_inicial", "estilo_conversa", "avisar_agendamento", "avisar_encaminhamento"].join(",");
+const ALLOWED_SELECT_FIELDS = new Set(DEFAULT_SELECT.split(","));
 
 function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -16,6 +20,31 @@ function getNullableString(value: unknown) {
 
 function getNullableBoolean(value: unknown) {
   return typeof value === "boolean" ? value : null;
+}
+
+function getViewer(request: NextRequest, body?: RawAssistant | null) {
+  const role = normalizeUserRole(request.nextUrl.searchParams.get("role") ?? body?.role);
+  const email = getString(request.nextUrl.searchParams.get("email") ?? body?.email).toLowerCase();
+  return { role, email };
+}
+
+function requireAdmin(request: NextRequest, body?: RawAssistant | null) {
+  const viewer = getViewer(request, body);
+  if (viewer.role !== "admin" && !isFallbackAdminEmail(viewer.email)) {
+    return NextResponse.json({ message: "Apenas administradores podem alterar as configuracoes da IA." }, { status: 403 });
+  }
+  return null;
+}
+
+function getAllowedSelect(fields: string) {
+  if (!fields) return DEFAULT_SELECT;
+
+  const requested = fields
+    .split(",")
+    .map((field) => field.trim())
+    .filter((field) => ALLOWED_SELECT_FIELDS.has(field));
+
+  return requested.length > 0 ? requested.join(",") : DEFAULT_SELECT;
 }
 
 async function supabaseRequest(path: string, init?: RequestInit) {
@@ -39,10 +68,7 @@ export async function GET(request: NextRequest) {
   try {
     const id = getString(request.nextUrl.searchParams.get("id"));
 
-    const fields = getString(request.nextUrl.searchParams.get("fields"));
-    const defaultSelect = ["id", "name", "gender", "emoji", "dados_empresa", "msg_inicial", "estilo_conversa", "avisar_agendamento", "avisar_encaminhamento"].join(",");
-
-    const select = fields || defaultSelect;
+    const select = getAllowedSelect(getString(request.nextUrl.searchParams.get("fields")));
 
     if (id) {
       const response = await supabaseRequest(`ia_assistant?select=${select}&id=eq.${encodeURIComponent(id)}`);
@@ -71,6 +97,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => null)) as RawAssistant | null;
+    const unauthorized = requireAdmin(request, body);
+    if (unauthorized) return unauthorized;
 
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       return NextResponse.json({ message: "Payload inválido." }, { status: 400 });
@@ -116,6 +144,8 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => null)) as RawAssistant | null;
+    const unauthorized = requireAdmin(request, body);
+    if (unauthorized) return unauthorized;
 
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       return NextResponse.json({ message: "Payload inválido." }, { status: 400 });
@@ -179,6 +209,9 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const unauthorized = requireAdmin(request);
+    if (unauthorized) return unauthorized;
+
     const id = getString(request.nextUrl.searchParams.get("id"));
 
     if (!id) {

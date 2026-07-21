@@ -10,7 +10,7 @@ type ProfessionalRow = {
   email: string | null;
   user_id: string | null;
   users?: { name: string | null; email: string | null } | null;
-  professional_procedimentos?: Array<{ procedimentos?: { id: string; nome: string | null; interesse: string | null } | null }>;
+  professional_procedimentos?: Array<{ procedimentos?: { id: string; nome: string | null; interest_tag_id?: string | null; interesse: string | null } | null }>;
 };
 
 type ChatRow = {
@@ -30,6 +30,12 @@ type StatusRow = {
 type TypeRow = {
   id: string;
   tipo: string;
+};
+
+type TagRow = {
+  id: string;
+  airtable_record_id: string | null;
+  label: string;
 };
 
 function getString(value: unknown) {
@@ -88,7 +94,7 @@ function canUseProfessional(viewer: { role: string; email: string }, professiona
 
 async function getProfessionals() {
   return selectRows<ProfessionalRow>("professional", {
-    select: "id_profissional,nome,email,user_id,users:user_id(name,email),professional_procedimentos(procedimentos:id_procedimento(id,nome,interesse))",
+    select: "id_profissional,nome,email,user_id,users:user_id(name,email),professional_procedimentos(procedimentos:id_procedimento(id,nome,interest_tag_id,interesse))",
     order: "created_at.desc",
     limit: 1000,
   });
@@ -106,25 +112,45 @@ function chatMatchesInterests(chat: ChatRow, interests: string[]) {
   return interests.some((interest) => haystack.includes(normalize(interest)));
 }
 
+function getProcedureInterestKeys(
+  procedure: { nome: string | null; interest_tag_id?: string | null; interesse: string | null },
+  tagsByUuid: Map<string, TagRow>,
+) {
+  const keys = new Set<string>();
+  if (procedure.interesse) keys.add(procedure.interesse);
+  if (procedure.nome) keys.add(procedure.nome);
+
+  const tag = procedure.interest_tag_id ? tagsByUuid.get(procedure.interest_tag_id) : null;
+  if (tag) {
+    keys.add(tag.id);
+    if (tag.airtable_record_id) keys.add(tag.airtable_record_id);
+    keys.add(tag.label);
+  }
+
+  return Array.from(keys).filter(Boolean);
+}
+
 export async function GET(request: NextRequest) {
   try {
     const role = normalizeUserRole(request.nextUrl.searchParams.get("role"));
     const email = getString(request.nextUrl.searchParams.get("email")).toLowerCase();
     const requestedProfessionalId = getString(request.nextUrl.searchParams.get("professionalId"));
 
-    const [professionals, statuses, types, chats] = await Promise.all([
+    const [professionals, statuses, types, chats, tags] = await Promise.all([
       getProfessionals(),
       selectRows<StatusRow>("appointment_status", { select: "id,status,hex", order: "status.asc", limit: 1000 }),
       selectRows<TypeRow>("appointment_procedure_type", { select: "id,tipo", order: "tipo.asc", limit: 1000 }),
       selectRows<ChatRow>("chats", { select: "id,nome_contato,phone_contact,chat_id,json_interesses", order: "last_message_time.desc", limit: 1000 }),
+      selectRows<TagRow>("tags", { select: "id,airtable_record_id,label", status: "eq.active", limit: 1000 }),
     ]);
 
     const allowedProfessionals = professionals.filter((professional) => canUseProfessional({ role, email }, professional));
     const selectedProfessional = allowedProfessionals.find((professional) => professional.id_profissional === requestedProfessionalId) ?? allowedProfessionals[0] ?? null;
-    const interests = (selectedProfessional?.professional_procedimentos ?? []).map((link) => link.procedimentos?.interesse || link.procedimentos?.nome || "").filter(Boolean);
+    const tagsByUuid = new Map(tags.map((tag) => [tag.id, tag]));
     const procedures = (selectedProfessional?.professional_procedimentos ?? [])
       .map((link) => link.procedimentos)
-      .filter((procedure): procedure is { id: string; nome: string | null; interesse: string | null } => Boolean(procedure?.id));
+      .filter((procedure): procedure is { id: string; nome: string | null; interest_tag_id?: string | null; interesse: string | null } => Boolean(procedure?.id));
+    const interests = procedures.flatMap((procedure) => getProcedureInterestKeys(procedure, tagsByUuid));
     const filteredChats = selectedProfessional ? chats.filter((chat) => chatMatchesInterests(chat, interests)) : chats;
 
     return NextResponse.json({

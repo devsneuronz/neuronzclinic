@@ -189,10 +189,12 @@ export default function SettingsPage() {
                           <Users className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
                           <span>Usuários</span>
                         </TabsTrigger>
-                        <TabsTrigger value="profissionais" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
-                          <Stethoscope className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
-                          <span>Profissionais</span>
-                        </TabsTrigger>
+                        {false && (
+                          <TabsTrigger value="profissionais" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
+                            <Stethoscope className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
+                            <span>Profissionais</span>
+                          </TabsTrigger>
+                        )}
                         <TabsTrigger value="tags" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
                           <Tags className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
                           <span>Tags</span>
@@ -209,10 +211,12 @@ export default function SettingsPage() {
                           <CopyPlus className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
                           <span>Anexos</span>
                         </TabsTrigger>
-                        <TabsTrigger value="informacoes" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
-                          <Sparkles className="text-blue-500 w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
-                          <span>IA</span>
-                        </TabsTrigger>
+                        {false && (
+                          <TabsTrigger value="informacoes" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
+                            <Sparkles className="text-blue-500 w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
+                            <span>IA</span>
+                          </TabsTrigger>
+                        )}
                       </>
                     )}
                   </>

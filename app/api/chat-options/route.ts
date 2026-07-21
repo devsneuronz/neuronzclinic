@@ -4,12 +4,10 @@ import { NextResponse } from "next/server";
 
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
 const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const AIRTABLE_BASE_ID = "app03ti52QQD3W9L2";
 const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY;
 const AIRTABLE_CONTACT_TABLE_CANDIDATES = [process.env.AIRTABLE_CONTACTS_TABLE, "Contatos", "Contato", "Contacts", "Contact", "Pacientes", "Paciente"].filter(Boolean) as string[];
-const AIRTABLE_TAG_TABLE_CANDIDATES = [process.env.AIRTABLE_TAGS_TABLE, "tblP68L7jNYctqKAq", "Tag", "TAG", "Tags", "TAGS", "Tags do contato", "Tags contato", "Tag Chat", "Tags Chat", "Etiquetas", "Etiqueta", "tags", "tag"].filter(
-  Boolean,
-) as string[];
 const PAGE_SIZE = 1000;
 const STATUS_FIELD_CANDIDATES = ["Status_chat", "Status Chat", "Status do chat", "Status do contato", "Status contato", "Status", "status"];
 
@@ -22,11 +20,6 @@ interface CatalogChatRecord {
   tag_chat_array: unknown;
 }
 
-type AirtableRecord = {
-  id: string;
-  fields?: Record<string, unknown>;
-};
-
 type AirtableTable = {
   name?: string;
   fields?: Array<{
@@ -35,6 +28,13 @@ type AirtableTable = {
       choices?: Array<{ name?: string }>;
     };
   }>;
+};
+
+type SupabaseTagRow = {
+  id: string;
+  airtable_record_id: string | null;
+  label: string;
+  color: string | null;
 };
 
 async function fetchCatalogChats() {
@@ -54,9 +54,7 @@ async function fetchCatalogChats() {
       cache: "no-store",
     });
 
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
+    if (!response.ok) throw new Error(await response.text());
 
     const page = (await response.json()) as CatalogChatRecord[];
     chats.push(...page);
@@ -68,6 +66,30 @@ async function fetchCatalogChats() {
   return chats;
 }
 
+async function fetchSupabaseTagOptions() {
+  if (!SUPABASE_REST_URL || !SUPABASE_SERVICE_ROLE_KEY) return [];
+
+  const response = await fetch(`${SUPABASE_REST_URL.replace(/\/$/, "")}/tags?select=id,airtable_record_id,label,color&status=eq.active&order=label.asc`, {
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) throw new Error(await response.text());
+
+  const rows = (await response.json()) as SupabaseTagRow[];
+  return rows
+    .map((row) => ({
+      id: row.airtable_record_id || row.id,
+      label: row.label,
+      uuid: row.id,
+      ...(row.color ? { color: row.color } : {}),
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }));
+}
+
 function getStatusOptions(chats: CatalogChatRecord[]) {
   const options = new Map<string, ChatStatusOption>();
   for (const chat of chats) {
@@ -75,9 +97,7 @@ function getStatusOptions(chats: CatalogChatRecord[]) {
     if (!label) continue;
 
     const normalizedLabel = label.toLowerCase();
-    if (normalizedLabel === "aberta" || normalizedLabel === "finalizada" || normalizedLabel === "fechada") {
-      continue;
-    }
+    if (normalizedLabel === "aberta" || normalizedLabel === "finalizada" || normalizedLabel === "fechada") continue;
 
     const current = options.get(normalizedLabel);
     const color = normalizeStatusColor(chat.hex_status);
@@ -123,42 +143,6 @@ function getTagOptions(chats: CatalogChatRecord[]) {
   return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }));
 }
 
-function getStringField(fields: Record<string, unknown>, candidates: string[]) {
-  for (const candidate of candidates) {
-    const value = fields[candidate];
-
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-
-  return "";
-}
-
-function getAirtableTag(record: AirtableRecord): ChatTag | null {
-  const fields = record.fields ?? {};
-  const label = getStringField(fields, ["Tag", "tag", "Nome", "nome", "Name", "name", "label", "Label"]) || getFirstReadableStringField(fields);
-  if (!label) return null;
-
-  const color = getStringField(fields, ["HEXCOR", "hexcor", "hex_status", "Color", "color", "Cor", "cor"]);
-  const tag: ChatTag = { id: record.id, label };
-
-  if (/^#[0-9a-f]{6}$/i.test(color)) {
-    tag.color = color;
-  }
-
-  return tag;
-}
-
-function getFirstReadableStringField(fields: Record<string, unknown>) {
-  for (const [key, value] of Object.entries(fields)) {
-    if (["status", "ativo", "hexcor", "hex_status", "color", "cor"].includes(key.toLowerCase())) continue;
-    if (typeof value === "string" && value.trim() && !value.startsWith("rec")) return value.trim();
-  }
-
-  return "";
-}
-
 function getChoiceNames(table: AirtableTable | undefined, fieldCandidates: string[]) {
   const fields = table?.fields ?? [];
   const field = fields.find((candidate) => {
@@ -182,70 +166,6 @@ function getTableWithStatusField(tables: AirtableTable[]) {
   return tables.find((table) => getChoiceNames(table, STATUS_FIELD_CANDIDATES).length > 0);
 }
 
-function isInactiveAirtableTag(record: AirtableRecord) {
-  const status = getStringField(record.fields ?? {}, ["Status", "status", "Ativo", "ativo"]);
-
-  return ["inativo", "inactive", "desativado", "excluido", "excluído", "false", "nao", "não"].includes(status.toLowerCase());
-}
-
-async function fetchAirtableRecords(table: string) {
-  const records: AirtableRecord[] = [];
-  let offset: string | undefined;
-
-  do {
-    const params = new URLSearchParams({ pageSize: "100" });
-    if (offset) params.set("offset", offset);
-
-    const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(table)}?${params}`, {
-      headers: {
-        Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-      },
-      cache: "no-store",
-    });
-
-    if (response.status === 404) return [];
-
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-
-    const data = (await response.json()) as { offset?: string; records?: AirtableRecord[] };
-    records.push(...(data.records ?? []));
-    offset = data.offset;
-  } while (offset);
-
-  return records;
-}
-
-async function fetchAirtableTagTableNamesFromMetadata() {
-  if (!AIRTABLE_TOKEN) return [];
-
-  const response = await fetch(`https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables`, {
-    headers: {
-      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-    },
-    cache: "no-store",
-  });
-
-  if (!response.ok) return [];
-
-  const data = (await response.json()) as {
-    tables?: AirtableTable[];
-  };
-
-  return (data.tables ?? [])
-    .filter((table) => {
-      const tableName = table.name?.toLowerCase() ?? "";
-      const fieldNames = (table.fields ?? []).map((field) => field.name?.toLowerCase() ?? "");
-      const hasLabelField = fieldNames.some((field) => ["tag", "nome", "name", "label"].includes(field));
-      const hasColorField = fieldNames.some((field) => ["hexcor", "hex_status", "color", "cor"].includes(field));
-
-      return (tableName.includes("tag") || tableName.includes("etiqueta")) && hasLabelField && hasColorField;
-    })
-    .map((table) => table.name)
-    .filter((name): name is string => Boolean(name));
-}
-
 async function fetchAirtableStatusOptions() {
   if (!AIRTABLE_TOKEN) return [];
 
@@ -266,37 +186,10 @@ async function fetchAirtableStatusOptions() {
   return choices.map((label) => ({ label }));
 }
 
-async function fetchAirtableTagOptions() {
-  if (!AIRTABLE_TOKEN) return [];
-
-  const metadataTableNames = await fetchAirtableTagTableNamesFromMetadata();
-  const tableCandidates = Array.from(new Set([...AIRTABLE_TAG_TABLE_CANDIDATES, ...metadataTableNames]));
-
-  for (const table of tableCandidates) {
-    let records: AirtableRecord[] = [];
-
-    try {
-      records = await fetchAirtableRecords(table);
-    } catch {
-      continue;
-    }
-
-    const tags = records
-      .filter((record) => !isInactiveAirtableTag(record))
-      .map(getAirtableTag)
-      .filter((tag): tag is ChatTag => Boolean(tag))
-      .sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }));
-
-    if (tags.length > 0) return tags;
-  }
-
-  return [];
-}
-
 export async function GET() {
   const errors: string[] = [];
   let chats: CatalogChatRecord[] = [];
-  let airtableTags: ChatTag[] = [];
+  let supabaseTags: ChatTag[] = [];
   let airtableStatuses: ChatStatusOption[] = [];
 
   try {
@@ -306,9 +199,9 @@ export async function GET() {
   }
 
   try {
-    airtableTags = await fetchAirtableTagOptions();
+    supabaseTags = await fetchSupabaseTagOptions();
   } catch (error) {
-    errors.push(error instanceof Error ? error.message : "Não foi possível carregar tags do Airtable.");
+    errors.push(error instanceof Error ? error.message : "Não foi possível carregar tags do Supabase.");
   }
 
   try {
@@ -321,7 +214,7 @@ export async function GET() {
 
   return NextResponse.json({
     statuses: mergeStatusOptions(getStatusOptions(chats), airtableStatuses),
-    tags: airtableTags.length > 0 ? airtableTags : fallbackTags,
+    tags: supabaseTags.length > 0 ? supabaseTags : fallbackTags,
     errors,
   });
 }

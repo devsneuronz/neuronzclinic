@@ -470,6 +470,9 @@ export async function GET(request: NextRequest) {
     const requestedProfessionalId = getString(request.nextUrl.searchParams.get("professionalId"));
     const professionals = await getProfessionals();
     const manageableProfessionals = viewer.role === "admin" ? professionals : professionals.filter((professional) => canManageProfessional(viewer, professional));
+    if (requestedProfessionalId && !manageableProfessionals.some((professional) => professional.id_profissional === requestedProfessionalId)) {
+      return NextResponse.json({ message: "Voce nao pode acessar a agenda deste profissional." }, { status: 403 });
+    }
     const selectedProfessional = manageableProfessionals.find((professional) => professional.id_profissional === requestedProfessionalId) ?? manageableProfessionals[0] ?? null;
 
     if (!selectedProfessional) {

@@ -22,13 +22,12 @@ type AgendaRow = {
 type BookingRow = {
   id: string;
   agenda_id: string;
-  id_profissional: string | null;
+  appointment_id: string | null;
+  professional_id: string | null;
   source: string | null;
   status: string | null;
   starts_at: string;
   ends_at: string | null;
-  patient_name: string | null;
-  patient_phone: string | null;
 };
 
 function getString(value: unknown) {
@@ -110,6 +109,9 @@ async function getContext(request: NextRequest, requestedProfessionalId?: string
   const email = getString(request.nextUrl.searchParams.get("email")).toLowerCase();
   const professionals = await getProfessionals();
   const manageableProfessionals = role === "admin" ? professionals : professionals.filter((professional) => canManageProfessional({ role, email }, professional));
+  if (requestedProfessionalId && !manageableProfessionals.some((item) => item.id_profissional === requestedProfessionalId)) {
+    throw new Error("Voce nao pode acessar a agenda deste profissional.");
+  }
   const professional = manageableProfessionals.find((item) => item.id_profissional === requestedProfessionalId) ?? manageableProfessionals[0] ?? null;
 
   if (!professional) throw new Error("Nenhum profissional vinculado a este usuario.");
@@ -120,7 +122,34 @@ async function getContext(request: NextRequest, requestedProfessionalId?: string
   return { role, email, professional, agenda };
 }
 
+function encodeManualSource(patientName: string, patientPhone: string) {
+  return JSON.stringify({
+    kind: "manual",
+    patientName,
+    patientPhone: patientPhone || null,
+  });
+}
+
+function getManualSourceDetails(source: string | null) {
+  if (!source) return { patientName: "Paciente", patientPhone: "" };
+
+  try {
+    const parsed = JSON.parse(source) as { kind?: unknown; patientName?: unknown; patientPhone?: unknown };
+    if (parsed.kind === "manual") {
+      return {
+        patientName: getString(parsed.patientName) || "Paciente",
+        patientPhone: getString(parsed.patientPhone),
+      };
+    }
+  } catch {
+    // Legacy text source; keep rendering a neutral patient label.
+  }
+
+  return { patientName: "Paciente", patientPhone: "" };
+}
+
 function mapBooking(row: BookingRow, professional: ProfessionalRow) {
+  const sourceDetails = getManualSourceDetails(row.source);
   return {
     id: row.id,
     status: row.status || "scheduled",
@@ -131,8 +160,8 @@ function mapBooking(row: BookingRow, professional: ProfessionalRow) {
     professionalId: professional.id_profissional,
     professional: getProfessionalName(professional),
     patientId: "",
-    patient: row.patient_name || "Paciente",
-    phone: row.patient_phone || "",
+    patient: sourceDetails.patientName,
+    phone: sourceDetails.patientPhone,
     observations: row.source || "manual",
   };
 }
@@ -146,7 +175,7 @@ export async function GET(request: NextRequest) {
     const context = await getContext(request, professionalId);
 
     const query: Record<string, string | number> = {
-      select: "id,agenda_id,id_profissional,source,status,starts_at,ends_at,patient_name,patient_phone",
+      select: "id,appointment_id,agenda_id,professional_id,source,status,starts_at,ends_at",
       agenda_id: `eq.${context.agenda.id}`,
       order: "starts_at.asc",
       limit: 1000,
@@ -193,13 +222,11 @@ export async function POST(request: NextRequest) {
       headers: { Prefer: "return=representation" },
       body: JSON.stringify({
         agenda_id: context.agenda.id,
-        id_profissional: context.professional.id_profissional,
-        source: "manual",
+        professional_id: context.professional.id_profissional,
+        source: encodeManualSource(patientName, patientPhone),
         status,
         starts_at: startDate.toISOString(),
         ends_at: endDate.toISOString(),
-        patient_name: patientName,
-        patient_phone: patientPhone || null,
       }),
     });
 
@@ -238,8 +265,7 @@ export async function PATCH(request: NextRequest) {
         status,
         starts_at: startDate.toISOString(),
         ends_at: endDate.toISOString(),
-        patient_name: patientName,
-        patient_phone: patientPhone || null,
+        source: encodeManualSource(patientName, patientPhone),
       }),
     });
 

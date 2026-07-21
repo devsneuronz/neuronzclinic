@@ -4,6 +4,7 @@ export interface ChatTag {
   id: string
   label: string
   color?: string
+  uuid?: string
 }
 
 export const CHAT_INTEREST_FIELD_CANDIDATES = [

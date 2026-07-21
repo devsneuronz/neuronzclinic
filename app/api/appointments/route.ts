@@ -180,6 +180,12 @@ export async function GET(request: NextRequest) {
     const status = getString(searchParams.get("status"));
     const type = getString(searchParams.get("type"));
     const context = await getContext(request, requestedProfessionalId);
+    const selectedProfessionalId = context.selectedProfessional?.id_profissional ?? "";
+    const requestedProfessionalAllowed =
+      !requestedProfessionalId || context.allowedProfessionals.some((professional) => professional.id_profissional === requestedProfessionalId);
+    if (!requestedProfessionalAllowed) {
+      return NextResponse.json({ appointments: [], message: "Voce nao pode acessar a agenda deste profissional." }, { status: 403 });
+    }
     const professionalIds =
       context.role === "admin" || context.role === "manager" ? context.allowedProfessionals.map((professional) => professional.id_profissional) : context.selectedProfessional ? [context.selectedProfessional.id_profissional] : [];
 
@@ -192,7 +198,7 @@ export async function GET(request: NextRequest) {
 
     if (start) query.dataHoraInicio = `gte.${new Date(start).toISOString()}`;
     if (end) query.and = `(dataHoraInicio.lt.${new Date(end).toISOString()})`;
-    if (requestedProfessionalId) query.professional_id = `eq.${requestedProfessionalId}`;
+    if (requestedProfessionalId) query.professional_id = `eq.${selectedProfessionalId}`;
     else if (professionalIds.length > 0 && context.role !== "admin" && context.role !== "manager") query.professional_id = `in.(${professionalIds.join(",")})`;
     if (status) query.appointment_status_id = `eq.${await resolveStatusId(status)}`;
     if (type) {
@@ -218,8 +224,12 @@ export async function POST(request: NextRequest) {
     const observations = getString(body?.observations);
     const statusId = await resolveStatusId(getString(body?.status));
     const typeId = await resolveTypeId(getString(body?.type));
+    const context = await getContext(request, professionalId);
 
     if (!professionalId || !chatId || !startsAt) return NextResponse.json({ message: "Informe profissional, paciente e horario." }, { status: 400 });
+    if (!context.allowedProfessionals.some((professional) => professional.id_profissional === professionalId)) {
+      return NextResponse.json({ message: "Voce nao pode criar agendamento para este profissional." }, { status: 403 });
+    }
 
     const startDate = new Date(startsAt);
     const endDate = endsAt ? new Date(endsAt) : new Date(startDate.getTime() + 60 * 60_000);
@@ -264,8 +274,12 @@ export async function PATCH(request: NextRequest) {
     const observations = getString(body?.observations);
     const statusId = await resolveStatusId(getString(body?.status));
     const typeId = await resolveTypeId(getString(body?.type));
+    const context = await getContext(request, professionalId);
 
     if (!id || !professionalId || !chatId || !startsAt) return NextResponse.json({ message: "Informe os dados obrigatorios." }, { status: 400 });
+    if (!context.allowedProfessionals.some((professional) => professional.id_profissional === professionalId)) {
+      return NextResponse.json({ message: "Voce nao pode editar agendamento deste profissional." }, { status: 403 });
+    }
 
     const startDate = new Date(startsAt);
     const endDate = endsAt ? new Date(endsAt) : new Date(startDate.getTime() + 60 * 60_000);
@@ -301,8 +315,18 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const id = getString(request.nextUrl.searchParams.get("id"));
+    const professionalId = getString(request.nextUrl.searchParams.get("professionalId"));
+    const context = await getContext(request, professionalId);
     if (!id) return NextResponse.json({ message: "Agendamento obrigatorio." }, { status: 400 });
-    await supabaseRequest(`appointments?id=eq.${id}`, { method: "DELETE" });
+    if (professionalId && !context.allowedProfessionals.some((professional) => professional.id_profissional === professionalId)) {
+      return NextResponse.json({ message: "Voce nao pode excluir agendamento deste profissional." }, { status: 403 });
+    }
+    if (!professionalId && context.role !== "admin" && context.role !== "manager") {
+      return NextResponse.json({ message: "Informe o profissional para excluir este agendamento." }, { status: 400 });
+    }
+    const allowedIds = context.allowedProfessionals.map((professional) => professional.id_profissional).filter(Boolean);
+    const filter = professionalId ? `id=eq.${id}&professional_id=eq.${professionalId}` : `id=eq.${id}&professional_id=in.(${allowedIds.join(",")})`;
+    await supabaseRequest(`appointments?${filter}`, { method: "DELETE" });
     return NextResponse.json({ id, message: "Agendamento excluido." });
   } catch (error) {
     return NextResponse.json({ message: error instanceof Error ? error.message : "Nao foi possivel excluir o agendamento." }, { status: 400 });

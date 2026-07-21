@@ -1,122 +1,194 @@
+import { isFallbackAdminEmail, normalizeUserRole } from "@/lib/user-roles"
 import { NextRequest, NextResponse } from "next/server"
 
-const AIRTABLE_BASE_ID = "app03ti52QQD3W9L2"
-const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY
-const TABLE = process.env.AIRTABLE_SECTORS_TABLE || "tbljxOTupllfDli5n"
-
-type AirtableRecord = {
-  id: string
-  fields?: Record<string, unknown>
-}
+const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 type SectorPayload = {
   name: string
   description: string
   color: string
   tagIds: string[]
+  email?: unknown
+  role?: unknown
 }
 
-function assertToken() {
-  if (!AIRTABLE_TOKEN) throw new Error("Missing AIRTABLE_TOKEN or AIRTABLE_API_KEY")
+type SectorRow = {
+  id: string
+  airtable_record_id: string | null
+  name: string
+  description: string | null
+  color: string | null
+  status: string | null
+  raw_airtable?: { fields?: { User?: unknown } } | null
 }
 
-async function airtableRequest(path: string, init?: RequestInit) {
-  assertToken()
-  const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${path}`, {
+type TagRow = {
+  id: string
+  airtable_record_id: string | null
+  label: string
+}
+
+type SectorTagRow = {
+  sector_id: string
+  tags?: TagRow | null
+}
+
+function getString(value: unknown) {
+  return typeof value === "string" ? value.trim() : ""
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+}
+
+function getSupabaseConfig() {
+  if (!SUPABASE_REST_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("Missing Supabase REST configuration for sectors.")
+  }
+
+  return { url: SUPABASE_REST_URL.replace(/\/$/, ""), key: SUPABASE_SERVICE_ROLE_KEY }
+}
+
+async function supabaseRequest(path: string, init?: RequestInit) {
+  const { url, key } = getSupabaseConfig()
+  const response = await fetch(`${url}/${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-      "Content-Type": "application/json",
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
       ...init?.headers,
     },
     cache: "no-store",
   })
 
   if (!response.ok) throw new Error(await response.text())
-  if (response.status === 204) return null
-  return response.json()
+  return response
 }
 
-async function fetchAllRecords() {
-  const records: AirtableRecord[] = []
-  let offset: string | undefined
-
-  do {
-    const params = new URLSearchParams({ pageSize: "100" })
-    if (offset) params.set("offset", offset)
-    const data = (await airtableRequest(`${encodeURIComponent(TABLE)}?${params}`)) as {
-      offset?: string
-      records?: AirtableRecord[]
-    }
-    records.push(...(data.records ?? []))
-    offset = data.offset
-  } while (offset)
-
-  return records
+function getViewer(request: NextRequest, body?: { email?: unknown; role?: unknown } | null) {
+  const role = normalizeUserRole(request.nextUrl.searchParams.get("role") ?? body?.role)
+  const email = getString(request.nextUrl.searchParams.get("email") ?? body?.email).toLowerCase()
+  return { role, email }
 }
 
-function getString(fields: Record<string, unknown>, field: string) {
-  const value = fields[field]
-  return typeof value === "string" ? value.trim() : ""
-}
-
-function getIds(fields: Record<string, unknown>, field: string) {
-  const value = fields[field]
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []
-}
-
-function isExcluded(fields: Record<string, unknown>) {
-  return getString(fields, "Status").toLowerCase() === "excluído"
-}
-
-function toSector(record: AirtableRecord) {
-  const fields = record.fields ?? {}
-  return {
-    id: record.id,
-    name: getString(fields, "Setor"),
-    description: getString(fields, "Observações"),
-    color: /^#[0-9a-f]{6}$/i.test(getString(fields, "HEXCOR")) ? getString(fields, "HEXCOR") : "#64748b",
-    tagIds: getIds(fields, "Tags"),
-    tagLabels: getIds(fields, "nometags"),
-    userIds: getIds(fields, "User"),
+function requireAdmin(request: NextRequest, body?: { email?: unknown; role?: unknown } | null) {
+  const viewer = getViewer(request, body)
+  if (viewer.role !== "admin" && !isFallbackAdminEmail(viewer.email)) {
+    return NextResponse.json({ error: "Apenas administradores podem alterar setores." }, { status: 403 })
   }
+  return null
+}
+
+function getExternalSectorId(row: SectorRow) {
+  return row.airtable_record_id || row.id
+}
+
+function getExternalTagId(row: TagRow) {
+  return row.airtable_record_id || row.id
+}
+
+function getRecordIds(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : []
 }
 
 function normalizePayload(body: unknown): SectorPayload {
-  if (!body || typeof body !== "object") throw new Error("Dados inválidos.")
+  if (!body || typeof body !== "object") throw new Error("Dados invalidos.")
+
   const source = body as Record<string, unknown>
-  const name = typeof source.name === "string" ? source.name.trim() : ""
-  const description = typeof source.description === "string" ? source.description.trim() : ""
-  const color = typeof source.color === "string" ? source.color.trim() : ""
+  const name = getString(source.name)
+  const description = getString(source.description)
+  const color = getString(source.color)
   const tagIds = Array.isArray(source.tagIds)
-    ? Array.from(new Set(source.tagIds.filter((id): id is string => typeof id === "string" && /^rec[a-zA-Z0-9]+$/.test(id))))
+    ? Array.from(new Set(source.tagIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0)))
     : []
 
   if (!name) throw new Error("Informe o nome do setor.")
-  if (color && !/^#[0-9a-f]{6}$/i.test(color)) throw new Error("Informe uma cor hexadecimal válida.")
+  if (color && !/^#[0-9a-f]{6}$/i.test(color)) throw new Error("Informe uma cor hexadecimal valida.")
 
-  return { name, description, color: color || "#64748b", tagIds }
+  return { name, description, color: color || "#64748b", tagIds, email: source.email, role: source.role }
 }
 
-function getFields(payload: SectorPayload) {
+function getIdFilter(id: string) {
+  return isUuid(id) ? `id=eq.${encodeURIComponent(id)}` : `airtable_record_id=eq.${encodeURIComponent(id)}`
+}
+
+async function fetchActiveSectors() {
+  const response = await supabaseRequest("sectors?select=id,airtable_record_id,name,description,color,status,raw_airtable&status=eq.active&order=name.asc")
+  return response.json() as Promise<SectorRow[]>
+}
+
+async function fetchSectorTags(sectorIds: string[]) {
+  if (sectorIds.length === 0) return []
+
+  const response = await supabaseRequest(`sector_tags?select=sector_id,tags:tag_id(id,airtable_record_id,label)&sector_id=in.(${sectorIds.join(",")})`)
+  return response.json() as Promise<SectorTagRow[]>
+}
+
+function toSector(row: SectorRow, links: SectorTagRow[]) {
+  const tagRows = links.map((link) => link.tags).filter((tag): tag is TagRow => Boolean(tag))
   return {
-    Setor: payload.name,
-    Status: "Ativo",
-    "Observações": payload.description,
-    HEXCOR: payload.color,
-    Tags: payload.tagIds,
+    id: getExternalSectorId(row),
+    name: row.name,
+    description: row.description || "",
+    color: /^#[0-9a-f]{6}$/i.test(row.color || "") ? row.color || "#64748b" : "#64748b",
+    tagIds: tagRows.map(getExternalTagId),
+    tagLabels: tagRows.map((tag) => tag.label),
+    userIds: getRecordIds(row.raw_airtable?.fields?.User),
   }
+}
+
+async function resolveTagIds(tagIds: string[]) {
+  if (tagIds.length === 0) return []
+
+  const response = await supabaseRequest("tags?select=id,airtable_record_id&status=eq.active&limit=1000")
+  const tags = (await response.json()) as TagRow[]
+  const tagByExternalId = new Map<string, string>()
+
+  for (const tag of tags) {
+    tagByExternalId.set(tag.id, tag.id)
+    if (tag.airtable_record_id) tagByExternalId.set(tag.airtable_record_id, tag.id)
+  }
+
+  return tagIds.map((tagId) => tagByExternalId.get(tagId)).filter((tagId): tagId is string => Boolean(tagId))
+}
+
+async function replaceSectorTags(sectorId: string, tagIds: string[]) {
+  await supabaseRequest(`sector_tags?sector_id=eq.${encodeURIComponent(sectorId)}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" },
+  })
+
+  const resolvedTagIds = await resolveTagIds(tagIds)
+  if (resolvedTagIds.length === 0) return
+
+  await supabaseRequest("sector_tags", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify(resolvedTagIds.map((tagId) => ({ sector_id: sectorId, tag_id: tagId }))),
+  })
+}
+
+async function fetchSectorById(id: string) {
+  const response = await supabaseRequest(`sectors?select=id,airtable_record_id,name,description,color,status,raw_airtable&${getIdFilter(id)}&limit=1`)
+  const rows = (await response.json()) as SectorRow[]
+  return rows[0] ?? null
 }
 
 export async function GET(request: Request) {
   try {
-    const records = await fetchAllRecords()
-    const sectors = records
-      .filter((record) => !isExcluded(record.fields ?? {}))
-      .map(toSector)
-      .filter((sector) => sector.name)
-      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }))
+    const rows = await fetchActiveSectors()
+    const links = await fetchSectorTags(rows.map((row) => row.id))
+    const linksBySectorId = new Map<string, SectorTagRow[]>()
 
+    for (const link of links) {
+      const current = linksBySectorId.get(link.sector_id) ?? []
+      current.push(link)
+      linksBySectorId.set(link.sector_id, current)
+    }
+
+    const sectors = rows.map((row) => toSector(row, linksBySectorId.get(row.id) ?? []))
     const requestedIds = new Set(
       (new URL(request.url).searchParams.get("ids") ?? "")
         .split(",")
@@ -132,50 +204,92 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ labels, sectors: sectors.map((sector) => sector.name), sectorRecords: sectors })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível carregar os setores." }, { status: 500 })
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Nao foi possivel carregar os setores." }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const payload = normalizePayload(await request.json())
-    const data = (await airtableRequest(encodeURIComponent(TABLE), {
+    const body = await request.json().catch(() => null)
+    const payload = normalizePayload(body)
+    const unauthorized = requireAdmin(request, payload)
+    if (unauthorized) return unauthorized
+
+    const response = await supabaseRequest("sectors?select=id,airtable_record_id,name,description,color,status,raw_airtable", {
       method: "POST",
-      body: JSON.stringify({ records: [{ fields: getFields(payload) }] }),
-    })) as { records?: AirtableRecord[] }
-    const sector = data.records?.[0] ? toSector(data.records[0]) : null
-    return NextResponse.json({ sector }, { status: 201 })
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        name: payload.name,
+        description: payload.description || null,
+        color: payload.color,
+        status: "active",
+        source: "supabase",
+      }),
+    })
+    const rows = (await response.json()) as SectorRow[]
+    const row = rows[0] ?? null
+    if (!row) return NextResponse.json({ sector: null }, { status: 201 })
+
+    await replaceSectorTags(row.id, payload.tagIds)
+    const links = await fetchSectorTags([row.id])
+    return NextResponse.json({ sector: toSector(row, links) }, { status: 201 })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível criar o setor." }, { status: 500 })
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Nao foi possivel criar o setor." }, { status: 500 })
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
-    const id = request.nextUrl.searchParams.get("id")
-    if (!id) throw new Error("Setor não encontrado.")
-    const payload = normalizePayload(await request.json())
-    const data = (await airtableRequest(encodeURIComponent(TABLE), {
+    const id = getString(request.nextUrl.searchParams.get("id"))
+    if (!id) throw new Error("Setor nao encontrado.")
+
+    const body = await request.json().catch(() => null)
+    const payload = normalizePayload(body)
+    const unauthorized = requireAdmin(request, payload)
+    if (unauthorized) return unauthorized
+
+    const response = await supabaseRequest(`sectors?${getIdFilter(id)}&select=id,airtable_record_id,name,description,color,status,raw_airtable`, {
       method: "PATCH",
-      body: JSON.stringify({ records: [{ id, fields: getFields(payload) }] }),
-    })) as { records?: AirtableRecord[] }
-    const sector = data.records?.[0] ? toSector(data.records[0]) : null
-    return NextResponse.json({ sector })
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        name: payload.name,
+        description: payload.description || null,
+        color: payload.color,
+        status: "active",
+      }),
+    })
+    const rows = (await response.json()) as SectorRow[]
+    const row = rows[0] ?? null
+    if (!row) throw new Error("Setor nao encontrado.")
+
+    await replaceSectorTags(row.id, payload.tagIds)
+    const links = await fetchSectorTags([row.id])
+    return NextResponse.json({ sector: toSector(row, links) })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível atualizar o setor." }, { status: 500 })
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Nao foi possivel atualizar o setor." }, { status: 500 })
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    const id = request.nextUrl.searchParams.get("id")
-    if (!id) throw new Error("Setor não encontrado.")
-    await airtableRequest(encodeURIComponent(TABLE), {
+    const id = getString(request.nextUrl.searchParams.get("id"))
+    if (!id) throw new Error("Setor nao encontrado.")
+
+    const unauthorized = requireAdmin(request)
+    if (unauthorized) return unauthorized
+
+    const row = await fetchSectorById(id)
+    if (!row) throw new Error("Setor nao encontrado.")
+
+    await replaceSectorTags(row.id, [])
+    await supabaseRequest(`sectors?id=eq.${encodeURIComponent(row.id)}`, {
       method: "PATCH",
-      body: JSON.stringify({ records: [{ id, fields: { Status: "Excluído", Tags: [] } }] }),
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ status: "inactive" }),
     })
+
     return NextResponse.json({ ok: true })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível excluir o setor." }, { status: 500 })
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Nao foi possivel excluir o setor." }, { status: 500 })
   }
 }

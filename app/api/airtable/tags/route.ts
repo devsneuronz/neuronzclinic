@@ -1,190 +1,61 @@
-import { NextRequest, NextResponse } from "next/server"
 import type { ChatTag } from "@/lib/chat-tags"
+import { isFallbackAdminEmail, normalizeUserRole } from "@/lib/user-roles"
+import { NextRequest, NextResponse } from "next/server"
 
-const AIRTABLE_BASE_ID = "app03ti52QQD3W9L2"
-const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY
-const AIRTABLE_TAG_TABLE_CANDIDATES = [
-  process.env.AIRTABLE_TAGS_TABLE,
-  "tblP68L7jNYctqKAq",
-  "Tag",
-  "TAG",
-  "Tags",
-  "TAGS",
-  "Tags do contato",
-  "Tags contato",
-  "Tag Chat",
-  "Tags Chat",
-  "Etiquetas",
-  "Etiqueta",
-  "tags",
-  "tag",
-].filter(Boolean) as string[]
+const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-type AirtableRecord = {
+type SupabaseTagRow = {
   id: string
-  fields?: Record<string, unknown>
+  airtable_record_id: string | null
+  label: string
+  color: string | null
+  status: string | null
+  notes: string | null
 }
 
-type AirtableField = {
-  id?: string
-  name?: string
-  type?: string
+function getString(value: unknown) {
+  return typeof value === "string" ? value.trim() : ""
 }
 
-type AirtableTable = {
-  id?: string
-  name?: string
-  fields?: AirtableField[]
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 }
 
-type TagTableConfig = {
-  table: string
-  labelField: string
-  colorField: string
-}
-
-function getStringField(fields: Record<string, unknown>, candidates: string[]) {
-  for (const candidate of candidates) {
-    const value = fields[candidate]
-
-    if (typeof value === "string" && value.trim()) {
-      return value.trim()
-    }
+function getSupabaseConfig() {
+  if (!SUPABASE_REST_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("Missing Supabase REST configuration for tags.")
   }
 
-  return ""
+  return { url: SUPABASE_REST_URL.replace(/\/$/, ""), key: SUPABASE_SERVICE_ROLE_KEY }
 }
 
-function getFirstReadableStringField(fields: Record<string, unknown>) {
-  for (const [key, value] of Object.entries(fields)) {
-    if (["status", "ativo", "hexcor", "hex_status", "color", "cor"].includes(key.toLowerCase())) continue
-    if (typeof value === "string" && value.trim() && !value.startsWith("rec")) return value.trim()
-  }
-
-  return ""
-}
-
-function getAirtableTag(record: AirtableRecord): ChatTag | null {
-  const fields = record.fields ?? {}
-  const label = getStringField(fields, ["Tag", "tag", "Nome", "nome", "Name", "name", "label", "Label"]) || getFirstReadableStringField(fields)
-  if (!label) return null
-
-  const color = getStringField(fields, ["HEXCOR", "hexcor", "hex_status", "Color", "color", "Cor", "cor"])
-  const tag: ChatTag = { id: record.id, label }
-
-  if (/^#[0-9a-f]{6}$/i.test(color)) {
-    tag.color = color
-  }
-
-  return tag
-}
-
-function assertAirtableToken() {
-  if (!AIRTABLE_TOKEN) {
-    throw new Error("Missing Airtable token. Add AIRTABLE_TOKEN or AIRTABLE_API_KEY to .env.local.")
-  }
-}
-
-async function fetchAirtableMetadata() {
-  assertAirtableToken()
-
-  const response = await fetch(`https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables`, {
-    headers: {
-      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-    },
-    cache: "no-store",
-  })
-
-  if (!response.ok) return []
-
-  const data = (await response.json()) as { tables?: AirtableTable[] }
-  return data.tables ?? []
-}
-
-function pickField(fields: AirtableField[], candidates: string[], fallback: string) {
-  const lowerCandidates = candidates.map((candidate) => candidate.toLowerCase())
-  const field = fields.find((item) => item.name && lowerCandidates.includes(item.name.toLowerCase()))
-
-  return field?.name ?? fallback
-}
-
-function hasTagShape(table: AirtableTable) {
-  const tableName = table.name?.toLowerCase() ?? ""
-  const fieldNames = (table.fields ?? []).map((field) => field.name?.toLowerCase() ?? "")
-  const hasLabelField = fieldNames.some((field) => ["tag", "nome", "name", "label"].includes(field))
-  const hasColorField = fieldNames.some((field) => ["hexcor", "hex_status", "color", "cor"].includes(field))
-
-  return (tableName.includes("tag") || tableName.includes("etiqueta")) && hasLabelField && hasColorField
-}
-
-async function getTagTableConfig(): Promise<TagTableConfig> {
-  const tables = await fetchAirtableMetadata()
-  const candidates = AIRTABLE_TAG_TABLE_CANDIDATES.map((candidate) => candidate.toLowerCase())
-  const configuredTable = tables.find((table) => {
-    const id = table.id?.toLowerCase()
-    const name = table.name?.toLowerCase()
-    return Boolean((id && candidates.includes(id)) || (name && candidates.includes(name)))
-  })
-  const inferredTable = tables.find(hasTagShape)
-  const table = configuredTable ?? inferredTable
-
-  if (table?.id || table?.name) {
-    const fields = table.fields ?? []
-
-    return {
-      table: table.id ?? table.name ?? AIRTABLE_TAG_TABLE_CANDIDATES[0],
-      labelField: pickField(fields, ["Tag", "tag", "Nome", "nome", "Name", "name", "label", "Label"], "Tag"),
-      colorField: pickField(fields, ["HEXCOR", "hexcor", "hex_status", "Color", "color", "Cor", "cor"], "HEXCOR"),
-    }
-  }
-
-  return {
-    table: AIRTABLE_TAG_TABLE_CANDIDATES[0],
-    labelField: "Tag",
-    colorField: "HEXCOR",
-  }
-}
-
-async function airtableRequest(path: string, init?: RequestInit) {
-  assertAirtableToken()
-
-  const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${path}`, {
+async function supabaseRequest(path: string, init?: RequestInit) {
+  const { url, key } = getSupabaseConfig()
+  const response = await fetch(`${url}/${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-      "Content-Type": "application/json",
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
       ...init?.headers,
     },
     cache: "no-store",
   })
 
-  if (!response.ok) {
-    throw new Error(await response.text())
-  }
-
-  if (response.status === 204) return null
-
-  return response.json()
+  if (!response.ok) throw new Error(await response.text())
+  return response
 }
 
-async function fetchTagRecords(table: string) {
-  const records: AirtableRecord[] = []
-  let offset: string | undefined
+function toChatTag(row: SupabaseTagRow): ChatTag {
+  const tag: ChatTag = {
+    id: row.airtable_record_id || row.id,
+    label: row.label,
+    uuid: row.id,
+  }
 
-  do {
-    const params = new URLSearchParams({ pageSize: "100" })
-    if (offset) params.set("offset", offset)
-
-    const data = (await airtableRequest(`${encodeURIComponent(table)}?${params}`)) as {
-      offset?: string
-      records?: AirtableRecord[]
-    }
-
-    records.push(...(data.records ?? []))
-    offset = data.offset
-  } while (offset)
-
-  return records
+  if (row.color) tag.color = row.color
+  return tag
 }
 
 function normalizePayload(body: unknown) {
@@ -192,36 +63,39 @@ function normalizePayload(body: unknown) {
     throw new Error("Dados invalidos.")
   }
 
-  const payload = body as { label?: unknown; color?: unknown }
-  const label = typeof payload.label === "string" ? payload.label.trim() : ""
-  const color = typeof payload.color === "string" ? payload.color.trim() : ""
+  const payload = body as { label?: unknown; color?: unknown; email?: unknown; role?: unknown }
+  const label = getString(payload.label)
+  const color = getString(payload.color)
 
-  if (!label) {
-    throw new Error("Informe o nome da tag.")
-  }
+  if (!label) throw new Error("Informe o nome da tag.")
+  if (color && !/^#[0-9a-f]{6}$/i.test(color)) throw new Error("Informe uma cor hexadecimal valida.")
 
-  if (color && !/^#[0-9a-f]{6}$/i.test(color)) {
-    throw new Error("Informe uma cor hexadecimal valida.")
-  }
-
-  return { label, color: color || "#0d9488" }
+  return { label, color: color || "#0d9488", email: payload.email, role: payload.role }
 }
 
-function getFields(config: TagTableConfig, payload: { label: string; color: string }) {
-  return {
-    [config.labelField]: payload.label,
-    [config.colorField]: payload.color,
+function getViewer(request: NextRequest, body?: { email?: unknown; role?: unknown } | null) {
+  const role = normalizeUserRole(request.nextUrl.searchParams.get("role") ?? body?.role)
+  const email = getString(request.nextUrl.searchParams.get("email") ?? body?.email).toLowerCase()
+  return { role, email }
+}
+
+function requireAdmin(request: NextRequest, body?: { email?: unknown; role?: unknown } | null) {
+  const viewer = getViewer(request, body)
+  if (viewer.role !== "admin" && !isFallbackAdminEmail(viewer.email)) {
+    return NextResponse.json({ error: "Apenas administradores podem alterar tags." }, { status: 403 })
   }
+  return null
+}
+
+function getIdFilter(id: string) {
+  return isUuid(id) ? `id=eq.${encodeURIComponent(id)}` : `airtable_record_id=eq.${encodeURIComponent(id)}`
 }
 
 export async function GET() {
   try {
-    const config = await getTagTableConfig()
-    const records = await fetchTagRecords(config.table)
-    const tags = records
-      .map(getAirtableTag)
-      .filter((tag): tag is ChatTag => Boolean(tag))
-      .sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }))
+    const response = await supabaseRequest("tags?select=id,airtable_record_id,label,color,status,notes&status=eq.active&order=label.asc")
+    const rows = (await response.json()) as SupabaseTagRow[]
+    const tags = rows.map(toChatTag).sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }))
 
     return NextResponse.json({ tags })
   } catch (error) {
@@ -231,15 +105,24 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const config = await getTagTableConfig()
-    const payload = normalizePayload(await request.json())
-    const data = (await airtableRequest(encodeURIComponent(config.table), {
-      method: "POST",
-      body: JSON.stringify({ records: [{ fields: getFields(config, payload) }] }),
-    })) as { records?: AirtableRecord[] }
-    const tag = data.records?.[0] ? getAirtableTag(data.records[0]) : null
+    const body = await request.json().catch(() => null)
+    const payload = normalizePayload(body)
+    const unauthorized = requireAdmin(request, payload)
+    if (unauthorized) return unauthorized
 
-    return NextResponse.json({ tag }, { status: 201 })
+    const response = await supabaseRequest("tags?select=id,airtable_record_id,label,color,status,notes", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        label: payload.label,
+        color: payload.color,
+        status: "active",
+        source: "supabase",
+      }),
+    })
+
+    const rows = (await response.json()) as SupabaseTagRow[]
+    return NextResponse.json({ tag: rows[0] ? toChatTag(rows[0]) : null }, { status: 201 })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Nao foi possivel criar a tag." }, { status: 500 })
   }
@@ -247,18 +130,26 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const id = request.nextUrl.searchParams.get("id")
+    const id = getString(request.nextUrl.searchParams.get("id"))
     if (!id) throw new Error("Tag nao encontrada.")
 
-    const config = await getTagTableConfig()
-    const payload = normalizePayload(await request.json())
-    const data = (await airtableRequest(encodeURIComponent(config.table), {
-      method: "PATCH",
-      body: JSON.stringify({ records: [{ id, fields: getFields(config, payload) }] }),
-    })) as { records?: AirtableRecord[] }
-    const tag = data.records?.[0] ? getAirtableTag(data.records[0]) : null
+    const body = await request.json().catch(() => null)
+    const payload = normalizePayload(body)
+    const unauthorized = requireAdmin(request, payload)
+    if (unauthorized) return unauthorized
 
-    return NextResponse.json({ tag })
+    const response = await supabaseRequest(`tags?${getIdFilter(id)}&select=id,airtable_record_id,label,color,status,notes`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        label: payload.label,
+        color: payload.color,
+        status: "active",
+      }),
+    })
+
+    const rows = (await response.json()) as SupabaseTagRow[]
+    return NextResponse.json({ tag: rows[0] ? toChatTag(rows[0]) : null })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Nao foi possivel atualizar a tag." }, { status: 500 })
   }
@@ -266,12 +157,16 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const id = request.nextUrl.searchParams.get("id")
+    const id = getString(request.nextUrl.searchParams.get("id"))
     if (!id) throw new Error("Tag nao encontrada.")
 
-    const config = await getTagTableConfig()
-    await airtableRequest(`${encodeURIComponent(config.table)}/${encodeURIComponent(id)}`, {
-      method: "DELETE",
+    const unauthorized = requireAdmin(request)
+    if (unauthorized) return unauthorized
+
+    await supabaseRequest(`tags?${getIdFilter(id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ status: "inactive" }),
     })
 
     return NextResponse.json({ ok: true })

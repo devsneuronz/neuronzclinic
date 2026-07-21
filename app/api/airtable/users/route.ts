@@ -1,32 +1,39 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 
-import { FALLBACK_ADMIN_EMAILS, getDefaultUser, normalizeUserRole } from "@/lib/user-roles"
+import { FALLBACK_ADMIN_EMAILS, getDefaultUser, isFallbackAdminEmail, normalizeUserRole } from "@/lib/user-roles"
 
-const AIRTABLE_BASE_ID = "app03ti52QQD3W9L2"
-const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY
-const TABLE_CANDIDATES = [
-  process.env.AIRTABLE_USERS_TABLE,
-  "User",
-  "Users",
-  "Usuarios",
-  "Usuários",
-  "users",
-  "user",
-].filter(Boolean) as string[]
-const SECTOR_TABLE_CANDIDATES = [
-  process.env.AIRTABLE_SECTORS_TABLE,
-  "Setores",
-  "Setor",
-  "SETOR",
-  "setores",
-  "setor",
-  "Sectors",
-  "Sector",
-].filter(Boolean) as string[]
+const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-type AirtableRecord = {
+type UserProfileRow = {
   id: string
-  fields?: Record<string, unknown>
+  airtable_record_id: string | null
+  email: string
+  name: string
+  role: string | null
+  status: string | null
+  raw_airtable?: { fields?: Record<string, unknown> } | null
+}
+
+type SectorRow = {
+  id: string
+  airtable_record_id: string | null
+  name: string
+  color: string | null
+}
+
+type UserProfileSectorRow = {
+  user_profile_id: string
+  sectors?: SectorRow | null
+}
+
+type SectorTagRow = {
+  sector_id: string
+  tags?: {
+    id: string
+    airtable_record_id: string | null
+    label: string
+  } | null
 }
 
 type ListedUser = {
@@ -38,44 +45,20 @@ type ListedUser = {
   sectorIds: string[]
   tagIds: string[]
   canAccessUntaggedChats: boolean
+  source: "airtable"
 }
 
-function getStringField(fields: Record<string, unknown>, candidates: string[]) {
-  for (const candidate of candidates) {
-    const value = fields[candidate]
-
-    if (typeof value === "string" && value.trim()) {
-      return value.trim()
-    }
-  }
-
-  return null
+function getString(value: unknown) {
+  return typeof value === "string" ? value.trim() : ""
 }
 
-function getEmail(fields: Record<string, unknown>) {
-  return getStringField(fields, ["Email", "email", "E-mail", "e-mail", "Login", "login"])
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 }
 
-function getName(fields: Record<string, unknown>, fallbackEmail: string) {
-  return (
-    getStringField(fields, ["Nome", "nome", "Name", "name", "Usuário", "Usuario", "user"]) ??
-    fallbackEmail
-  )
-}
+function getStringArrayField(fields: Record<string, unknown> | undefined, candidates: string[]) {
+  if (!fields) return []
 
-function getRole(fields: Record<string, unknown>) {
-  const statusRole = normalizeUserRole(getStringField(fields, ["Status", "status"]))
-
-  if (statusRole === "admin") {
-    return statusRole
-  }
-
-  return normalizeUserRole(
-    getStringField(fields, ["Role", "role", "Perfil", "perfil", "Cargo", "cargo", "Tipo", "tipo", "Permissão", "Permissao"]),
-  )
-}
-
-function getStringArrayField(fields: Record<string, unknown>, candidates: string[]) {
   for (const candidate of candidates) {
     const value = fields[candidate]
 
@@ -96,261 +79,226 @@ function getStringArrayField(fields: Record<string, unknown>, candidates: string
   return []
 }
 
-function getUserTags(fields: Record<string, unknown>) {
-  return getStringArrayField(fields, [
-    "Setores sob responsabilidade",
-    "Setores",
-    "Setor",
-    "Responsabilidades",
-    "Tags",
-    "tags",
-    "Sectors",
-    "Sector",
-  ])
-}
-
-function getRecordLabel(fields: Record<string, unknown>) {
-  return getStringField(fields, ["Nome", "nome", "Name", "name", "Setor", "setor", "Titulo", "title"])
-}
-
-function isInactive(fields: Record<string, unknown>) {
-  const status = getStringField(fields, ["Status", "status", "Ativo", "ativo"])
-
-  if (!status) {
-    return false
+function getSupabaseConfig() {
+  if (!SUPABASE_REST_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("Missing Supabase REST configuration for users.")
   }
 
-  return ["inativo", "inactive", "desativado", "excluído", "excluido", "false", "não", "nao"].includes(
-    status.toLowerCase(),
-  )
+  return { url: SUPABASE_REST_URL.replace(/\/$/, ""), key: SUPABASE_SERVICE_ROLE_KEY }
 }
 
-async function fetchAllRecords(table: string) {
-  const records: AirtableRecord[] = []
-  let offset: string | undefined
+async function supabaseRequest(path: string, init?: RequestInit) {
+  const { url, key } = getSupabaseConfig()
+  const response = await fetch(`${url}/${path}`, {
+    ...init,
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...init?.headers,
+    },
+    cache: "no-store",
+  })
 
-  do {
-    const params = new URLSearchParams({ pageSize: "100" })
-    if (offset) params.set("offset", offset)
-
-    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(table)}?${params}`
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-      },
-      cache: "no-store",
-    })
-
-    if (response.status === 404) return []
-
-    if (!response.ok) {
-      throw new Error(await response.text())
-    }
-
-    const data = (await response.json()) as {
-      offset?: string
-      records?: AirtableRecord[]
-    }
-
-    records.push(...(data.records ?? []))
-    offset = data.offset
-  } while (offset)
-
-  return records
+  if (!response.ok) throw new Error(await response.text())
+  return response
 }
 
-async function getLinkedTagLabels(ids: string[]) {
-  const uniqueIds = Array.from(new Set(ids.filter((id) => /^rec[a-zA-Z0-9]+$/.test(id))))
-  const labels = new Map<string, string>()
-
-  if (uniqueIds.length === 0) {
-    return labels
-  }
-
-  for (const table of SECTOR_TABLE_CANDIDATES) {
-    const records = await fetchAllRecords(table)
-
-    for (const record of records) {
-      if (!uniqueIds.includes(record.id)) continue
-
-      const label = getRecordLabel(record.fields ?? {})
-      if (label) labels.set(record.id, label)
-    }
-
-    if (labels.size > 0) {
-      break
-    }
-  }
-
-  return labels
+function getExternalProfileId(row: UserProfileRow) {
+  return row.airtable_record_id || row.id
 }
 
-async function getUntaggedSectorIds() {
-  const sectorIds = new Set<string>()
-
-  for (const table of SECTOR_TABLE_CANDIDATES) {
-    const records = await fetchAllRecords(table)
-    if (records.length === 0) continue
-
-    for (const record of records) {
-      const fields = record.fields ?? {}
-      if (!isInactive(fields) && getStringArrayField(fields, ["Tags", "tags"]).length === 0) {
-        sectorIds.add(record.id)
-      }
-    }
-
-    break
-  }
-
-  return sectorIds
+function getExternalSectorId(row: SectorRow) {
+  return row.airtable_record_id || row.id
 }
 
-async function findUserByEmail(email: string) {
-  const normalizedEmail = email.trim().toLowerCase()
+function getExternalTagId(row: { id: string; airtable_record_id: string | null }) {
+  return row.airtable_record_id || row.id
+}
 
-  for (const table of TABLE_CANDIDATES) {
-    const records = await fetchAllRecords(table)
-    const record = records.find((candidate) => {
-      const fields = candidate.fields ?? {}
-      const recordEmail = getEmail(fields)
+function getIdFilter(id: string) {
+  return isUuid(id) ? `id=eq.${encodeURIComponent(id)}` : `airtable_record_id=eq.${encodeURIComponent(id)}`
+}
 
-      return recordEmail?.toLowerCase() === normalizedEmail && !isInactive(fields)
-    })
+function getViewer(request: NextRequest, body?: { email?: unknown; role?: unknown } | null) {
+  const role = normalizeUserRole(request.nextUrl.searchParams.get("role") ?? body?.role)
+  const email = getString(request.nextUrl.searchParams.get("email") ?? body?.email).toLowerCase()
+  return { role, email }
+}
 
-    if (record?.fields) {
-      const sectorIds = getStringArrayField(record.fields, ["Setor", "Setores"])
-      const tagIds = getStringArrayField(record.fields, ["Tags", "tags"])
-      const untaggedSectorIds = await getUntaggedSectorIds()
-      return {
-        id: record.id,
-        email: normalizedEmail,
-        name: getName(record.fields, normalizedEmail),
-        role: getRole(record.fields),
-        source: "airtable" as const,
-        sectorIds,
-        tagIds,
-        canAccessUntaggedChats: sectorIds.some((id) => untaggedSectorIds.has(id)),
-      }
-    }
+function requireAdmin(request: NextRequest, body?: { email?: unknown; role?: unknown } | null) {
+  const viewer = getViewer(request, body)
+  if (viewer.role !== "admin" && !isFallbackAdminEmail(viewer.email)) {
+    return NextResponse.json({ error: "Apenas administradores podem alterar usuarios." }, { status: 403 })
   }
-
   return null
 }
 
-async function listActiveUsers() {
-  const indexedUsers = new Map<string, ListedUser>()
+async function fetchProfiles(email?: string) {
+  const params = new URLSearchParams({
+    select: "id,airtable_record_id,email,name,role,status,raw_airtable",
+    status: "eq.active",
+    order: "name.asc",
+  })
+  if (email) params.set("email", `eq.${email}`)
 
-  for (const table of TABLE_CANDIDATES) {
-    const records = await fetchAllRecords(table)
+  const response = await supabaseRequest(`user_profiles?${params}`)
+  return response.json() as Promise<UserProfileRow[]>
+}
 
-    for (const record of records) {
-      const fields = record.fields ?? {}
-      const email = getEmail(fields)?.toLowerCase()
+async function fetchProfileSectors(profileIds: string[]) {
+  if (profileIds.length === 0) return []
 
-      if (!email || isInactive(fields) || indexedUsers.has(email)) {
-        continue
+  const response = await supabaseRequest(`user_profile_sectors?select=user_profile_id,sectors:sector_id(id,airtable_record_id,name,color)&user_profile_id=in.(${profileIds.join(",")})`)
+  return response.json() as Promise<UserProfileSectorRow[]>
+}
+
+async function fetchSectorTags(sectorIds: string[]) {
+  if (sectorIds.length === 0) return []
+
+  const response = await supabaseRequest(`sector_tags?select=sector_id,tags:tag_id(id,airtable_record_id,label)&sector_id=in.(${sectorIds.join(",")})`)
+  return response.json() as Promise<SectorTagRow[]>
+}
+
+function getFallbackListedUser(email: string): ListedUser {
+  const user = getDefaultUser(email)
+  return {
+    id: `fallback-${user.email}`,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    tags: user.role === "admin" ? ["ADM"] : [],
+    sectorIds: [],
+    tagIds: [],
+    canAccessUntaggedChats: false,
+    source: "airtable",
+  }
+}
+
+async function buildUsers(profiles: UserProfileRow[]) {
+  const profileSectors = await fetchProfileSectors(profiles.map((profile) => profile.id))
+  const sectorsByProfileId = new Map<string, SectorRow[]>()
+
+  for (const link of profileSectors) {
+    if (!link.sectors) continue
+    const current = sectorsByProfileId.get(link.user_profile_id) ?? []
+    current.push(link.sectors)
+    sectorsByProfileId.set(link.user_profile_id, current)
+  }
+
+  const allSectorIds = Array.from(new Set(profileSectors.map((link) => link.sectors?.id).filter((id): id is string => Boolean(id))))
+  const sectorTags = await fetchSectorTags(allSectorIds)
+  const tagsBySectorId = new Map<string, SectorTagRow[]>()
+
+  for (const link of sectorTags) {
+    const current = tagsBySectorId.get(link.sector_id) ?? []
+    current.push(link)
+    tagsBySectorId.set(link.sector_id, current)
+  }
+
+  return profiles.map((profile) => {
+    const sectors = sectorsByProfileId.get(profile.id) ?? []
+    const tagIds = new Set<string>(getStringArrayField(profile.raw_airtable?.fields, ["Tags", "tags"]))
+
+    for (const sector of sectors) {
+      for (const link of tagsBySectorId.get(sector.id) ?? []) {
+        if (link.tags) tagIds.add(getExternalTagId(link.tags))
       }
-
-      indexedUsers.set(email, {
-        id: record.id,
-        email,
-        name: getName(fields, email),
-        role: getRole(fields),
-        tags: getUserTags(fields),
-        sectorIds: getStringArrayField(fields, ["Setor", "Setores"]),
-        tagIds: getStringArrayField(fields, ["Tags", "tags"]),
-        canAccessUntaggedChats: false,
-      })
     }
 
-    if (indexedUsers.size > 0) {
-      break
+    return {
+      id: getExternalProfileId(profile),
+      email: profile.email,
+      name: profile.name,
+      role: normalizeUserRole(profile.role),
+      tags: sectors.map((sector) => sector.name),
+      sectorIds: sectors.map(getExternalSectorId),
+      tagIds: Array.from(tagIds),
+      canAccessUntaggedChats: sectors.some((sector) => (tagsBySectorId.get(sector.id) ?? []).length === 0),
+      source: "airtable" as const,
     }
-  }
-
-  for (const email of FALLBACK_ADMIN_EMAILS) {
-    if (!indexedUsers.has(email)) {
-      const user = getDefaultUser(email)
-      indexedUsers.set(email, {
-        id: `fallback-${email}`,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        tags: user.role === "admin" ? ["ADM"] : [],
-        sectorIds: [],
-        tagIds: [],
-        canAccessUntaggedChats: false,
-      })
-    }
-  }
-
-  const linkedTagLabels = await getLinkedTagLabels(Array.from(indexedUsers.values()).flatMap((user) => user.tags))
-  const untaggedSectorIds = await getUntaggedSectorIds()
-
-  return Array.from(indexedUsers.values())
-    .map((user) => ({
-      ...user,
-      tags: Array.from(new Set(user.tags.map((tag) => linkedTagLabels.get(tag) ?? tag).filter((tag) => !/^rec[a-zA-Z0-9]+$/.test(tag)))),
-      canAccessUntaggedChats: user.sectorIds.some((id) => untaggedSectorIds.has(id)),
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+  })
 }
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const email = searchParams.get("email")?.trim().toLowerCase()
+  try {
+    const { searchParams } = new URL(request.url)
+    const email = searchParams.get("email")?.trim().toLowerCase()
 
-  if (!email) {
-    if (!AIRTABLE_TOKEN) {
-      return NextResponse.json({
-        users: FALLBACK_ADMIN_EMAILS.map((fallbackEmail) => {
-          const user = getDefaultUser(fallbackEmail)
-          return { email: user.email, name: user.name, role: user.role, tags: user.role === "admin" ? ["ADM"] : [] }
-        }),
-      })
+    if (email) {
+      const users = await buildUsers(await fetchProfiles(email))
+      return NextResponse.json(users[0] ?? getDefaultUser(email))
     }
 
-    return NextResponse.json({ users: await listActiveUsers() })
+    const indexedUsers = new Map<string, ListedUser>()
+    for (const user of await buildUsers(await fetchProfiles())) indexedUsers.set(user.email, user)
+
+    for (const email of FALLBACK_ADMIN_EMAILS) {
+      if (!indexedUsers.has(email)) indexedUsers.set(email, getFallbackListedUser(email))
+    }
+
+    return NextResponse.json({ users: Array.from(indexedUsers.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR")) })
+  } catch (error) {
+    const { searchParams } = new URL(request.url)
+    const email = searchParams.get("email")?.trim().toLowerCase()
+    if (email) return NextResponse.json(getDefaultUser(email))
+
+    return NextResponse.json({
+      users: FALLBACK_ADMIN_EMAILS.map((fallbackEmail) => getFallbackListedUser(fallbackEmail)),
+      error: error instanceof Error ? error.message : "Nao foi possivel carregar usuarios.",
+    })
   }
-
-  if (!AIRTABLE_TOKEN) {
-    return NextResponse.json(getDefaultUser(email))
-  }
-
-  const user = await findUserByEmail(email)
-
-  return NextResponse.json(user ?? getDefaultUser(email))
 }
 
-export async function PATCH(request: Request) {
+async function resolveSectorIds(sectorIds: string[]) {
+  if (sectorIds.length === 0) return []
+
+  const response = await supabaseRequest("sectors?select=id,airtable_record_id&status=eq.active&limit=1000")
+  const sectors = (await response.json()) as SectorRow[]
+  const sectorsByExternalId = new Map<string, string>()
+
+  for (const sector of sectors) {
+    sectorsByExternalId.set(sector.id, sector.id)
+    if (sector.airtable_record_id) sectorsByExternalId.set(sector.airtable_record_id, sector.id)
+  }
+
+  return sectorIds.map((sectorId) => sectorsByExternalId.get(sectorId)).filter((sectorId): sectorId is string => Boolean(sectorId))
+}
+
+export async function PATCH(request: NextRequest) {
   try {
-    if (!AIRTABLE_TOKEN) throw new Error("Missing AIRTABLE_TOKEN or AIRTABLE_API_KEY")
-    const body = (await request.json()) as { id?: unknown; sectorIds?: unknown }
-    const id = typeof body.id === "string" ? body.id : ""
-    const sectorIds = Array.isArray(body.sectorIds)
-      ? Array.from(new Set(body.sectorIds.filter((value): value is string => typeof value === "string" && /^rec[a-zA-Z0-9]+$/.test(value))))
+    const body = (await request.json().catch(() => null)) as { id?: unknown; sectorIds?: unknown; email?: unknown; role?: unknown } | null
+    const unauthorized = requireAdmin(request, body)
+    if (unauthorized) return unauthorized
+
+    const id = getString(body?.id)
+    const sectorIds = Array.isArray(body?.sectorIds)
+      ? Array.from(new Set(body.sectorIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0)))
       : []
 
-    if (!/^rec[a-zA-Z0-9]+$/.test(id)) throw new Error("Usuário não encontrado.")
+    if (!id) throw new Error("Usuario nao encontrado.")
 
-    for (const table of TABLE_CANDIDATES) {
-      const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(table)}`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ records: [{ id, fields: { Setor: sectorIds } }] }),
-        cache: "no-store",
+    const profileResponse = await supabaseRequest(`user_profiles?select=id&${getIdFilter(id)}&limit=1`)
+    const profiles = (await profileResponse.json()) as Array<{ id: string }>
+    const profile = profiles[0]
+    if (!profile) throw new Error("Usuario nao encontrado.")
+
+    await supabaseRequest(`user_profile_sectors?user_profile_id=eq.${encodeURIComponent(profile.id)}`, {
+      method: "DELETE",
+      headers: { Prefer: "return=minimal" },
+    })
+
+    const resolvedSectorIds = await resolveSectorIds(sectorIds)
+    if (resolvedSectorIds.length > 0) {
+      await supabaseRequest("user_profile_sectors", {
+        method: "POST",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify(resolvedSectorIds.map((sectorId) => ({ user_profile_id: profile.id, sector_id: sectorId }))),
       })
-
-      if (response.status === 404) continue
-      if (!response.ok) throw new Error(await response.text())
-      return NextResponse.json({ ok: true, sectorIds })
     }
 
-    throw new Error("Tabela de usuários não encontrada.")
+    return NextResponse.json({ ok: true, sectorIds })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível atualizar o usuário." }, { status: 500 })
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Nao foi possivel atualizar o usuario." }, { status: 500 })
   }
 }

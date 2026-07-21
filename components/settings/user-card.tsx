@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { FolderKanban, HardHat, Loader2, Mail, Pencil, Shield, User } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -28,6 +29,7 @@ interface UserCardProps {
 }
 
 export function UserCard({ user, sectors, onUpdated }: UserCardProps) {
+  const { user: currentUser } = useCurrentUser();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState(user.sectorIds);
   const [isSaving, setIsSaving] = useState(false);
@@ -45,7 +47,7 @@ export function UserCard({ user, sectors, onUpdated }: UserCardProps) {
       const response = await fetch("/api/airtable/users", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: user.id, sectorIds: selectedIds }),
+        body: JSON.stringify({ id: user.id, sectorIds: selectedIds, email: currentUser?.email ?? "", role: currentUser?.role ?? "user" }),
       });
       const data = (await response.json().catch(() => null)) as { error?: string } | null;
       if (!response.ok) throw new Error(data?.error || "Não foi possível atualizar o usuário.");
@@ -109,7 +111,7 @@ export function UserCard({ user, sectors, onUpdated }: UserCardProps) {
             <FolderKanban className="h-3.5 w-3.5 opacity-70" />
             Setores sob responsabilidade
           </span>
-          {/^rec[a-zA-Z0-9]+$/.test(user.id) && (
+          {(user.id.startsWith("rec") || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id)) && (
             <Button
               variant="ghost"
               size="icon-sm"

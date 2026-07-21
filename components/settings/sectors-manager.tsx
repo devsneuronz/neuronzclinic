@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { type ChatTag } from "@/lib/chat-tags";
 import { Loader2, Pencil, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
@@ -30,6 +31,9 @@ async function apiError(response: Response, fallback: string) {
 }
 
 export function SectorsManager({ onSectorsChanged }: { onSectorsChanged?: (sectors: Sector[]) => void }) {
+  const { user } = useCurrentUser();
+  const userEmail = user?.email ?? "";
+  const userRole = user?.role ?? "user";
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [tags, setTags] = useState<ChatTag[]>([]);
   const [draft, setDraft] = useState<SectorDraft>(EMPTY_DRAFT);
@@ -86,6 +90,13 @@ export function SectorsManager({ onSectorsChanged }: { onSectorsChanged?: (secto
   }, []);
 
   const sortedSectors = useMemo(() => sectors.slice().sort((a, b) => a.name.localeCompare(b.name, "pt-BR")), [sectors]);
+  const accessPayload = useMemo(() => ({ email: userEmail, role: userRole }), [userEmail, userRole]);
+  const accessQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (userEmail) params.set("email", userEmail);
+    if (userRole) params.set("role", userRole);
+    return params.toString();
+  }, [userEmail, userRole]);
 
   function openCreate() {
     setEditing(null);
@@ -115,7 +126,7 @@ export function SectorsManager({ onSectorsChanged }: { onSectorsChanged?: (secto
       const response = await fetch(editing ? `/api/airtable/sectors?id=${encodeURIComponent(editing.id)}` : "/api/airtable/sectors", {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(draft),
+        body: JSON.stringify({ ...draft, ...accessPayload }),
       });
       if (!response.ok) throw new Error(await apiError(response, "Não foi possível salvar o setor."));
       const data = (await response.json()) as { sector?: Sector | null };
@@ -139,7 +150,7 @@ export function SectorsManager({ onSectorsChanged }: { onSectorsChanged?: (secto
     setIsSaving(true);
     setError(null);
     try {
-      const response = await fetch(`/api/airtable/sectors?id=${encodeURIComponent(deleting.id)}`, { method: "DELETE" });
+      const response = await fetch(`/api/airtable/sectors?id=${encodeURIComponent(deleting.id)}${accessQuery ? `&${accessQuery}` : ""}`, { method: "DELETE" });
       if (!response.ok) throw new Error(await apiError(response, "Não foi possível excluir o setor."));
       const next = sectors.filter((sector) => sector.id !== deleting.id);
       setSectors(next);

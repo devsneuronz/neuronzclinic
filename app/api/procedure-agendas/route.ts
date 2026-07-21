@@ -1,4 +1,5 @@
 import { WEEKDAY_LABELS, type WeekdayName } from "@/lib/schedule/professional-agenda";
+import { isFallbackAdminEmail, normalizeUserRole } from "@/lib/user-roles";
 import { NextRequest, NextResponse } from "next/server";
 
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
@@ -53,6 +54,20 @@ function getSupabaseConfig() {
   }
 
   return { url: SUPABASE_REST_URL.replace(/\/$/, ""), key: SUPABASE_SERVICE_ROLE_KEY };
+}
+
+function getViewer(request: NextRequest, body?: { role?: unknown; email?: unknown } | null) {
+  const role = normalizeUserRole(request.nextUrl.searchParams.get("role") ?? body?.role);
+  const email = getString(request.nextUrl.searchParams.get("email") ?? body?.email).toLowerCase();
+  return { role, email };
+}
+
+function requireAdmin(request: NextRequest, body?: { role?: unknown; email?: unknown } | null) {
+  const viewer = getViewer(request, body);
+  if (viewer.role !== "admin" && !isFallbackAdminEmail(viewer.email)) {
+    return NextResponse.json({ message: "Apenas administradores podem vincular agendas a procedimentos." }, { status: 403 });
+  }
+  return null;
 }
 
 async function supabaseRequest(path: string, init?: RequestInit) {
@@ -158,7 +173,10 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const body = (await request.json().catch(() => null)) as { procedureId?: unknown; agendaIds?: unknown } | null;
+    const body = (await request.json().catch(() => null)) as { procedureId?: unknown; agendaIds?: unknown; role?: unknown; email?: unknown } | null;
+    const unauthorized = requireAdmin(request, body);
+    if (unauthorized) return unauthorized;
+
     const procedureId = getString(body?.procedureId);
     const agendaIds = Array.isArray(body?.agendaIds) ? Array.from(new Set(body.agendaIds.map(getString).filter(Boolean))) : [];
 

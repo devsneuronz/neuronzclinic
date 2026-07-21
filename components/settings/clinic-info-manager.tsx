@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getReadableTextColor } from "@/lib/chat-tags";
 import { cn, normalizeText } from "@/lib/utils";
@@ -45,6 +46,7 @@ export type SupabaseProcedure = {
   valor_consulta: string;
   valor_procedimento: string;
   agendas_contexto_ia: string;
+  interest_tag_id?: string | null;
   interesse: string;
   created_at: string;
 };
@@ -62,6 +64,7 @@ type ProcedureDraft = {
   valor_avaliacao: string;
   valor_consulta: string;
   valor_procedimento: string;
+  interest_tag_id: string;
   interesse: string;
 };
 
@@ -90,6 +93,7 @@ const emptyProcedureDraft: ProcedureDraft = {
   valor_avaliacao: "",
   valor_consulta: "",
   valor_procedimento: "",
+  interest_tag_id: "",
   interesse: "",
 };
 
@@ -107,6 +111,7 @@ function procedureToDraft(p: SupabaseProcedure): ProcedureDraft {
     valor_avaliacao: p.valor_avaliacao || "",
     valor_consulta: p.valor_consulta || "",
     valor_procedimento: p.valor_procedimento || "",
+    interest_tag_id: p.interest_tag_id || "",
     interesse: p.interesse || "",
   };
 }
@@ -125,6 +130,7 @@ function draftToPayload(draft: ProcedureDraft) {
     valor_avaliacao: draft.informar_valor_avaliacao ? draft.valor_avaliacao || null : null,
     valor_consulta: draft.informar_valor_consulta ? draft.valor_consulta || null : null,
     valor_procedimento: draft.informar_valor_procedimento ? draft.valor_procedimento || null : null,
+    interest_tag_id: draft.interest_tag_id || null,
     interesse: draft.interesse || null,
   };
 }
@@ -187,11 +193,14 @@ function ProcedureDialog({ open, onOpenChange, editTarget, tagOptions, isSaving,
   };
 
   useEffect(() => {
-    if (open) {
+    const timer = window.setTimeout(() => {
+      if (!open) return;
       setDraft(editTarget ? procedureToDraft(editTarget) : emptyProcedureDraft);
       setInterestSearch("");
       setIsInterestOpen(false);
-    }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [open, editTarget]);
 
   useEffect(() => {
@@ -209,7 +218,7 @@ function ProcedureDialog({ open, onOpenChange, editTarget, tagOptions, isSaving,
     return tagOptions.filter((t) => normalizeText(t.label).includes(q));
   }, [interestSearch, tagOptions]);
 
-  const selectedTag = tagOptions.find((t) => t.label === draft.interesse);
+  const selectedTag = tagOptions.find((t) => t.uuid === draft.interest_tag_id || t.id === draft.interest_tag_id || t.label === draft.interesse);
 
   const set = <K extends keyof ProcedureDraft>(key: K, value: ProcedureDraft[K]) => setDraft((d) => ({ ...d, [key]: value }));
 
@@ -360,6 +369,7 @@ function ProcedureDialog({ open, onOpenChange, editTarget, tagOptions, isSaving,
                     <span
                       onClick={(e) => {
                         e.stopPropagation();
+                        set("interest_tag_id", "");
                         set("interesse", "");
                       }}
                       className="ml-2 text-muted-foreground hover:text-foreground"
@@ -384,11 +394,12 @@ function ProcedureDialog({ open, onOpenChange, editTarget, tagOptions, isSaving,
                             key={tag.id}
                             type="button"
                             onClick={() => {
+                              set("interest_tag_id", tag.uuid || tag.id);
                               set("interesse", tag.label);
                               setIsInterestOpen(false);
                               setInterestSearch("");
                             }}
-                            className={cn("flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent transition-colors text-left", draft.interesse === tag.label && "bg-accent")}
+                            className={cn("flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent transition-colors text-left", selectedTag?.id === tag.id && "bg-accent")}
                           >
                             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: tag.color || "#888" }} />
                             <span className="font-medium">{tag.label}</span>
@@ -538,6 +549,9 @@ function ProcedureDialog({ open, onOpenChange, editTarget, tagOptions, isSaving,
 }
 
 export function ClinicInfoManager() {
+  const { user } = useCurrentUser();
+  const userEmail = user?.email ?? "";
+  const userRole = user?.role ?? "user";
   const [assistant, setAssistant] = useState<SupabaseAssistantInfo>(emptyAssistant);
   const [assistantDraft, setAssistantDraft] = useState<SupabaseAssistantInfo>(emptyAssistant);
   const [procedures, setProcedures] = useState<SupabaseProcedure[]>([]);
@@ -564,6 +578,21 @@ export function ClinicInfoManager() {
     assistantDraft.estilo_conversa !== assistant.estilo_conversa ||
     assistantDraft.avisar_agendamento !== assistant.avisar_agendamento ||
     assistantDraft.avisar_encaminhamento !== assistant.avisar_encaminhamento;
+
+  const accessPayload = useMemo(
+    () => ({
+      email: userEmail,
+      role: userRole,
+    }),
+    [userEmail, userRole],
+  );
+
+  const accessQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (userEmail) params.set("email", userEmail);
+    if (userRole) params.set("role", userRole);
+    return params.toString();
+  }, [userEmail, userRole]);
 
   async function loadInfo() {
     setIsLoading(true);
@@ -624,7 +653,7 @@ export function ClinicInfoManager() {
       const res = await fetch("/api/ia-assistant", {
         method: isNew ? "POST" : "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(assistantDraft),
+        body: JSON.stringify({ ...assistantDraft, ...accessPayload }),
       });
       if (!res.ok) throw new Error(await readApiMessage(res, "Não foi possível salvar as informações da assistente."));
       const data = await res.json();
@@ -646,7 +675,7 @@ export function ClinicInfoManager() {
       const res = await fetch("/api/procedures", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(draftToPayload(draft)),
+        body: JSON.stringify({ ...draftToPayload(draft), ...accessPayload }),
       });
       if (!res.ok) throw new Error(await readApiMessage(res, "Não foi possível criar o procedimento."));
       const data = await res.json();
@@ -669,7 +698,7 @@ export function ClinicInfoManager() {
       const res = await fetch("/api/procedures", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editTarget.id, ...draftToPayload(draft) }),
+        body: JSON.stringify({ id: editTarget.id, ...draftToPayload(draft), ...accessPayload }),
       });
       if (!res.ok) throw new Error(await readApiMessage(res, "Não foi possível salvar o procedimento."));
       const data = await res.json();
@@ -691,7 +720,7 @@ export function ClinicInfoManager() {
     setDeletingId(deleteTarget.id);
     setError(null);
     try {
-      const res = await fetch(`/api/procedures?id=${encodeURIComponent(deleteTarget.id)}`, { method: "DELETE" });
+      const res = await fetch(`/api/procedures?id=${encodeURIComponent(deleteTarget.id)}${accessQuery ? `&${accessQuery}` : ""}`, { method: "DELETE" });
       if (!res.ok) throw new Error(await readApiMessage(res, "Não foi possível excluir o procedimento."));
       setProcedures((curr) => curr.filter((p) => p.id !== deleteTarget.id));
       setDeleteTarget(null);
@@ -820,134 +849,138 @@ export function ClinicInfoManager() {
                   disabled={isSavingAssistant}
                 />
               </div>
-              <Separator className="my-2 bg-border/60" />
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Personalidade e Identidade</h3>
-                  <p className="text-xs text-muted-foreground">Defina a identidade visual, gênero e as informações cadastrais da clínica.</p>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {false && (
+                <>
+                  <Separator className="my-2 bg-border/60" />
                   <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="assistant-name" className="text-xs font-semibold text-foreground">
-                        Nome da IA
-                      </Label>
-                      <Input
-                        id="assistant-name"
-                        type="text"
-                        value={assistantDraft.name || ""}
-                        onChange={(e) => setAssistantDraft((c) => ({ ...c, name: e.target.value }))}
-                        placeholder="Ex: Lia, Dr. Robô, Amanda..."
-                        disabled={isSavingAssistant}
-                      />
+                    <div>
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Personalidade e Identidade</h3>
+                      <p className="text-xs text-muted-foreground">Defina a identidade visual, gênero e as informações cadastrais da clínica.</p>
                     </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-semibold text-foreground">Gênero de Tratamento</Label>
-                      <Tabs value={assistantDraft.gender || "ia"} onValueChange={(v) => setAssistantDraft((c) => ({ ...c, gender: v }))} className="w-full">
-                        <TabsList className="w-full gap-1.5 rounded-full h-9! bg-secondary/50 border border-border/40">
-                          <TabsTrigger value="mulher" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
-                            Mulher
-                          </TabsTrigger>
-                          <TabsTrigger value="homem" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
-                            Homem
-                          </TabsTrigger>
-                          <TabsTrigger value="ia" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
-                            Neutro / IA
-                          </TabsTrigger>
-                        </TabsList>
-                      </Tabs>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="assistant-name" className="text-xs font-semibold text-foreground">
+                            Nome da IA
+                          </Label>
+                          <Input
+                            id="assistant-name"
+                            type="text"
+                            value={assistantDraft.name || ""}
+                            onChange={(e) => setAssistantDraft((c) => ({ ...c, name: e.target.value }))}
+                            placeholder="Ex: Lia, Dr. Robô, Amanda..."
+                            disabled={isSavingAssistant}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs font-semibold text-foreground">Gênero de Tratamento</Label>
+                          <Tabs value={assistantDraft.gender || "ia"} onValueChange={(v) => setAssistantDraft((c) => ({ ...c, gender: v }))} className="w-full">
+                            <TabsList className="w-full gap-1.5 rounded-full h-9! bg-secondary/50 border border-border/40">
+                              <TabsTrigger value="mulher" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
+                                Mulher
+                              </TabsTrigger>
+                              <TabsTrigger value="homem" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
+                                Homem
+                              </TabsTrigger>
+                              <TabsTrigger value="ia" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
+                                Neutro / IA
+                              </TabsTrigger>
+                            </TabsList>
+                          </Tabs>
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="assistant-style" className="text-xs font-semibold text-foreground">
+                            Estilo de Conversa
+                          </Label>
+                          <Select value={assistantDraft.estilo_conversa || "formal"} onValueChange={(v) => setAssistantDraft((c) => ({ ...c, estilo_conversa: v }))} disabled={isSavingAssistant}>
+                            <SelectTrigger id="assistant-style" className="w-full">
+                              <SelectValue placeholder="Selecione o tom da conversa" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="formal">Formal • Profissional, educado e objetivo</SelectItem>
+                              <SelectItem value="informal">Informal • Acolhedor, próximo e natural</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="assistant-style" className="text-xs font-semibold text-foreground">
-                        Estilo de Conversa
-                      </Label>
-                      <Select value={assistantDraft.estilo_conversa || "formal"} onValueChange={(v) => setAssistantDraft((c) => ({ ...c, estilo_conversa: v }))} disabled={isSavingAssistant}>
-                        <SelectTrigger id="assistant-style" className="w-full">
-                          <SelectValue placeholder="Selecione o tom da conversa" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="formal">Formal • Profissional, educado e objetivo</SelectItem>
-                          <SelectItem value="informal">Informal • Acolhedor, próximo e natural</SelectItem>
-                        </SelectContent>
-                      </Select>
+                  <Separator className="my-2 bg-border/60" />
+                  <div className="space-y-4 pt-2">
+                    <div>
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Comportamento e Notificações</h3>
+                      <p className="text-xs text-muted-foreground">Ajuste como a assistente interage e quando ela deve enviar notificações.</p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div
+                        className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
+                        onClick={() => setAssistantDraft((c) => ({ ...c, emoji: !c.emoji }))}
+                      >
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                            <Smile className="h-4 w-4" />
+                          </div>
+                          <div className="space-y-0.5 min-w-0">
+                            <Label htmlFor="assistant-emojis" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
+                              Permitir o uso de emojis
+                            </Label>
+                            <p className="text-[11px] text-muted-foreground leading-tight">{assistantDraft.emoji ? "A IA usará reações visuais moderadas nas respostas." : "Respostas estritamente textuais e limpas."}</p>
+                          </div>
+                        </div>
+                        <Switch id="assistant-emojis" checked={!!assistantDraft.emoji} onClick={(e) => e.stopPropagation()} onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, emoji: v }))} disabled={isSavingAssistant} />
+                      </div>
+                      <div
+                        className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
+                        onClick={() => setAssistantDraft((c) => ({ ...c, avisar_agendamento: !c.avisar_agendamento }))}
+                      >
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                            <CalendarPlus className="h-4 w-4" />
+                          </div>
+                          <div className="space-y-0.5 min-w-0">
+                            <Label htmlFor="assistant-notify-booking" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
+                              Avisar sobre agendamentos
+                            </Label>
+                            <p className="text-[11px] text-muted-foreground leading-tight">Notificar quando um novo agendamento for solicitado ou realizado.</p>
+                          </div>
+                        </div>
+                        <Switch
+                          id="assistant-notify-booking"
+                          checked={!!assistantDraft.avisar_agendamento}
+                          onClick={(e) => e.stopPropagation()}
+                          onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, avisar_agendamento: v }))}
+                          disabled={isSavingAssistant}
+                        />
+                      </div>
+                      <div
+                        className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
+                        onClick={() => setAssistantDraft((c) => ({ ...c, avisar_encaminhamento: !c.avisar_encaminhamento }))}
+                      >
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                            <ArrowUpRight className="h-4 w-4" />
+                          </div>
+                          <div className="space-y-0.5 min-w-0">
+                            <Label htmlFor="assistant-notify-forward" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
+                              Avisar sobre encaminhamentos
+                            </Label>
+                            <p className="text-[11px] text-muted-foreground leading-tight">Notificar quando a conversa for encaminhada para atendimento humano.</p>
+                          </div>
+                        </div>
+                        <Switch
+                          id="assistant-notify-forward"
+                          checked={!!assistantDraft.avisar_encaminhamento}
+                          onClick={(e) => e.stopPropagation()}
+                          onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, avisar_encaminhamento: v }))}
+                          disabled={isSavingAssistant}
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-              <Separator className="my-2 bg-border/60" />
-              <div className="space-y-4 pt-2">
-                <div>
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Comportamento e Notificações</h3>
-                  <p className="text-xs text-muted-foreground">Ajuste como a assistente interage e quando ela deve enviar notificações.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div
-                    className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
-                    onClick={() => setAssistantDraft((c) => ({ ...c, emoji: !c.emoji }))}
-                  >
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
-                        <Smile className="h-4 w-4" />
-                      </div>
-                      <div className="space-y-0.5 min-w-0">
-                        <Label htmlFor="assistant-emojis" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
-                          Permitir o uso de emojis
-                        </Label>
-                        <p className="text-[11px] text-muted-foreground leading-tight">{assistantDraft.emoji ? "A IA usará reações visuais moderadas nas respostas." : "Respostas estritamente textuais e limpas."}</p>
-                      </div>
-                    </div>
-                    <Switch id="assistant-emojis" checked={!!assistantDraft.emoji} onClick={(e) => e.stopPropagation()} onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, emoji: v }))} disabled={isSavingAssistant} />
-                  </div>
-                  <div
-                    className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
-                    onClick={() => setAssistantDraft((c) => ({ ...c, avisar_agendamento: !c.avisar_agendamento }))}
-                  >
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
-                        <CalendarPlus className="h-4 w-4" />
-                      </div>
-                      <div className="space-y-0.5 min-w-0">
-                        <Label htmlFor="assistant-notify-booking" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
-                          Avisar sobre agendamentos
-                        </Label>
-                        <p className="text-[11px] text-muted-foreground leading-tight">Notificar quando um novo agendamento for solicitado ou realizado.</p>
-                      </div>
-                    </div>
-                    <Switch
-                      id="assistant-notify-booking"
-                      checked={!!assistantDraft.avisar_agendamento}
-                      onClick={(e) => e.stopPropagation()}
-                      onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, avisar_agendamento: v }))}
-                      disabled={isSavingAssistant}
-                    />
-                  </div>
-                  <div
-                    className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
-                    onClick={() => setAssistantDraft((c) => ({ ...c, avisar_encaminhamento: !c.avisar_encaminhamento }))}
-                  >
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
-                        <ArrowUpRight className="h-4 w-4" />
-                      </div>
-                      <div className="space-y-0.5 min-w-0">
-                        <Label htmlFor="assistant-notify-forward" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
-                          Avisar sobre encaminhamentos
-                        </Label>
-                        <p className="text-[11px] text-muted-foreground leading-tight">Notificar quando a conversa for encaminhada para atendimento humano.</p>
-                      </div>
-                    </div>
-                    <Switch
-                      id="assistant-notify-forward"
-                      checked={!!assistantDraft.avisar_encaminhamento}
-                      onClick={(e) => e.stopPropagation()}
-                      onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, avisar_encaminhamento: v }))}
-                      disabled={isSavingAssistant}
-                    />
-                  </div>
-                </div>
-              </div>
+                </>
+              )}
             </div>
           </>
         )}
@@ -1045,7 +1078,7 @@ export function ClinicInfoManager() {
                   <Stethoscope className="h-9 w-9 text-muted-foreground/50 stroke-[1.5]" />
                   <div>
                     <p className="font-medium">Nenhum procedimento cadastrado.</p>
-                    <p className="text-xs mt-0.5">Clique em "Novo procedimento" para começar.</p>
+                    <p className="text-xs mt-0.5">Clique em &quot;Novo procedimento&quot; para começar.</p>
                   </div>
                 </div>
               ) : (
@@ -1053,7 +1086,7 @@ export function ClinicInfoManager() {
                   {procedures.map((procedure) => {
                     const isActive = procedure.status === "ativo";
                     const isDeleting = deletingId === procedure.id;
-                    const tag = tagOptions.find((t) => t.label === procedure.interesse);
+                    const tag = tagOptions.find((t) => t.uuid === procedure.interest_tag_id || t.id === procedure.interest_tag_id || t.label === procedure.interesse);
                     const modalidadeLabel = procedure.modalidade === "presencial" ? "Presencial" : procedure.modalidade === "online" ? "Online" : procedure.modalidade;
                     const modoLabel = procedure.modo_resposta_ia === "texto_integral" ? "Integral" : procedure.modo_resposta_ia === "usar_como_base" ? "Base" : procedure.modo_resposta_ia;
                     return (
