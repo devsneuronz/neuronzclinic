@@ -1,0 +1,165 @@
+import { normalizeUserRole } from "@/lib/user-roles";
+import { NextRequest, NextResponse } from "next/server";
+
+const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+type ProfessionalRow = {
+  id_profissional: string;
+  nome: string | null;
+  email: string | null;
+  user_id: string | null;
+  users?: { name: string | null; email: string | null } | null;
+  professional_procedimentos?: Array<{ procedimentos?: { id: string; nome: string | null; interesse: string | null } | null }>;
+};
+
+type ChatRow = {
+  id: string;
+  nome_contato: string | null;
+  phone_contact: string | null;
+  chat_id: string | null;
+  json_interesses: unknown;
+};
+
+type StatusRow = {
+  id: string;
+  status: string;
+  hex: string;
+};
+
+type TypeRow = {
+  id: string;
+  tipo: string;
+};
+
+function getString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalize(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function getSupabaseConfig() {
+  if (!SUPABASE_REST_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing Supabase REST configuration.");
+  return { url: SUPABASE_REST_URL.replace(/\/$/, ""), key: SUPABASE_SERVICE_ROLE_KEY };
+}
+
+async function supabaseRequest(path: string, init?: RequestInit) {
+  const { url, key } = getSupabaseConfig();
+  const response = await fetch(`${url}/${path}`, {
+    ...init,
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...(init?.headers ?? {}),
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) throw new Error(`Supabase ${response.status}: ${await response.text()}`);
+  return response;
+}
+
+async function selectRows<T>(table: string, query: Record<string, string | number>) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) params.set(key, String(value));
+  const response = await supabaseRequest(`${table}?${params}`);
+  return response.json() as Promise<T[]>;
+}
+
+function getProfessionalEmail(professional: ProfessionalRow) {
+  return professional.users?.email || professional.email || "";
+}
+
+function getProfessionalName(professional: ProfessionalRow) {
+  return professional.users?.name || professional.nome || professional.email || professional.users?.email || "Profissional";
+}
+
+function canUseProfessional(viewer: { role: string; email: string }, professional: ProfessionalRow) {
+  if (viewer.role === "admin" || viewer.role === "manager") return true;
+  return getProfessionalEmail(professional).trim().toLowerCase() === viewer.email;
+}
+
+async function getProfessionals() {
+  return selectRows<ProfessionalRow>("professional", {
+    select: "id_profissional,nome,email,user_id,users:user_id(name,email),professional_procedimentos(procedimentos:id_procedimento(id,nome,interesse))",
+    order: "created_at.desc",
+    limit: 1000,
+  });
+}
+
+function interestText(value: unknown) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  return JSON.stringify(value);
+}
+
+function chatMatchesInterests(chat: ChatRow, interests: string[]) {
+  if (interests.length === 0) return true;
+  const haystack = normalize(interestText(chat.json_interesses));
+  return interests.some((interest) => haystack.includes(normalize(interest)));
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const role = normalizeUserRole(request.nextUrl.searchParams.get("role"));
+    const email = getString(request.nextUrl.searchParams.get("email")).toLowerCase();
+    const requestedProfessionalId = getString(request.nextUrl.searchParams.get("professionalId"));
+
+    const [professionals, statuses, types, chats] = await Promise.all([
+      getProfessionals(),
+      selectRows<StatusRow>("appointment_status", { select: "id,status,hex", order: "status.asc", limit: 1000 }),
+      selectRows<TypeRow>("appointment_procedure_type", { select: "id,tipo", order: "tipo.asc", limit: 1000 }),
+      selectRows<ChatRow>("chats", { select: "id,nome_contato,phone_contact,chat_id,json_interesses", order: "last_message_time.desc", limit: 1000 }),
+    ]);
+
+    const allowedProfessionals = professionals.filter((professional) => canUseProfessional({ role, email }, professional));
+    const selectedProfessional = allowedProfessionals.find((professional) => professional.id_profissional === requestedProfessionalId) ?? allowedProfessionals[0] ?? null;
+    const interests = (selectedProfessional?.professional_procedimentos ?? []).map((link) => link.procedimentos?.interesse || link.procedimentos?.nome || "").filter(Boolean);
+    const procedures = (selectedProfessional?.professional_procedimentos ?? [])
+      .map((link) => link.procedimentos)
+      .filter((procedure): procedure is { id: string; nome: string | null; interesse: string | null } => Boolean(procedure?.id));
+    const filteredChats = selectedProfessional ? chats.filter((chat) => chatMatchesInterests(chat, interests)) : chats;
+
+    return NextResponse.json({
+      status: statuses.map((status) => status.status),
+      statusOptions: statuses.map((status) => ({ id: status.id, label: status.status, hex: status.hex })),
+      types: types.map((type) => type.tipo),
+      typeOptions: types.map((type) => ({ id: type.id, label: type.tipo })),
+      attendanceModes: ["Presencial", "Online"],
+      professionals: allowedProfessionals.map((professional) => ({ id: professional.id_profissional, label: getProfessionalName(professional) })),
+      procedures: procedures.map((procedure) => ({
+        id: procedure.id,
+        label: procedure.nome || "Procedimento",
+        interest: procedure.interesse || "",
+      })),
+      patients: filteredChats.map((chat) => ({
+        id: chat.id,
+        label: chat.nome_contato || chat.phone_contact || chat.chat_id || "Contato",
+        phone: chat.phone_contact || "",
+      })),
+      selectedProfessionalId: selectedProfessional?.id_profissional ?? "",
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        status: [],
+        statusOptions: [],
+        types: [],
+        typeOptions: [],
+        attendanceModes: [],
+        professionals: [],
+        procedures: [],
+        patients: [],
+        message: error instanceof Error ? error.message : "Nao foi possivel carregar as opcoes.",
+      },
+      { status: 200 },
+    );
+  }
+}
