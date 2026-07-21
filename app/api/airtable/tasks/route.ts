@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server"
 
-const AIRTABLE_BASE_ID = "app03ti52QQD3W9L2"
-const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY
-const TASK_TABLE = process.env.AIRTABLE_TASKS_TABLE || "Encaminhamentos"
-const CONTACTS_TABLE = process.env.AIRTABLE_CONTACTS_TABLE || "Contatos"
-const USERS_TABLE = process.env.AIRTABLE_USERS_TABLE || "User"
+const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 type CreateTaskBody = {
   type?: unknown
@@ -31,63 +28,59 @@ type UpdateTaskBody = {
   observations?: unknown
 }
 
-type AirtableRecord = {
+type UserProfileRow = {
   id: string
-  createdTime?: string
-  fields?: Record<string, unknown>
+  airtable_record_id: string | null
+  name: string
+  email: string
+}
+
+type ContactRow = {
+  id: string
+  name: string | null
+  phone: string | null
+  phone_id_chat: string | null
+}
+
+type ChatRow = {
+  id: string
+  chat_id: string | null
+  phone_contact: string | null
+  nome_contato: string | null
+  url_foto_perfil: string | null
+  contact_id: string | null
+}
+
+type TaskRow = {
+  id: string
+  airtable_record_id: string | null
+  type: string
+  status: string
+  status_normalized: string
+  subject: string
+  description: string | null
+  responsible_airtable_record_id: string | null
+  responsible_name: string | null
+  creator_airtable_record_id: string | null
+  creator_name: string | null
+  contact_airtable_record_id: string | null
+  chat_id: string | null
+  patient_name: string | null
+  patient_phone: string | null
+  due_date: string | null
+  created_at: string
+  responsible_user_profiles?: UserProfileRow | null
+  creator_user_profiles?: UserProfileRow | null
+  contacts?: ContactRow | null
+  chats?: ChatRow | null
 }
 
 function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
 }
 
-function getStringField(fields: Record<string, unknown>, candidates: string[]) {
-  for (const candidate of candidates) {
-    const value = fields[candidate]
-
-    if (typeof value === "string" && value.trim()) {
-      return value.trim()
-    }
-
-    if (Array.isArray(value)) {
-      const textValue = value.find((item) => typeof item === "string" && item.trim())
-      if (typeof textValue === "string") return textValue.trim()
-    }
-  }
-
-  return ""
-}
-
-function getRecordIds(fields: Record<string, unknown>, candidates: string[]) {
-  for (const candidate of candidates) {
-    const value = fields[candidate]
-
-    if (Array.isArray(value)) {
-      return value.filter((item): item is string => typeof item === "string" && isAirtableRecordId(item))
-    }
-
-    if (typeof value === "string" && isAirtableRecordId(value)) {
-      return [value]
-    }
-  }
-
-  return []
-}
-
-function getDateField(fields: Record<string, unknown>, candidates: string[]) {
-  const value = getStringField(fields, candidates)
-  const date = value ? new Date(value) : null
-
-  return date && !Number.isNaN(date.getTime()) ? date.toISOString() : ""
-}
-
-function getDateOnlyField(fields: Record<string, unknown>, candidates: string[]) {
-  const value = getStringField(fields, candidates)
-  const dateOnlyMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (dateOnlyMatch) return `${dateOnlyMatch[1]}-${dateOnlyMatch[2]}-${dateOnlyMatch[3]}`
-
-  const date = value ? new Date(value) : null
-  return date && !Number.isNaN(date.getTime()) ? date.toISOString().slice(0, 10) : ""
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 }
 
 function normalizeStatus(value: string) {
@@ -96,14 +89,8 @@ function normalizeStatus(value: string) {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
 
-  if (["finalizado", "finalizada", "finalizada.", "finalizados", "finalizadas", "concluido", "concluida"].includes(normalized)) {
-    return "finalizado"
-  }
-
-  if (["resolvendo", "atendendo", "em atendimento", "em andamento", "andamento", "em resolucao"].includes(normalized)) {
-    return "resolvendo"
-  }
-
+  if (["finalizado", "finalizada", "finalizados", "finalizadas", "concluido", "concluida"].includes(normalized)) return "finalizado"
+  if (["resolvendo", "atendendo", "em atendimento", "em andamento", "andamento", "em resolucao"].includes(normalized)) return "resolvendo"
   return "aguardando"
 }
 
@@ -116,76 +103,101 @@ function getInitials(name: string) {
   return (words.length > 1 ? `${words[0][0]}${words[words.length - 1][0]}` : words[0]?.slice(0, 2) || "TA").toUpperCase()
 }
 
-type LinkedContact = {
-  name: string
-  chatId: string
-  phone: string
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, "")
 }
 
-function mapTaskRecord(record: AirtableRecord, linkedNames: { users: Map<string, string>; contacts: Map<string, LinkedContact> }) {
-  const fields = record.fields ?? {}
-  const subject = getStringField(fields, ["Assunto", "assunto", "Titulo", "Título", "Title", "Name", "Nome"])
-  const observations = getStringField(fields, ["Observações", "Observacoes", "Descricao", "Descrição", "Description"])
-  const statusLabel = getStringField(fields, ["Status", "status"]) || "Aguardando"
-  const type = getStringField(fields, ["Tipo", "tipo"]) || "Tarefa"
-  const responsibleIds = getRecordIds(fields, ["User", "Responsável", "Responsavel"])
-  const contactIds = getRecordIds(fields, ["Contato", "Paciente", "Patient"])
-  const responsible = getStringField(fields, [
-    "Responsável",
-    "Responsavel",
-    "Nome User",
-    "User Name",
-    "Usuario",
-    "Usuário",
-    "User",
-  ])
-  const creatorIds = getRecordIds(fields, ["User_criador", "Criador", "Creator", "Created by", "Autor", "Solicitante"])
-  const creator = getStringField(fields, [
-    "nome_user_criador",
-    "Criador",
-    "Creator",
-    "Created by",
-    "Autor",
-    "Solicitante",
-  ])
-  const patient = getStringField(fields, [
-    "Paciente",
-    "Nome Paciente",
-    "Contato Nome",
-    "Nome Contato",
-    "Contato",
-    "Patient",
-  ])
-  const responsibleName =
-    responsibleIds.map((id) => linkedNames.users.get(id)).find(Boolean) ||
-    (isAirtableRecordId(responsible) ? "" : responsible)
-  const linkedContact = contactIds.map((id) => linkedNames.contacts.get(id)).find(Boolean)
-  const patientName = linkedContact?.name || (isAirtableRecordId(patient) ? "" : patient)
-  const creatorName = creatorIds.map((id) => linkedNames.users.get(id)).find(Boolean) || creator || "Sistema"
-  const createdAt = getDateField(fields, ["Data e Hora", "Criado em", "Created At", "createdAt"]) || record.createdTime || ""
-  const dueDate = getDateOnlyField(fields, ["Data_prazo", "Data prazo", "Prazo", "Due date", "Due Date"])
+function getBrazilPhoneVariants(value: string) {
+  const digits = onlyDigits(value)
+  const variants = new Set<string>()
+
+  if (digits) variants.add(digits)
+  if (digits.startsWith("55")) variants.add(digits.slice(2))
+  if (digits.length >= 10 && !digits.startsWith("55")) variants.add(`55${digits}`)
+
+  return Array.from(variants).filter(Boolean)
+}
+
+function getSupabaseConfig() {
+  if (!SUPABASE_REST_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing Supabase REST configuration for tasks.")
+  return { url: SUPABASE_REST_URL.replace(/\/$/, ""), key: SUPABASE_SERVICE_ROLE_KEY }
+}
+
+async function supabaseRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const { url, key } = getSupabaseConfig()
+  const response = await fetch(`${url}/${path}`, {
+    ...init,
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...init?.headers,
+    },
+    cache: "no-store",
+  })
+
+  const text = await response.text()
+  if (!response.ok) throw new Error(text)
+  if (!text.trim()) return null as T
+  return JSON.parse(text) as T
+}
+
+function externalId(row: { id: string; airtable_record_id: string | null }) {
+  return row.airtable_record_id || row.id
+}
+
+function getIdFilter(id: string) {
+  const encodedId = encodeURIComponent(id)
+  return isUuid(id) ? `or=(id.eq.${encodedId},airtable_record_id.eq.${encodedId})` : `airtable_record_id=eq.${encodedId}`
+}
+
+function getExternalUserId(user: UserProfileRow | null | undefined, fallback: string | null) {
+  if (user) return externalId(user)
+  return fallback || ""
+}
+
+function mapTask(row: TaskRow) {
+  const responsible = row.responsible_user_profiles
+  const creator = row.creator_user_profiles
+  const contact = row.contacts
+  const chat = row.chats
+  const responsibleName = responsible?.name || row.responsible_name || "Sem responsavel"
+  const creatorName = creator?.name || row.creator_name || "Sistema"
+  const patientName = row.patient_name || contact?.name || chat?.nome_contato || ""
+  const patientPhone = row.patient_phone || contact?.phone || contact?.phone_id_chat || chat?.phone_contact || ""
+  const patientChatId = row.chat_id || chat?.chat_id || ""
+  const status = normalizeStatus(row.status_normalized || row.status)
 
   return {
-    id: record.id,
-    subject,
-    description: observations,
-    status: normalizeStatus(statusLabel),
-    statusLabel,
-    type,
+    id: externalId(row),
+    subject: row.subject,
+    description: row.description || "",
+    status,
+    statusLabel: row.status || "Aguardando",
+    type: row.type || "Tarefa",
     creator: creatorName,
     creatorInitials: getInitials(creatorName),
-    responsible: responsibleName || "Sem responsável",
-    responsibleUserId: responsibleIds[0] || "",
-    responsibleInitials: getInitials(responsibleName || "Sem responsável"),
+    responsible: responsibleName,
+    responsibleUserId: getExternalUserId(responsible, row.responsible_airtable_record_id),
+    responsibleInitials: getInitials(responsibleName),
     patient: patientName,
-    patientChatId: linkedContact?.chatId || "",
-    patientPhone: linkedContact?.phone || "",
-    createdAt,
-    dueDate,
+    patientChatId,
+    patientPhone,
+    patientPhotoUrl: chat?.url_foto_perfil || undefined,
+    createdAt: row.created_at,
+    dueDate: row.due_date || "",
   }
 }
 
-type TaskPayload = ReturnType<typeof mapTaskRecord>
+type TaskPayload = ReturnType<typeof mapTask>
+
+const TASK_SELECT = [
+  "id,airtable_record_id,type,status,status_normalized,subject,description,responsible_airtable_record_id,responsible_name,creator_airtable_record_id,creator_name,contact_airtable_record_id,chat_id,patient_name,patient_phone,due_date,created_at",
+  "responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email)",
+  "creator_user_profiles:creator_user_profile_id(id,airtable_record_id,name,email)",
+  "contacts:contact_id(id,name,phone,phone_id_chat)",
+  "chats:chat_row_id(id,chat_id,phone_contact,nome_contato,url_foto_perfil,contact_id)",
+].join(",")
 
 const TASK_CACHE_TTL_MS = 45_000
 let taskListCache: { expiresAt: number; tasks: TaskPayload[] } | null = null
@@ -202,308 +214,143 @@ function normalizeTaskViewerRole(value: string) {
 
 function filterTasksForViewer(tasks: TaskPayload[], viewerUserId: string, viewerRole: string) {
   if (normalizeTaskViewerRole(viewerRole) === "admin") return tasks
-  if (!isAirtableRecordId(viewerUserId)) return []
+  if (!viewerUserId) return []
 
   return tasks.filter((task) => task.responsibleUserId === viewerUserId)
 }
 
-function onlyDigits(value: string) {
-  return value.replace(/\D/g, "")
-}
+function filterTasksForContact(tasks: TaskPayload[], chatId: string, contactPhone: string) {
+  if (!chatId && !contactPhone) return tasks
+  const phoneVariants = new Set(getBrazilPhoneVariants(contactPhone || chatId))
 
-function formulaString(value: string) {
-  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
-}
-
-function fieldText(fieldName: string) {
-  return `{${fieldName}}&""`
-}
-
-function isAirtableRecordId(value: string) {
-  return /^rec[a-zA-Z0-9]+$/.test(value)
-}
-
-function getEmailField(fields: Record<string, unknown>) {
-  return getStringField(fields, ["Email", "email", "E-mail", "e-mail", "Login", "login"])
-}
-
-function getBrazilPhoneVariants(value: string) {
-  const digits = onlyDigits(value)
-  const variants = new Set<string>()
-
-  if (digits) variants.add(digits)
-  if (digits.startsWith("55")) variants.add(digits.slice(2))
-  if (digits.length >= 10 && !digits.startsWith("55")) variants.add(`55${digits}`)
-
-  return Array.from(variants).filter(Boolean)
-}
-
-async function fetchAirtableRecords(table: string, params: URLSearchParams) {
-  const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(table)}?${params}`, {
-    headers: {
-      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-    },
-    cache: "no-store",
+  return tasks.filter((task) => {
+    if (chatId && (task.patientChatId === chatId || task.patientPhone === chatId)) return true
+    const taskPhone = onlyDigits(task.patientPhone || task.patientChatId)
+    return taskPhone ? phoneVariants.has(taskPhone) : false
   })
-
-  if (!response.ok) {
-    throw new Error(await response.text())
-  }
-
-  const data = (await response.json()) as { records?: AirtableRecord[] }
-  return data.records ?? []
 }
 
-async function fetchAirtableRecord(table: string, id: string) {
-  const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(table)}/${id}`, {
-    headers: {
-      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-    },
-    cache: "no-store",
+async function fetchTasks() {
+  const rows = await supabaseRequest<TaskRow[]>(`tasks?select=${TASK_SELECT}&is_active=is.true&deleted_at=is.null&order=due_date.asc.nullslast&order=created_at.asc`)
+  return rows.map(mapTask).sort((a, b) => {
+    const dateA = new Date(a.dueDate || a.createdAt || 0).getTime()
+    const dateB = new Date(b.dueDate || b.createdAt || 0).getTime()
+    return dateA - dateB
   })
+}
 
-  if (response.status === 404) return null
+async function fetchTaskById(id: string) {
+  const rows = await supabaseRequest<TaskRow[]>(`tasks?select=${TASK_SELECT}&is_active=is.true&deleted_at=is.null&limit=10000`)
+  return rows.find((row) => row.id === id || row.airtable_record_id === id) ?? null
+}
 
-  if (!response.ok) {
-    throw new Error(await response.text())
+async function resolveUserProfile(id: string, email = "") {
+  if (id) {
+    const rows = await supabaseRequest<UserProfileRow[]>(`user_profiles?select=id,airtable_record_id,name,email&${getIdFilter(id)}&limit=1`)
+    if (rows[0]) return rows[0]
   }
 
-  return (await response.json()) as AirtableRecord
-}
-
-async function fetchTaskRecords(filterByFormula?: string) {
-  const records: AirtableRecord[] = []
-  let offset: string | undefined
-
-  do {
-    const params = new URLSearchParams({ pageSize: "100" })
-    params.set("sort[0][field]", "Data_prazo")
-    params.set("sort[0][direction]", "asc")
-    if (filterByFormula) params.set("filterByFormula", filterByFormula)
-    if (offset) params.set("offset", offset)
-
-    const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TASK_TABLE)}?${params}`, {
-      headers: {
-        Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-      },
-      cache: "no-store",
-    })
-
-    if (!response.ok) {
-      throw new Error(await response.text())
-    }
-
-    const data = (await response.json()) as { offset?: string; records?: AirtableRecord[] }
-    records.push(...(data.records ?? []))
-    offset = data.offset
-  } while (offset)
-
-  return records
-}
-
-async function fetchRecordsByIds(table: string, ids: string[]) {
-  const uniqueIds = Array.from(new Set(ids.filter(isAirtableRecordId)))
-  const records: AirtableRecord[] = []
-
-  for (let index = 0; index < uniqueIds.length; index += 20) {
-    const batch = uniqueIds.slice(index, index + 20)
-    const formula = batch.length === 1 ? `RECORD_ID()="${batch[0]}"` : `OR(${batch.map((id) => `RECORD_ID()="${id}"`).join(",")})`
-    const params = new URLSearchParams({ pageSize: "100", filterByFormula: formula })
-    records.push(...(await fetchAirtableRecords(table, params)))
+  if (email) {
+    const rows = await supabaseRequest<UserProfileRow[]>(`user_profiles?select=id,airtable_record_id,name,email&email=eq.${encodeURIComponent(email.toLowerCase())}&limit=1`)
+    if (rows[0]) return rows[0]
   }
 
-  return records
+  return null
 }
 
-async function findUserIdByEmail(email: string) {
-  const normalizedEmail = email.trim().toLowerCase()
-  if (!normalizedEmail) return ""
+async function resolveContactAndChat(chatId: string, contactPhone: string) {
+  const phoneVariants = getBrazilPhoneVariants(contactPhone || chatId)
+  const chatFilters = []
+  if (chatId) chatFilters.push(`chat_id.eq.${encodeURIComponent(chatId)}`)
+  for (const phone of phoneVariants) chatFilters.push(`phone_contact.eq.${encodeURIComponent(phone)}`, `chat_id.ilike.*${encodeURIComponent(phone)}*`)
 
-  const params = new URLSearchParams({ pageSize: "100" })
-  const records = await fetchAirtableRecords(USERS_TABLE, params)
-  const record = records.find((candidate) => getEmailField(candidate.fields ?? {}).toLowerCase() === normalizedEmail)
-
-  return record?.id ?? ""
-}
-
-function getLinkedTaskIdsFromContact(fields: Record<string, unknown>) {
-  return getRecordIds(fields, [
-    "Encaminhamentos",
-    "Encaminhamento",
-    "Avisos / Tarefas",
-    "Avisos/Tarefas",
-    "Avisos",
-    "Tarefas",
-    "Tasks",
-  ])
-}
-
-async function fetchContactTaskRecords(contactId: string) {
-  const contact = await fetchAirtableRecord(CONTACTS_TABLE, contactId)
-  const linkedTaskIds = getLinkedTaskIdsFromContact(contact?.fields ?? {})
-
-  if (linkedTaskIds.length > 0) {
-    return fetchRecordsByIds(TASK_TABLE, linkedTaskIds)
+  let chat: ChatRow | null = null
+  if (chatFilters.length > 0) {
+    const chats = await supabaseRequest<ChatRow[]>(`chats?select=id,contact_id,chat_id,phone_contact,nome_contato,url_foto_perfil&or=(${chatFilters.join(",")})&limit=1`)
+    chat = chats[0] ?? null
   }
 
-  return (await fetchTaskRecords()).filter((record) =>
-    getRecordIds(record.fields ?? {}, ["Contato", "Paciente", "Patient"]).includes(contactId),
-  )
+  let contact: ContactRow | null = null
+  if (chat?.contact_id) {
+    const contacts = await supabaseRequest<ContactRow[]>(`contacts?select=id,name,phone,phone_id_chat&id=eq.${encodeURIComponent(chat.contact_id)}&limit=1`)
+    contact = contacts[0] ?? null
+  }
+
+  if (!contact && phoneVariants.length > 0) {
+    const filters = phoneVariants.flatMap((phone) => [`phone.eq.${encodeURIComponent(phone)}`, `phone_id_chat.ilike.*${encodeURIComponent(phone)}*`])
+    const contacts = await supabaseRequest<ContactRow[]>(`contacts?select=id,name,phone,phone_id_chat&or=(${filters.join(",")})&limit=1`)
+    contact = contacts[0] ?? null
+  }
+
+  return { contact, chat }
 }
 
-async function getLinkedNames(records: AirtableRecord[]) {
-  const userIds = records.flatMap((record) =>
-    getRecordIds(record.fields ?? {}, ["User", "User_criador", "Responsável", "Responsavel", "Criador"]),
-  )
-  const contactIds = records.flatMap((record) => getRecordIds(record.fields ?? {}, ["Contato", "Paciente", "Patient"]))
-  const users = new Map<string, string>()
-  const contacts = new Map<string, LinkedContact>()
-
-  let userRecords: AirtableRecord[] = []
-  let contactRecords: AirtableRecord[] = []
-
-  ;[userRecords, contactRecords] = await Promise.all([
-    userIds.length > 0 ? fetchRecordsByIds(USERS_TABLE, userIds).catch(() => []) : Promise.resolve([]),
-    contactIds.length > 0 ? fetchRecordsByIds(CONTACTS_TABLE, contactIds).catch(() => []) : Promise.resolve([]),
-  ])
-
-  for (const record of userRecords) {
-    const fields = record.fields ?? {}
-    const name = getStringField(fields, ["Name", "name", "Nome", "nome", "Usuário", "Usuario", "user"])
-    if (name) users.set(record.id, name)
+function getTaskWritePayload({
+  type,
+  status,
+  dueDate,
+  subject,
+  observations,
+  responsible,
+  creator,
+  creatorName,
+  patientName,
+  contactPhone,
+  chatId,
+  contact,
+  chat,
+  createdAt,
+}: {
+  type: string
+  status: string
+  dueDate: string
+  subject: string
+  observations: string
+  responsible: UserProfileRow
+  creator?: UserProfileRow | null
+  creatorName?: string
+  patientName?: string
+  contactPhone?: string
+  chatId?: string
+  contact?: ContactRow | null
+  chat?: ChatRow | null
+  createdAt?: string
+}) {
+  return {
+    type,
+    status,
+    status_normalized: normalizeStatus(status),
+    due_date: dueDate || null,
+    subject,
+    description: observations || null,
+    responsible_user_profile_id: responsible.id,
+    responsible_airtable_record_id: responsible.airtable_record_id,
+    responsible_name: responsible.name,
+    creator_user_profile_id: creator?.id ?? null,
+    creator_airtable_record_id: creator?.airtable_record_id ?? null,
+    creator_name: creator?.name || creatorName || "Sistema",
+    contact_id: contact?.id ?? chat?.contact_id ?? null,
+    chat_row_id: chat?.id ?? null,
+    chat_id: chatId || chat?.chat_id || null,
+    patient_name: patientName || contact?.name || chat?.nome_contato || null,
+    patient_phone: contactPhone || contact?.phone || contact?.phone_id_chat || chat?.phone_contact || null,
+    source: "supabase",
+    updated_at: new Date().toISOString(),
+    ...(createdAt ? { created_at: createdAt } : {}),
   }
-
-  for (const record of contactRecords) {
-    const fields = record.fields ?? {}
-    const name = getStringField(fields, ["Name", "name", "Nome", "nome", "Nome Completo", "Contato", "Paciente"])
-    const chatId = getStringField(fields, ["SUPABASE_CHAT", "ALT_CHAT_ID", "chat_id", "Chat ID"]) || ""
-    const phone = getStringField(fields, [
-      "N_WHATS_API",
-      "N_WHATS_WEB",
-      "Telefone Princial",
-      "Telefone Principal",
-      "Telefone SecundÃ¡rio",
-      "Telefone Secundario",
-      "celular-so-numero",
-      "Celularsupabase",
-      "Telefone",
-    ])
-
-    if (name || chatId || phone) {
-      contacts.set(record.id, {
-        name,
-        chatId,
-        phone: phone || "",
-      })
-    }
-  }
-
-  return { users, contacts }
 }
 
-async function findContactId({ chatId, contactPhone }: { chatId: string; contactPhone: string }) {
-  const formulaParts: string[] = []
-  const trimmedChatId = chatId.trim()
-
-  if (trimmedChatId) {
-    const chatValue = formulaString(trimmedChatId)
-    formulaParts.push(`{SUPABASE_CHAT}=${chatValue}`)
-    formulaParts.push(`{ALT_CHAT_ID}=${chatValue}`)
-    formulaParts.push(`{N_WHATS_API}=${chatValue}`)
-    formulaParts.push(`{N_WHATS_WEB}=${chatValue}`)
-    formulaParts.push(`FIND(${chatValue}, ${fieldText("SUPABASE_CHAT")})>0`)
-    formulaParts.push(`FIND(${chatValue}, ${fieldText("ALT_CHAT_ID")})>0`)
-  }
-
-  for (const phone of getBrazilPhoneVariants(contactPhone || trimmedChatId)) {
-    const phoneValue = formulaString(phone)
-    formulaParts.push(`{N_WHATS_API}=${phoneValue}`)
-    formulaParts.push(`{N_WHATS_WEB}=${phoneValue}`)
-    formulaParts.push(`{Telefone Princial}=${phoneValue}`)
-    formulaParts.push(`{Telefone Secundário}=${phoneValue}`)
-    formulaParts.push(`{celular-so-numero}=${phoneValue}`)
-    formulaParts.push(`{Celularsupabase}=${phoneValue}`)
-    formulaParts.push(`FIND(${phoneValue}, ${fieldText("N_WHATS_API")})>0`)
-    formulaParts.push(`FIND(${phoneValue}, ${fieldText("N_WHATS_WEB")})>0`)
-    formulaParts.push(`FIND(${phoneValue}, ${fieldText("celular-so-numero")})>0`)
-    formulaParts.push(`FIND(${phoneValue}, ${fieldText("Celularsupabase")})>0`)
-  }
-
-  if (formulaParts.length === 0) return null
-
-  const params = new URLSearchParams({
-    maxRecords: "1",
-    pageSize: "1",
-    filterByFormula: formulaParts.length === 1 ? formulaParts[0] : `OR(${formulaParts.join(",")})`,
-  })
-  const records = await fetchAirtableRecords(CONTACTS_TABLE, params)
-
-  return records[0]?.id ?? null
-}
-
-async function createTask(fields: Record<string, unknown>) {
-  const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TASK_TABLE)}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    cache: "no-store",
-    body: JSON.stringify({
-      records: [{ fields }],
-    }),
-  })
-
-  if (!response.ok) {
-    throw new Error(await response.text())
-  }
-
-  const data = (await response.json()) as { records?: AirtableRecord[] }
-  return data.records?.[0]
-}
-
-async function updateTask(id: string, fields: Record<string, unknown>) {
-  const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TASK_TABLE)}/${id}`, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    cache: "no-store",
-    body: JSON.stringify({ fields }),
-  })
-
-  if (!response.ok) {
-    throw new Error(await response.text())
-  }
-
-  return (await response.json()) as AirtableRecord
-}
-
-function getAirtableErrorMessage(error: unknown, fallback: string) {
+function getErrorMessage(error: unknown, fallback: string) {
   const rawMessage = error instanceof Error ? error.message : ""
-
-  if (!rawMessage) return fallback
-
   try {
-    const parsed = JSON.parse(rawMessage) as { error?: { message?: string } }
-    const message = parsed.error?.message
-
-    if (message?.startsWith("Unknown field name:")) {
-      return `Campo não encontrado no Airtable: ${message.replace("Unknown field name:", "").trim().replace(/^"|"$/g, "")}.`
-    }
-
-    return message || fallback
+    const parsed = JSON.parse(rawMessage) as { message?: string; error?: { message?: string } }
+    return parsed.message || parsed.error?.message || rawMessage || fallback
   } catch {
-    return rawMessage
+    return rawMessage || fallback
   }
 }
 
 export async function GET(request: Request) {
-  if (!AIRTABLE_TOKEN) {
-    return NextResponse.json({ tasks: [], message: "Missing AIRTABLE_TOKEN or AIRTABLE_API_KEY" }, { status: 500 })
-  }
-
   const { searchParams } = new URL(request.url)
   const chatId = getString(searchParams.get("chatId"))
   const contactPhone = getString(searchParams.get("contactPhone"))
@@ -512,85 +359,42 @@ export async function GET(request: Request) {
   const viewerRole = getString(searchParams.get("role"))
 
   try {
-    if (!chatId && !contactPhone && !shouldRefresh && taskListCache && taskListCache.expiresAt > Date.now()) {
-      return NextResponse.json({ tasks: filterTasksForViewer(taskListCache.tasks, viewerUserId, viewerRole) })
-    }
+    const allTasks = !chatId && !contactPhone && !shouldRefresh && taskListCache && taskListCache.expiresAt > Date.now() ? taskListCache.tasks : await fetchTasks()
+    if (!chatId && !contactPhone && (!taskListCache || shouldRefresh)) taskListCache = { expiresAt: Date.now() + TASK_CACHE_TTL_MS, tasks: allTasks }
 
-    const contactId = chatId || contactPhone ? await findContactId({ chatId, contactPhone }).catch(() => "") : ""
-    if ((chatId || contactPhone) && !contactId) {
-      return NextResponse.json({ tasks: [] })
-    }
-
-    const records = contactId ? await fetchContactTaskRecords(contactId) : await fetchTaskRecords()
-    const linkedNames = await getLinkedNames(records)
-    const tasks = records
-      .map((record) => mapTaskRecord(record, linkedNames))
-      .sort((a, b) => {
-        const dateA = new Date(a.dueDate || a.createdAt || 0).getTime()
-        const dateB = new Date(b.dueDate || b.createdAt || 0).getTime()
-        return dateA - dateB
-      })
-
-    if (!contactId) {
-      taskListCache = { expiresAt: Date.now() + TASK_CACHE_TTL_MS, tasks }
-    }
-
-    return NextResponse.json({ tasks: filterTasksForViewer(tasks, viewerUserId, viewerRole) })
+    const contactTasks = filterTasksForContact(allTasks, chatId, contactPhone)
+    return NextResponse.json({ tasks: filterTasksForViewer(contactTasks, viewerUserId, viewerRole) })
   } catch (error) {
-    return NextResponse.json(
-      { tasks: [], message: error instanceof Error ? error.message : "Não foi possível carregar encaminhamentos do Airtable." },
-      { status: 500 },
-    )
+    return NextResponse.json({ tasks: [], message: getErrorMessage(error, "Nao foi possivel carregar encaminhamentos.") }, { status: 500 })
   }
 }
 
 export async function DELETE(request: Request) {
-  if (!AIRTABLE_TOKEN) {
-    return NextResponse.json({ message: "Missing AIRTABLE_TOKEN or AIRTABLE_API_KEY" }, { status: 500 })
-  }
-
   const { searchParams } = new URL(request.url)
   const id = getString(searchParams.get("id"))
-
-  if (!isAirtableRecordId(id)) {
-    return NextResponse.json({ message: "Tarefa inválida." }, { status: 400 })
-  }
+  if (!id) return NextResponse.json({ message: "Tarefa invalida." }, { status: 400 })
 
   try {
-    taskListCache = null
+    const existing = await fetchTaskById(id)
+    if (!existing) return NextResponse.json({ message: "Tarefa nao encontrada." }, { status: 404 })
 
-    const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(TASK_TABLE)}/${id}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-      },
-      cache: "no-store",
+    taskListCache = null
+    await supabaseRequest<unknown>(`tasks?id=eq.${encodeURIComponent(existing.id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ is_active: false, deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
     })
 
-    if (!response.ok) {
-      throw new Error(await response.text())
-    }
-
-    return NextResponse.json({ id, message: "Tarefa excluída." })
+    return NextResponse.json({ id, message: "Tarefa excluida." })
   } catch (error) {
-    return NextResponse.json(
-      { message: error instanceof Error ? error.message : "Não foi possível excluir a tarefa no Airtable." },
-      { status: 500 },
-    )
+    return NextResponse.json({ message: getErrorMessage(error, "Nao foi possivel excluir a tarefa.") }, { status: 500 })
   }
 }
 
 export async function PATCH(request: Request) {
-  if (!AIRTABLE_TOKEN) {
-    return NextResponse.json({ message: "Missing AIRTABLE_TOKEN or AIRTABLE_API_KEY" }, { status: 500 })
-  }
-
   const { searchParams } = new URL(request.url)
   const id = getString(searchParams.get("id"))
-
-  if (!isAirtableRecordId(id)) {
-    return NextResponse.json({ message: "Tarefa inválida." }, { status: 400 })
-  }
+  if (!id) return NextResponse.json({ message: "Tarefa invalida." }, { status: 400 })
 
   const body = (await request.json()) as UpdateTaskBody
   const type = getString(body.type)
@@ -600,47 +404,39 @@ export async function PATCH(request: Request) {
   const subject = getString(body.subject)
   const observations = getString(body.observations)
 
-  if (!type || !status || !responsibleUserId || !subject) {
-    return NextResponse.json({ message: "Preencha tipo, status, responsável e assunto." }, { status: 400 })
-  }
-
-  if (!isAirtableRecordId(responsibleUserId)) {
-    return NextResponse.json({ message: "Usuário responsável inválido." }, { status: 400 })
-  }
-
-  const dueDateValue = dueDate ? new Date(`${dueDate}T00:00:00`) : null
-  if (dueDateValue && Number.isNaN(dueDateValue.getTime())) {
-    return NextResponse.json({ message: "Data invalida." }, { status: 400 })
-  }
+  if (!type || !status || !responsibleUserId || !subject) return NextResponse.json({ message: "Preencha tipo, status, responsavel e assunto." }, { status: 400 })
 
   try {
+    const [existing, responsible] = await Promise.all([fetchTaskById(id), resolveUserProfile(responsibleUserId)])
+    if (!existing) return NextResponse.json({ message: "Tarefa nao encontrada." }, { status: 404 })
+    if (!responsible) return NextResponse.json({ message: "Usuario responsavel nao encontrado no Supabase." }, { status: 400 })
+
     taskListCache = null
-
-    const record = await updateTask(id, {
-      Tipo: type,
-      Status: status,
-      Data_prazo: dueDate || null,
-      User: [responsibleUserId],
-      Assunto: subject,
-      Observações: observations,
+    await supabaseRequest<unknown>(`tasks?id=eq.${encodeURIComponent(existing.id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        type,
+        status,
+        status_normalized: normalizeStatus(status),
+        due_date: dueDate || null,
+        subject,
+        description: observations || null,
+        responsible_user_profile_id: responsible.id,
+        responsible_airtable_record_id: responsible.airtable_record_id,
+        responsible_name: responsible.name,
+        updated_at: new Date().toISOString(),
+      }),
     })
-    const linkedNames = await getLinkedNames([record])
-    const task = mapTaskRecord(record, linkedNames)
 
-    return NextResponse.json({ task, message: "Tarefa atualizada." })
+    const updated = await fetchTaskById(existing.id)
+    return NextResponse.json({ task: updated ? mapTask(updated) : null, message: "Tarefa atualizada." })
   } catch (error) {
-    return NextResponse.json(
-      { message: error instanceof Error ? error.message : "Não foi possível atualizar a tarefa no Airtable." },
-      { status: 500 },
-    )
+    return NextResponse.json({ message: getErrorMessage(error, "Nao foi possivel atualizar a tarefa.") }, { status: 500 })
   }
 }
 
 export async function POST(request: Request) {
-  if (!AIRTABLE_TOKEN) {
-    return NextResponse.json({ message: "Missing AIRTABLE_TOKEN or AIRTABLE_API_KEY" }, { status: 500 })
-  }
-
   const body = (await request.json()) as CreateTaskBody
   const type = getString(body.type)
   const status = getString(body.status)
@@ -657,15 +453,7 @@ export async function POST(request: Request) {
   const creatorEmail = getString(body.creatorEmail)
 
   if (!type || !status || !createdAt || !responsibleUserId || !subject || !creatorName) {
-    return NextResponse.json({ message: "Preencha tipo, status, responsável, criador e assunto." }, { status: 400 })
-  }
-
-  if (!isAirtableRecordId(responsibleUserId)) {
-    return NextResponse.json({ message: "Usuário responsável inválido." }, { status: 400 })
-  }
-
-  if (creatorUserId && !isAirtableRecordId(creatorUserId)) {
-    return NextResponse.json({ message: "Usuário criador inválido." }, { status: 400 })
+    return NextResponse.json({ message: "Preencha tipo, status, responsavel, criador e assunto." }, { status: 400 })
   }
 
   const createdAtDate = new Date(createdAt)
@@ -675,42 +463,36 @@ export async function POST(request: Request) {
   }
 
   try {
+    const [responsible, creator, relation] = await Promise.all([resolveUserProfile(responsibleUserId), resolveUserProfile(creatorUserId, creatorEmail), resolveContactAndChat(chatId, contactPhone)])
+    if (!responsible) return NextResponse.json({ message: "Usuario responsavel nao encontrado no Supabase." }, { status: 400 })
+
     taskListCache = null
-
-    const resolvedCreatorUserId = creatorUserId || (creatorEmail ? await findUserIdByEmail(creatorEmail) : "")
-    if (!resolvedCreatorUserId) {
-      return NextResponse.json(
-        { message: "Usuário criador não encontrado no Airtable. Verifique se o usuário logado está cadastrado na tabela User." },
-        { status: 400 },
-      )
-    }
-
-    const contactId = chatId || contactPhone ? await findContactId({ chatId, contactPhone }) : ""
-
-    const fields: Record<string, unknown> = {
-      Tipo: type,
-      Status: status,
-      "Data e Hora": createdAtDate.toISOString(),
-      User: [responsibleUserId],
-      User_criador: [resolvedCreatorUserId],
-      Assunto: subject,
-    }
-
-    if (dueDate) fields.Data_prazo = dueDate
-    if (contactId) fields.Contato = [contactId]
-    if (observations) fields["Observações"] = observations
-
-    const record = await createTask(fields)
-
-    return NextResponse.json({
-      id: record?.id,
-      patientName,
-      message: "Aviso/tarefa criado com sucesso.",
+    const rows = await supabaseRequest<TaskRow[]>("tasks?select=id,airtable_record_id", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(
+        getTaskWritePayload({
+          type,
+          status,
+          dueDate,
+          subject,
+          observations,
+          responsible,
+          creator,
+          creatorName,
+          patientName,
+          contactPhone,
+          chatId,
+          contact: relation.contact,
+          chat: relation.chat,
+          createdAt: createdAtDate.toISOString(),
+        }),
+      ),
     })
+
+    const row = rows[0]
+    return NextResponse.json({ id: row?.airtable_record_id || row?.id, patientName, message: "Aviso/tarefa criado com sucesso." })
   } catch (error) {
-    return NextResponse.json(
-      { message: getAirtableErrorMessage(error, "Não foi possível criar o aviso/tarefa no Airtable.") },
-      { status: 500 },
-    )
+    return NextResponse.json({ message: getErrorMessage(error, "Nao foi possivel criar o aviso/tarefa.") }, { status: 500 })
   }
 }

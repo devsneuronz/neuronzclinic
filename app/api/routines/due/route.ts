@@ -4,8 +4,6 @@ const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const AIRTABLE_BASE_ID = "app03ti52QQD3W9L2";
 const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY;
-const TASK_TABLE = process.env.AIRTABLE_TASKS_TABLE || "Encaminhamentos";
-const CONTACTS_TABLE = process.env.AIRTABLE_CONTACTS_TABLE || "Contatos";
 const MESSAGE_TEMPLATES_TABLE = process.env.AIRTABLE_MESSAGE_TEMPLATES_TABLE || "Templates mensagens";
 const MESSAGE_TEMPLATES_READ_SOURCE = process.env.MESSAGE_TEMPLATES_READ_SOURCE || "supabase";
 const TEMPLATE_CONTENT_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_CONTENT_FIELDS, ["Mensagem", "Conteudo", "Conteúdo", "Texto", "Message", "Content"]);
@@ -123,6 +121,14 @@ function getValidActionRunIds(value: unknown) {
   return value.filter((item): item is string => typeof item === "string" && /^[0-9a-f-]{36}$/i.test(item));
 }
 
+function isAirtableRecordId(value: string) {
+  return /^rec[a-zA-Z0-9]+$/.test(value);
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -175,13 +181,13 @@ async function airtableRequest(table: string, path = "", init?: RequestInit) {
 }
 
 async function fetchAirtableRecordById(table: string, id: string) {
-  if (!/^rec[a-zA-Z0-9]+$/.test(id)) throw new Error("ID de registro do Airtable inválido.");
+  if (!isAirtableRecordId(id)) throw new Error("ID de registro do Airtable inválido.");
 
   return airtableRequest(table, `/${encodeURIComponent(id)}`) as Promise<{ id: string; fields?: RawRecord }>;
 }
 
 async function fetchSupabaseTemplateById(templateId: string) {
-  const idFilter = /^rec[a-zA-Z0-9]+$/.test(templateId) ? `airtable_record_id=eq.${encodeURIComponent(templateId)}` : `id=eq.${encodeURIComponent(templateId)}`;
+  const idFilter = isAirtableRecordId(templateId) ? `airtable_record_id=eq.${encodeURIComponent(templateId)}` : `id=eq.${encodeURIComponent(templateId)}`;
   const templates = (await supabaseRequest(
     `message_templates?select=content,media&${idFilter}&is_active=is.true&deleted_at=is.null&limit=1`,
   )) as SupabaseTemplateRecord[] | null;
@@ -207,14 +213,6 @@ function onlyDigits(value: string) {
   return value.replace(/\D/g, "");
 }
 
-function formulaString(value: string) {
-  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}
-
-function fieldText(fieldName: string) {
-  return `{${fieldName}}&""`;
-}
-
 function getBrazilPhoneVariants(value: string) {
   const digits = onlyDigits(value);
   const variants = new Set<string>();
@@ -226,98 +224,101 @@ function getBrazilPhoneVariants(value: string) {
   return Array.from(variants).filter(Boolean);
 }
 
-async function findContactAirtableId(run: RawRecord) {
-  const existing = getString(run.contact_airtable_id);
-  if (existing) return existing;
+async function resolveUserProfile(userId: string) {
+  if (!userId) return null;
 
+  const filter = isUuid(userId) ? `id=eq.${encodeURIComponent(userId)}` : `airtable_record_id=eq.${encodeURIComponent(userId)}`;
+  const rows = (await supabaseRequest(`user_profiles?select=id,airtable_record_id,name&${filter}&limit=1`)) as Array<{ id: string; airtable_record_id: string | null; name: string }>;
+  return rows[0] ?? null;
+}
+
+async function resolveContactAndChat(run: RawRecord) {
+  const contactId = getString(run.contact_id);
+  const contactAirtableId = getString(run.contact_airtable_id);
   const chatId = getString(run.chat_id);
   const contactPhone = getString(run.contact_phone);
-  const formulas: string[] = [];
+  const phoneVariants = getBrazilPhoneVariants(contactPhone || chatId);
 
-  if (chatId) {
-    const chatValue = formulaString(chatId);
-    formulas.push(`{SUPABASE_CHAT}=${chatValue}`);
-    formulas.push(`{ALT_CHAT_ID}=${chatValue}`);
-    formulas.push(`{N_WHATS_API}=${chatValue}`);
-    formulas.push(`{N_WHATS_WEB}=${chatValue}`);
-    formulas.push(`FIND(${chatValue}, ${fieldText("SUPABASE_CHAT")})>0`);
-    formulas.push(`FIND(${chatValue}, ${fieldText("ALT_CHAT_ID")})>0`);
+  let chat: RawRecord | null = null;
+  const chatFilters = [];
+  if (isUuid(contactId)) chatFilters.push(`id.eq.${encodeURIComponent(contactId)}`);
+  if (contactAirtableId) chatFilters.push(`ida_contato.eq.${encodeURIComponent(contactAirtableId)}`);
+  if (chatId) chatFilters.push(`chat_id.eq.${encodeURIComponent(chatId)}`);
+  for (const phone of phoneVariants) chatFilters.push(`phone_contact.eq.${encodeURIComponent(phone)}`, `chat_id.ilike.*${encodeURIComponent(phone)}*`);
+
+  if (chatFilters.length > 0) {
+    const rows = (await supabaseRequest(`chats?select=id,contact_id,ida_contato,chat_id,phone_contact,nome_contato&or=(${chatFilters.join(",")})&limit=1`)) as RawRecord[];
+    chat = rows[0] ?? null;
   }
 
-  for (const phone of getBrazilPhoneVariants(contactPhone || chatId)) {
-    const phoneValue = formulaString(phone);
-    formulas.push(`{N_WHATS_API}=${phoneValue}`);
-    formulas.push(`{N_WHATS_WEB}=${phoneValue}`);
-    formulas.push(`{Telefone Princial}=${phoneValue}`);
-    formulas.push(`{Telefone Principal}=${phoneValue}`);
-    formulas.push(`{Telefone Secundário}=${phoneValue}`);
-    formulas.push(`{Telefone Secundario}=${phoneValue}`);
-    formulas.push(`{celular-so-numero}=${phoneValue}`);
-    formulas.push(`{Celularsupabase}=${phoneValue}`);
-    formulas.push(`FIND(${phoneValue}, ${fieldText("N_WHATS_API")})>0`);
-    formulas.push(`FIND(${phoneValue}, ${fieldText("N_WHATS_WEB")})>0`);
-    formulas.push(`FIND(${phoneValue}, ${fieldText("celular-so-numero")})>0`);
-    formulas.push(`FIND(${phoneValue}, ${fieldText("Celularsupabase")})>0`);
+  let contact: RawRecord | null = null;
+  const contactFilters = [];
+  const linkedContactId = getString(chat?.contact_id);
+  if (isUuid(contactId)) contactFilters.push(`id.eq.${encodeURIComponent(contactId)}`);
+  if (isUuid(linkedContactId)) contactFilters.push(`id.eq.${encodeURIComponent(linkedContactId)}`);
+  if (contactAirtableId) contactFilters.push(`ida_contato.eq.${encodeURIComponent(contactAirtableId)}`);
+  for (const phone of phoneVariants) contactFilters.push(`phone.eq.${encodeURIComponent(phone)}`, `phone_id_chat.ilike.*${encodeURIComponent(phone)}*`);
+
+  if (contactFilters.length > 0) {
+    const rows = (await supabaseRequest(`contacts?select=id,ida_contato,phone,phone_id_chat,name&or=(${contactFilters.join(",")})&limit=1`)) as RawRecord[];
+    contact = rows[0] ?? null;
   }
 
-  if (formulas.length === 0) return "";
-
-  for (const formula of formulas) {
-    const params = new URLSearchParams({
-      maxRecords: "1",
-      pageSize: "1",
-      filterByFormula: formula,
-    });
-
-    try {
-      const data = (await airtableRequest(CONTACTS_TABLE, `?${params}`)) as { records?: Array<{ id: string }> };
-      const id = data.records?.[0]?.id;
-      if (id) return id;
-    } catch {
-      continue;
-    }
-  }
-
-  return "";
+  return { contact, chat };
 }
 
 async function createTask(run: RawRecord, action: RawRecord, type: "Aviso" | "Tarefa") {
-  const contactAirtableId = await findContactAirtableId(run);
-  if (!contactAirtableId) throw new Error("contact_airtable_id é obrigatório para criar aviso/tarefa no Airtable.");
+  const responsible = await resolveUserProfile(getString(action.responsibleUserId));
+  const { contact, chat } = await resolveContactAndChat(run);
+  const now = new Date();
+  const subject = getString(action.subject) || getString(action.label) || type;
+  const notes = getString(action.notes);
 
-  const responsibleUserId = getString(action.responsibleUserId);
-  const fields: RawRecord = {
-    Tipo: type,
-    Status: "Aguardando",
-    "Data e Hora": new Date().toISOString(),
-    Data_prazo: new Date().toISOString().slice(0, 10),
-    Contato: [contactAirtableId],
-    Assunto: getString(action.subject) || getString(action.label) || type,
-  };
+  const rows = (await supabaseRequest("tasks?select=id", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      type,
+      status: "Aguardando",
+      status_normalized: "aguardando",
+      subject,
+      description: notes || null,
+      responsible_user_profile_id: responsible?.id ?? null,
+      responsible_airtable_record_id: responsible?.airtable_record_id ?? null,
+      responsible_name: responsible?.name ?? null,
+      creator_user_profile_id: responsible?.id ?? null,
+      creator_airtable_record_id: responsible?.airtable_record_id ?? null,
+      creator_name: responsible?.name || "Sistema",
+      contact_id: getString(contact?.id) || getString(chat?.contact_id) || null,
+      chat_row_id: getString(chat?.id) || null,
+      contact_airtable_record_id: getString(run.contact_airtable_id) || getString(contact?.ida_contato) || getString(chat?.ida_contato) || null,
+      chat_id: getString(run.chat_id) || getString(chat?.chat_id) || null,
+      patient_name: getString(run.contact_name) || getString(contact?.name) || getString(chat?.nome_contato) || null,
+      patient_phone: getString(run.contact_phone) || getString(contact?.phone) || getString(contact?.phone_id_chat) || getString(chat?.phone_contact) || null,
+      due_date: now.toISOString().slice(0, 10),
+      source: "routine",
+      created_at: now.toISOString(),
+      updated_at: now.toISOString(),
+    }),
+  })) as Array<{ id: string }>;
 
-  if (responsibleUserId) {
-    fields.User = [responsibleUserId];
-    fields.User_criador = [responsibleUserId];
+  return { type: "create_task", taskId: rows[0]?.id ?? null, taskType: type, subject };
+}
+async function fetchTemplate(templateId: string) {
+  const supabaseTemplate = await fetchSupabaseTemplateById(templateId);
+
+  if (supabaseTemplate?.content || supabaseTemplate?.media) {
+    return supabaseTemplate;
   }
 
-  const notes = getString(action.notes);
-  if (notes) fields["Observações"] = notes;
-
-  return airtableRequest(TASK_TABLE, "", {
-    method: "POST",
-    body: JSON.stringify({ records: [{ fields }] }),
-  });
-}
-
-async function fetchTemplate(templateId: string) {
-  if (MESSAGE_TEMPLATES_READ_SOURCE === "supabase") {
-    const template = await fetchSupabaseTemplateById(templateId);
-
-    if (!template?.content && !template?.media) {
+  if (MESSAGE_TEMPLATES_READ_SOURCE === "supabase" || isUuid(templateId)) {
+    if (!supabaseTemplate?.content && !supabaseTemplate?.media) {
       throw new Error(`Template de mensagem sem conteudo ou midia configurada no Supabase: ${templateId}.`);
     }
+  }
 
-    return template;
+  if (!isAirtableRecordId(templateId)) {
+    throw new Error(`Template de mensagem nao encontrado no Supabase: ${templateId}.`);
   }
 
   const template = await fetchAirtableRecordById(MESSAGE_TEMPLATES_TABLE, templateId);
@@ -447,15 +448,85 @@ async function sendMessage(run: RawRecord, action: RawRecord) {
   };
 }
 
-async function addTag(run: RawRecord, action: RawRecord) {
-  const contactAirtableId = await findContactAirtableId(run);
-  const tagId = getString(action.tagId);
-  if (!contactAirtableId || !tagId) throw new Error("contact_airtable_id e tagId são obrigatórios para vincular tag.");
+function getTagFromCandidate(value: unknown) {
+  if (!value) return null;
+  if (typeof value === "string") {
+    try {
+      return getTagFromCandidate(JSON.parse(value));
+    } catch {
+      const id = getString(value);
+      return id ? { id, label: id } : null;
+    }
+  }
+  if (typeof value !== "object" || Array.isArray(value)) return null;
+  const source = value as RawRecord;
+  const id = getString(source.id) || getString(source["IDA TAG"]);
+  const label = getString(source.label) || getString(source.Tag) || getString(source.tag) || getString(source.name) || id;
+  const color = getString(source.color) || getString(source.HEXCOR) || getString(source.hexcor);
+  return id && label ? { id, label, ...(color ? { color } : {}) } : null;
+}
 
-  return airtableRequest(CONTACTS_TABLE, `/${encodeURIComponent(contactAirtableId)}`, {
+function getTagsFromChat(chat: RawRecord) {
+  const tags: Array<{ id: string; label: string; color?: string }> = [];
+  const seen = new Set<string>();
+  const candidates = [chat.json_tags_parsed, chat.json_tags, chat.tag_chat_array];
+
+  for (const candidate of candidates) {
+    const values = Array.isArray(candidate) ? candidate : typeof candidate === "string" ? candidate.split(",").map((item) => item.trim()) : [];
+    for (const value of values) {
+      const tag = getTagFromCandidate(value);
+      if (!tag || seen.has(tag.id)) continue;
+      seen.add(tag.id);
+      tags.push(tag);
+    }
+  }
+
+  return tags;
+}
+
+async function fetchTag(tagId: string) {
+  const filter = isUuid(tagId) ? `id=eq.${encodeURIComponent(tagId)}` : `airtable_record_id=eq.${encodeURIComponent(tagId)}`;
+  const tags = (await supabaseRequest(`tags?select=id,airtable_record_id,label,color&${filter}&limit=1`)) as Array<{ id: string; airtable_record_id: string | null; label: string; color: string | null }>;
+  const tag = tags[0];
+  if (!tag) return null;
+  return { id: tag.airtable_record_id || tag.id, label: tag.label, ...(tag.color ? { color: tag.color } : {}) };
+}
+
+async function fetchChatForRoutine(run: RawRecord) {
+  const contactId = getString(run.contact_id);
+  const chatId = getString(run.chat_id);
+  const filters = [];
+  if (isUuid(contactId)) filters.push(`id=eq.${encodeURIComponent(contactId)}`);
+  if (chatId) filters.push(`chat_id=eq.${encodeURIComponent(chatId)}`);
+  if (filters.length === 0 && contactId) filters.push(`chat_id=eq.${encodeURIComponent(contactId)}`);
+
+  for (const filter of filters) {
+    const rows = (await supabaseRequest(`chats?select=id,json_tags,json_tags_parsed,tag_chat_array&${filter}&limit=1`)) as RawRecord[];
+    if (rows[0]) return rows[0];
+  }
+
+  return null;
+}
+
+async function addTag(run: RawRecord, action: RawRecord) {
+  const tagId = getString(action.tagId);
+  if (!tagId) throw new Error("tagId e obrigatorio para vincular tag.");
+
+  const [chat, tag] = await Promise.all([fetchChatForRoutine(run), fetchTag(tagId)]);
+  if (!chat?.id) throw new Error("Chat do Supabase nao encontrado para vincular tag.");
+  if (!tag) throw new Error("Tag do Supabase nao encontrada para vincular ao chat.");
+
+  const tags = getTagsFromChat(chat);
+  if (!tags.some((current) => current.id === tag.id)) tags.push(tag);
+
+  await supabaseRequest(`chats?id=eq.${encodeURIComponent(getString(chat.id))}`, {
     method: "PATCH",
-    body: JSON.stringify({ fields: { Tag: [tagId] } }),
+    body: JSON.stringify({ json_tags_parsed: tags }),
   });
+
+  return { type: "add_tag", chatId: getString(chat.id), tagId: tag.id, tagLabel: tag.label };
+
+
 }
 
 async function executeAction(actionRun: RawRecord) {

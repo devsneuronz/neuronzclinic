@@ -22,6 +22,10 @@ function getBoolean(value: unknown) {
   return typeof value === "boolean" ? value : null
 }
 
+function isTagId(value: string) {
+  return /^rec[a-zA-Z0-9]+$/.test(value) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+}
+
 function getUnreadCount(value: unknown) {
   if (value === null) return null
   if (typeof value !== "number" || !Number.isFinite(value)) return undefined
@@ -45,7 +49,7 @@ function normalizeTags(value: unknown): TagInput[] | null {
         ...(color ? { color } : {}),
       }
     })
-    .filter((tag) => /^rec[a-zA-Z0-9]+$/.test(tag.id) && tag.label)
+    .filter((tag) => isTagId(tag.id) && tag.label)
 
   return tags
 }
@@ -63,7 +67,7 @@ function normalizeTagFromUnknown(value: unknown): TagInput | null {
       }
     }
 
-    return /^rec[a-zA-Z0-9]+$/.test(trimmed) ? { id: trimmed, label: trimmed } : null
+    return isTagId(trimmed) ? { id: trimmed, label: trimmed } : null
   }
 
   if (!value || typeof value !== "object" || Array.isArray(value)) return null
@@ -73,7 +77,7 @@ function normalizeTagFromUnknown(value: unknown): TagInput | null {
   const label = getString(source.label) || getString(source.Tag) || getString(source.tag) || getString(source.Nome) || getString(source.name) || id
   const color = getHexColor(source.color) || getHexColor(source.HEXCOR) || getHexColor(source.hexcor) || getHexColor(source.hex_status)
 
-  return /^rec[a-zA-Z0-9]+$/.test(id) && label ? { id, label, ...(color ? { color } : {}) } : null
+  return isTagId(id) && label ? { id, label, ...(color ? { color } : {}) } : null
 }
 
 function extractTagsFromChat(chat: RawChat): TagInput[] {

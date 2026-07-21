@@ -89,7 +89,6 @@ const templateTypeColors: Record<string, string> = {
   informação: "#4f86d7",
   informacao: "#4f86d7",
 };
-const MAX_MESSAGE_TEMPLATES = 6;
 const intervalOptions = [
   { label: "Nenhum", minutes: 0 },
   { label: "Segundos", minutes: 1 / 60 },
@@ -165,7 +164,7 @@ function readApiMessage(response: Response, fallback: string) {
 }
 
 function limitMessageTemplates(templates: RoutineMessageTemplate[] = []) {
-  return templates.slice(0, MAX_MESSAGE_TEMPLATES);
+  return templates;
 }
 
 function getTemplateMediaKind(file: File): Exclude<SavedAttachmentKind, "text"> {
@@ -448,9 +447,10 @@ export function RoutinesPage() {
         throw new Error("Digite uma mensagem ou escolha um template para cada ação Enviar mensagem.");
       }
 
-      const url = form.id?.startsWith("rec") ? `/api/airtable/routines?id=${encodeURIComponent(form.id)}` : "/api/airtable/routines";
+      const routineId = form.id?.trim();
+      const url = routineId ? `/api/airtable/routines?id=${encodeURIComponent(routineId)}` : "/api/airtable/routines";
       const response = await fetch(url, {
-        method: form.id?.startsWith("rec") ? "PATCH" : "POST",
+        method: routineId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
@@ -485,12 +485,6 @@ export function RoutinesPage() {
     setIsDeletingRoutine(true);
 
     try {
-      if (!routinePendingDelete.id.startsWith("rec")) {
-        setRoutines((current) => current.filter((item) => item.id !== routinePendingDelete.id));
-        setRoutinePendingDelete(null);
-        return;
-      }
-
       setError("");
       const response = await fetch(`/api/airtable/routines?id=${encodeURIComponent(routinePendingDelete.id)}`, { method: "DELETE" });
       if (!response.ok) {
@@ -507,11 +501,6 @@ export function RoutinesPage() {
 
   async function toggleRoutineActive(routine: Routine) {
     const nextActive = !routine.active;
-
-    if (!routine.id.startsWith("rec")) {
-      setRoutines((current) => current.map((item) => (item.id === routine.id ? { ...item, active: nextActive } : item)));
-      return;
-    }
 
     setTogglingRoutineId(routine.id);
     setError("");

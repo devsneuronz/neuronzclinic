@@ -1,159 +1,72 @@
 import { NextResponse } from "next/server"
 
-const AIRTABLE_BASE_ID = "app03ti52QQD3W9L2"
-const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY
-const TASK_TABLE_CANDIDATES = [
-  process.env.AIRTABLE_TASKS_TABLE,
-  "Encaminhamentos",
-  "Encaminhamento",
-  "Tarefas",
-  "Tarefa",
-].filter(Boolean) as string[]
-const USERS_TABLE_CANDIDATES = [process.env.AIRTABLE_USERS_TABLE, "User", "Users", "Usuarios", "Usuários"].filter(
-  Boolean,
-) as string[]
+const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-type AirtableRecord = {
+type TaskOptionRow = {
+  type: string | null
+  status: string | null
+}
+
+type UserProfileRow = {
   id: string
-  fields?: Record<string, unknown>
+  airtable_record_id: string | null
+  name: string
+  status: string
 }
 
-type AirtableTable = {
-  name?: string
-  fields?: Array<{
-    name?: string
-    type?: string
-    options?: {
-      choices?: Array<{ name?: string }>
-    }
-  }>
+function getSupabaseConfig() {
+  if (!SUPABASE_REST_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing Supabase REST configuration for task options.")
+  return { url: SUPABASE_REST_URL.replace(/\/$/, ""), key: SUPABASE_SERVICE_ROLE_KEY }
 }
 
-function getStringField(fields: Record<string, unknown>, candidates: string[]) {
-  for (const candidate of candidates) {
-    const value = fields[candidate]
-
-    if (typeof value === "string" && value.trim()) {
-      return value.trim()
-    }
-  }
-
-  return ""
-}
-
-function isInactive(fields: Record<string, unknown>) {
-  const status = getStringField(fields, ["Status", "status", "Ativo", "ativo"])
-  const inactiveStatuses = ["inativo", "inactive", "desativado", "excluido", "excluído", "false", "nao", "não"]
-
-  return inactiveStatuses.includes(status.toLowerCase())
-}
-
-function getChoiceNames(table: AirtableTable | undefined, fieldCandidates: string[]) {
-  const fields = table?.fields ?? []
-  const field = fields.find((candidate) => {
-    const fieldName = candidate.name?.toLowerCase()
-    return fieldName ? fieldCandidates.some((name) => name.toLowerCase() === fieldName) : false
-  })
-
-  return Array.from(
-    new Set(
-      (field?.options?.choices ?? [])
-        .map((choice) => choice.name?.trim())
-        .filter((choice): choice is string => Boolean(choice)),
-    ),
-  ).sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }))
-}
-
-async function fetchMetadataTables() {
-  if (!AIRTABLE_TOKEN) return []
-
-  const response = await fetch(`https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables`, {
+async function supabaseRequest<T>(path: string): Promise<T> {
+  const { url, key } = getSupabaseConfig()
+  const response = await fetch(`${url}/${path}`, {
     headers: {
-      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
+      apikey: key,
+      Authorization: `Bearer ${key}`,
     },
     cache: "no-store",
   })
 
-  if (!response.ok) return []
-
-  const data = (await response.json()) as { tables?: AirtableTable[] }
-  return data.tables ?? []
+  if (!response.ok) throw new Error(await response.text())
+  return response.json() as Promise<T>
 }
 
-async function fetchAllRecords(table: string) {
-  const records: AirtableRecord[] = []
-  let offset: string | undefined
-
-  do {
-    const params = new URLSearchParams({ pageSize: "100" })
-    if (offset) params.set("offset", offset)
-
-    const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(table)}?${params}`, {
-      headers: {
-        Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-      },
-      cache: "no-store",
-    })
-
-    if (response.status === 404) return []
-
-    if (!response.ok) {
-      throw new Error(await response.text())
-    }
-
-    const data = (await response.json()) as { offset?: string; records?: AirtableRecord[] }
-    records.push(...(data.records ?? []))
-    offset = data.offset
-  } while (offset)
-
-  return records
+function uniqueSorted(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))).sort((a, b) =>
+    a.localeCompare(b, "pt-BR", { sensitivity: "base" }),
+  )
 }
 
-function getTableByCandidates(tables: AirtableTable[], candidates: string[]) {
-  const normalizedCandidates = candidates.map((candidate) => candidate.toLowerCase())
-
-  return tables.find((table) => {
-    const tableName = table.name?.toLowerCase()
-    return tableName ? normalizedCandidates.includes(tableName) : false
-  })
-}
-
-async function getUsers(tableName: string) {
-  const records = await fetchAllRecords(tableName)
-
-  return records
-    .filter((record) => !isInactive(record.fields ?? {}))
-    .map((record) => {
-      const fields = record.fields ?? {}
-      const label = getStringField(fields, ["Name", "name", "Nome", "nome", "Usuário", "Usuario", "user"])
-
-      return label ? { id: record.id, label } : null
-    })
-    .filter((user): user is { id: string; label: string } => Boolean(user))
-    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }))
+function externalId(row: UserProfileRow) {
+  return row.airtable_record_id || row.id
 }
 
 export async function GET() {
-  if (!AIRTABLE_TOKEN) {
-    return NextResponse.json({ types: [], statuses: [], users: [], error: "Missing AIRTABLE_TOKEN or AIRTABLE_API_KEY" })
+  try {
+    const [taskRows, userRows] = await Promise.all([
+      supabaseRequest<TaskOptionRow[]>("tasks?select=type,status&is_active=is.true&deleted_at=is.null&limit=10000"),
+      supabaseRequest<UserProfileRow[]>("user_profiles?select=id,airtable_record_id,name,status&status=eq.active&order=name.asc&limit=1000"),
+    ])
+
+    const types = uniqueSorted(taskRows.map((row) => row.type))
+    const statuses = uniqueSorted(taskRows.map((row) => row.status))
+    const users = userRows.map((row) => ({ id: externalId(row), label: row.name })).filter((user) => user.label)
+
+    return NextResponse.json({
+      types: types.length ? types : ["Tarefa"],
+      statuses: statuses.length ? statuses : ["Aguardando", "Resolvendo", "Finalizado"],
+      users,
+      errors: [],
+    })
+  } catch (error) {
+    return NextResponse.json({
+      types: ["Tarefa"],
+      statuses: ["Aguardando", "Resolvendo", "Finalizado"],
+      users: [],
+      errors: [error instanceof Error ? error.message : "Nao foi possivel carregar opcoes de tarefas."],
+    })
   }
-
-  const tables = await fetchMetadataTables()
-  const taskTable = getTableByCandidates(tables, TASK_TABLE_CANDIDATES)
-  const usersTable = getTableByCandidates(tables, USERS_TABLE_CANDIDATES)
-  const errors: string[] = []
-
-  const types = getChoiceNames(taskTable, ["Tipo", "tipo"])
-  const statuses = getChoiceNames(taskTable, ["Status", "status"])
-  let users: Array<{ id: string; label: string }> = []
-
-  if (usersTable?.name) {
-    try {
-      users = await getUsers(usersTable.name)
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : "Não foi possível carregar usuários do Airtable.")
-    }
-  }
-
-  return NextResponse.json({ types, statuses, users, errors })
 }

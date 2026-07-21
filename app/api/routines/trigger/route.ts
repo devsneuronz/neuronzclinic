@@ -1,16 +1,11 @@
 import { NextResponse } from "next/server";
-import type { Routine, RoutineActionType, RoutineTrigger } from "@/lib/routines";
+import { actionLabels, type Routine, type RoutineAction, type RoutineActionType, type RoutineTrigger } from "@/lib/routines";
 
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const AIRTABLE_BASE_ID = "app03ti52QQD3W9L2";
-const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY;
-const ROUTINES_TABLE = process.env.AIRTABLE_ROUTINES_TABLE || "tblTOHnzJW7tOBTHc";
-const PROCESSES_TABLE = process.env.AIRTABLE_ROUTINE_PROCESSES_TABLE || "tblnjiV1h19XRU89j";
 const ROUTINES_WEBHOOK_SECRET = process.env.ROUTINES_WEBHOOK_SECRET;
 
 type RawRecord = Record<string, unknown>;
-type AirtableRecord = { id: string; createdTime?: string; fields?: Record<string, unknown> };
 
 type TriggerBody = {
   routineId?: unknown;
@@ -26,6 +21,40 @@ type TriggerBody = {
   occurredAt?: unknown;
 };
 
+type TagRow = { id: string; airtable_record_id: string | null; label: string; color: string | null };
+type TemplateRow = { id: string; airtable_record_id: string | null; label: string };
+type UserProfileRow = { id: string; airtable_record_id: string | null; name: string; email: string };
+type RoutineActionRow = {
+  id: string;
+  airtable_record_id: string | null;
+  action_type: string;
+  label: string | null;
+  delay_minutes: number | string | null;
+  interval_amount: number | string | null;
+  interval_label: string | null;
+  subject: string | null;
+  message: string | null;
+  notes: string | null;
+  webhook_url: string | null;
+  position: number | null;
+  responsible_user_profiles?: UserProfileRow | null;
+  message_templates?: TemplateRow | null;
+  tags?: TagRow | null;
+};
+type RoutineRow = {
+  id: string;
+  airtable_record_id: string | null;
+  name: string;
+  description: string | null;
+  trigger: string;
+  target_status: string | null;
+  specific_date: string | null;
+  birthday_enabled: boolean | null;
+  is_active: boolean | null;
+  target_tag?: TagRow | null;
+  routine_actions?: RoutineActionRow[];
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
@@ -34,10 +63,40 @@ function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function getSupabaseTemplateMarker(value: unknown) {
-  const text = getString(value);
-  const match = text.match(/^supabase_template:([0-9a-f-]{36})$/i);
-  return match?.[1] ?? "";
+function getNumber(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function normalizeText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function normalizeTrigger(value: string): RoutineTrigger {
+  const normalized = normalizeText(value);
+  if (normalized.includes("data") || normalized === "specific_date") return "specific_date";
+  if (normalized.includes("tag")) return "tag";
+  if (normalized.includes("status")) return "status";
+  if (normalized.includes("anivers") || normalized === "birthday") return "birthday";
+  return "manual";
+}
+
+function normalizeActionType(value: string): RoutineActionType {
+  const normalized = normalizeText(value);
+  if (normalized === "create_notice" || normalized.includes("aviso")) return "create_notice";
+  if (normalized === "send_message" || normalized.includes("mensagem")) return "send_message";
+  if (normalized === "add_tag" || normalized.includes("tag")) return "add_tag";
+  if (normalized === "wait" || normalized.includes("aguard")) return "wait";
+  if (normalized === "webhook" || normalized.includes("webhook")) return "webhook";
+  return "create_task";
+}
+
+function externalId(row: { id: string; airtable_record_id: string | null }) {
+  return row.airtable_record_id || row.id;
 }
 
 function isSameOriginRequest(request: Request) {
@@ -70,19 +129,6 @@ function isAuthorized(request: Request, body: TriggerBody) {
   const secret = request.headers.get("x-routines-secret") || "";
 
   return authorization === `Bearer ${ROUTINES_WEBHOOK_SECRET}` || secret === ROUTINES_WEBHOOK_SECRET;
-}
-
-function normalizeTrigger(value: string): RoutineTrigger {
-  const normalized = value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-
-  if (normalized.includes("data")) return "specific_date";
-  if (normalized.includes("tag")) return "tag";
-  if (normalized.includes("status")) return "status";
-  if (normalized.includes("anivers")) return "birthday";
-  return "manual";
 }
 
 function getSupabaseRestUrl() {
@@ -119,7 +165,7 @@ async function parseTriggerBody(request: Request): Promise<TriggerBody> {
   const trimmedBody = rawBody.trim();
 
   if (!trimmedBody) {
-    throw new Error("Envie um JSON no body da requisição.");
+    throw new Error("Envie um JSON no body da requisicao.");
   }
 
   if (contentType.includes("application/x-www-form-urlencoded")) {
@@ -138,128 +184,60 @@ async function parseTriggerBody(request: Request): Promise<TriggerBody> {
   return parsed as TriggerBody;
 }
 
-async function airtableRequest(table: string, path = "") {
-  if (!AIRTABLE_TOKEN) throw new Error("Configure AIRTABLE_TOKEN.");
+function mapAction(row: RoutineActionRow): RoutineAction {
+  const type = normalizeActionType(row.action_type);
+  const template = row.message_templates;
+  const tag = row.tags;
+  const responsible = row.responsible_user_profiles;
 
-  const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(table)}${path}`, {
-    headers: {
-      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-    },
-    cache: "no-store",
-  });
-
-  if (!response.ok) throw new Error(await response.text());
-  return response.json();
+  return {
+    id: externalId(row),
+    type,
+    label: row.label || actionLabels[type],
+    delayMinutes: getNumber(row.delay_minutes),
+    intervalAmount: row.interval_amount === null ? undefined : getNumber(row.interval_amount),
+    intervalLabel: row.interval_label || undefined,
+    responsibleUserId: responsible ? externalId(responsible) : "",
+    subject: row.subject || "",
+    message: row.message || "",
+    notes: row.notes || "",
+    webhookUrl: row.webhook_url || "",
+    templateId: template ? externalId(template) : "",
+    templateLabel: template?.label || "",
+    tagId: tag ? externalId(tag) : "",
+    tagLabel: tag?.label || "",
+    order: row.position ?? 0,
+  };
 }
 
-async function fetchAirtableRecords(table: string, params = new URLSearchParams({ pageSize: "100" })) {
-  const records: AirtableRecord[] = [];
-  let offset: string | undefined;
+function mapRoutine(row: RoutineRow): Routine {
+  const trigger = normalizeTrigger(row.trigger);
+  const targetTag = row.target_tag;
+  const actions = (row.routine_actions ?? []).map(mapAction).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
-  do {
-    const pageParams = new URLSearchParams(params);
-    if (offset) pageParams.set("offset", offset);
-    const data = (await airtableRequest(table, `?${pageParams}`)) as { offset?: string; records?: AirtableRecord[] };
-    records.push(...(data.records ?? []));
-    offset = data.offset;
-  } while (offset);
-
-  return records;
-}
-
-function getRecordIds(fields: Record<string, unknown>, field: string) {
-  const value = fields[field];
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && /^rec[a-zA-Z0-9]+$/.test(item)) : [];
-}
-
-function getStringField(fields: Record<string, unknown>, field: string) {
-  const value = fields[field];
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function getBooleanField(fields: Record<string, unknown>, field: string, fallback: boolean) {
-  const value = fields[field];
-  if (typeof value === "boolean") return value;
-  if (typeof value === "string" && value.trim()) return ["sim", "true", "ativo", "active", "1", "yes"].includes(value.trim().toLowerCase());
-  return fallback;
-}
-
-function getDelayMinutes(fields: Record<string, unknown>) {
-  const interval = getStringField(fields, "Intervalo").toLowerCase();
-  const amount = Number(fields.numero);
-
-  if (!Number.isFinite(amount) || !amount || interval.includes("nenhum")) return 0;
-  if (interval.includes("segundo")) return amount / 60;
-  if (interval.includes("hora")) return amount * 60;
-  if (interval.includes("dia")) return amount * 1440;
-  if (interval.includes("semana")) return amount * 10080;
-  if (interval.includes("mes")) return amount * 43200;
-  if (interval.includes("mês")) return amount * 43200;
-  return amount;
-}
-
-function getActionType(value: string): RoutineActionType {
-  const normalized = value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-
-  if (normalized.includes("aviso")) return "create_notice";
-  if (normalized.includes("mensagem")) return "send_message";
-  if (normalized.includes("tag")) return "add_tag";
-  return "create_task";
+  return {
+    id: externalId(row),
+    name: row.name,
+    description: row.description || "",
+    trigger,
+    targetId: trigger === "tag" && targetTag ? externalId(targetTag) : trigger === "status" ? row.target_status || "" : "",
+    targetLabel: trigger === "tag" ? targetTag?.label || "" : trigger === "status" ? row.target_status || "" : trigger === "specific_date" ? row.specific_date || "" : "",
+    targetColor: trigger === "tag" ? targetTag?.color || "" : "",
+    specificDate: row.specific_date || "",
+    birthdayEnabled: row.birthday_enabled === true,
+    active: row.is_active !== false,
+    actions,
+  };
 }
 
 async function fetchRoutines(): Promise<Routine[]> {
-  const routines = await fetchAirtableRecords(ROUTINES_TABLE);
-  const processIds = routines.flatMap((record) => getRecordIds(record.fields ?? {}, "Processos"));
-  const processFormula = processIds.length ? `OR(${processIds.map((id) => `RECORD_ID()="${id}"`).join(",")})` : "";
-  const processes = processFormula ? await fetchAirtableRecords(PROCESSES_TABLE, new URLSearchParams({ pageSize: "100", filterByFormula: processFormula })) : [];
-  const processMap = new Map(processes.map((record) => [record.id, record]));
-
-  return routines.map((record) => {
-    const fields = record.fields ?? {};
-    const trigger = normalizeTrigger(getStringField(fields, "Gatilho"));
-    const actions = getRecordIds(fields, "Processos")
-      .map((id) => processMap.get(id))
-      .filter((process): process is AirtableRecord => Boolean(process))
-      .map((process, index) => {
-        const processFields = process.fields ?? {};
-        const type = getActionType(getStringField(processFields, "Tipo"));
-        const templateId = getRecordIds(processFields, "Template_mensagem")[0] || getSupabaseTemplateMarker(processFields.Assunto);
-        const description = getStringField(processFields, "Descrição");
-
-        return {
-          id: process.id,
-          type,
-          label: getStringField(processFields, "Tipo") || type,
-          delayMinutes: getDelayMinutes(processFields),
-          intervalAmount: Number(processFields.numero) || 0,
-          intervalLabel: getStringField(processFields, "Intervalo"),
-          order: Number(processFields.ordem) || index,
-          responsibleUserId: getRecordIds(processFields, "Responsavel")[0] || "",
-          subject: templateId ? "" : getStringField(processFields, "Assunto"),
-          message: type === "send_message" ? description : "",
-          notes: type === "send_message" ? "" : description,
-          templateId,
-          tagId: getRecordIds(processFields, "Tags")[0] || "",
-        };
-      })
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-
-    return {
-      id: record.id,
-      name: getStringField(fields, "Rotina") || record.id,
-      description: getStringField(fields, "Descrição"),
-      trigger,
-      targetId: trigger === "tag" ? getRecordIds(fields, "Tag")[0] || "" : trigger === "status" ? getStringField(fields, "Status") : "",
-      targetLabel: trigger === "status" ? getStringField(fields, "Status") : "",
-      specificDate: getStringField(fields, "Data"),
-      birthdayEnabled: trigger === "birthday",
-      active: getBooleanField(fields, "Ativo", Boolean(getStringField(fields, "Gatilho"))),
-      actions,
-    } satisfies Routine;
-  });
+  const select = [
+    "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,is_active",
+    "target_tag:target_tag_id(id,airtable_record_id,label,color)",
+    "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,airtable_record_id,label),tags:tag_id(id,airtable_record_id,label,color))",
+  ].join(",");
+  const rows = (await supabaseRequest(`routines?select=${select}&is_active=is.true&order=name.asc`)) as RoutineRow[];
+  return rows.map(mapRoutine);
 }
 
 function matchesRoutine(routine: Routine, body: TriggerBody) {
@@ -283,7 +261,7 @@ export async function POST(request: Request) {
     const body = await parseTriggerBody(request);
 
     if (!isAuthorized(request, body)) {
-      return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
+      return NextResponse.json({ message: "Nao autorizado." }, { status: 401 });
     }
 
     const contactId = getString(body.contactId) || getString(body.chatId) || getString(body.contactAirtableId);
@@ -348,6 +326,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ matched: routines.length, runs, actionRuns: createdActionRuns.length, actionRunIds: createdActionRuns.map((actionRun) => actionRun.id).filter(Boolean) });
   } catch (error) {
-    return NextResponse.json({ message: error instanceof Error ? error.message : "Não foi possível disparar rotinas." }, { status: 500 });
+    return NextResponse.json({ message: error instanceof Error ? error.message : "Nao foi possivel disparar rotinas." }, { status: 500 });
   }
 }
