@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { cn, normalizeText } from "@/lib/utils";
 import { addDays, addMonths, addWeeks, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek, subMonths, subWeeks } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -359,6 +360,7 @@ function getPointerMinute(event: MouseEvent<HTMLElement>, element: HTMLElement) 
 }
 
 export function WeeklyCalendar() {
+  const { user, isLoading: isLoadingUser } = useCurrentUser();
   const [activeView, setActiveView] = useState<ViewType>("Semana");
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [appointments, setAppointments] = useState<CalendarAppointment[]>([]);
@@ -387,6 +389,8 @@ export function WeeklyCalendar() {
   const [newPatientEmail, setNewPatientEmail] = useState("");
   const [newPatientObservations, setNewPatientObservations] = useState("");
   const [initialAppointmentPatient, setInitialAppointmentPatient] = useState<{ id: string; label: string } | null>(null);
+  const [professionalBookingMode, setProfessionalBookingMode] = useState(false);
+  const [professionalBookingContext, setProfessionalBookingContext] = useState<{ professionalId: string; label: string } | null>(null);
 
   const range = useMemo(() => getRange(currentDate, activeView), [activeView, currentDate]);
   const professionalLabels = useMemo(() => new Map(options.professionals.map((professional) => [professional.id, professional.label])), [options.professionals]);
@@ -441,31 +445,88 @@ export function WeeklyCalendar() {
     return grouped;
   }, [filteredAppointments]);
 
-  const loadOptions = useCallback(async (optionsConfig?: { silent?: boolean }) => {
-    if (!optionsConfig?.silent) setIsLoadingOptions(true);
+  const loadOptions = useCallback(
+    async (optionsConfig?: { silent?: boolean }) => {
+      if (!optionsConfig?.silent) setIsLoadingOptions(true);
 
-    try {
-      const response = await fetch("/api/airtable/appointment-options");
-      const data = (await response.json()) as Partial<AppointmentOptions>;
-      const nextOptions = {
-        status: Array.isArray(data.status) ? data.status : [],
-        types: Array.isArray(data.types) ? data.types : [],
-        attendanceModes: Array.isArray(data.attendanceModes) ? data.attendanceModes : [],
-        professionals: Array.isArray(data.professionals) ? data.professionals : [],
-        patients: Array.isArray(data.patients) ? data.patients : [],
-      };
+      try {
+        if (professionalBookingMode && professionalBookingContext) {
+          const nextOptions = {
+            status: ["scheduled", "confirmed", "cancelled"],
+            types: ["Consulta"],
+            attendanceModes: ["Manual"],
+            professionals: [{ id: professionalBookingContext.professionalId, label: professionalBookingContext.label }],
+            patients: [],
+          };
 
-      console.log(nextOptions);
+          setOptions(nextOptions);
+          return nextOptions;
+        }
 
-      setOptions(nextOptions);
-      return nextOptions;
-    } catch {
-      setErrorMessage("Não foi possível carregar os filtros do Airtable.");
-      return null;
-    } finally {
-      if (!optionsConfig?.silent) setIsLoadingOptions(false);
+        const response = await fetch("/api/airtable/appointment-options");
+        const data = (await response.json()) as Partial<AppointmentOptions>;
+        const nextOptions = {
+          status: Array.isArray(data.status) ? data.status : [],
+          types: Array.isArray(data.types) ? data.types : [],
+          attendanceModes: Array.isArray(data.attendanceModes) ? data.attendanceModes : [],
+          professionals: Array.isArray(data.professionals) ? data.professionals : [],
+          patients: Array.isArray(data.patients) ? data.patients : [],
+        };
+
+        setOptions(nextOptions);
+        return nextOptions;
+      } catch {
+        setErrorMessage("Não foi possível carregar os filtros do Airtable.");
+        return null;
+      } finally {
+        if (!optionsConfig?.silent) setIsLoadingOptions(false);
+      }
+    },
+    [professionalBookingContext, professionalBookingMode],
+  );
+
+  useEffect(() => {
+    if (isLoadingUser || !user?.email || user.role !== "user") {
+      const resetTimer = window.setTimeout(() => {
+        setProfessionalBookingMode(false);
+        setProfessionalBookingContext(null);
+      }, 0);
+      return () => window.clearTimeout(resetTimer);
     }
-  }, []);
+
+    let isActive = true;
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams({ email: user.email, role: user.role });
+
+      fetch(`/api/professional-agendas?${params.toString()}`, { cache: "no-store" })
+        .then(async (response) => (response.ok ? response.json() : null))
+        .then((payload: { agenda?: { id?: string | null; professionalName?: string; professionalId?: string } | null; selectedProfessionalId?: string } | null) => {
+          if (!isActive) return;
+
+          const professionalId = payload?.selectedProfessionalId || payload?.agenda?.professionalId || "";
+          if (payload?.agenda?.id && professionalId) {
+            setProfessionalBookingMode(true);
+            setProfessionalBookingContext({
+              professionalId,
+              label: payload.agenda.professionalName || "Minha agenda",
+            });
+          } else {
+            setProfessionalBookingMode(false);
+            setProfessionalBookingContext(null);
+          }
+        })
+        .catch(() => {
+          if (!isActive) return;
+          setProfessionalBookingMode(false);
+          setProfessionalBookingContext(null);
+        });
+    }, 0);
+
+    return () => {
+      isActive = false;
+      window.clearTimeout(timer);
+    };
+  }, [isLoadingUser, user?.email, user?.role]);
 
   useEffect(() => {
     let isActive = true;
@@ -501,7 +562,14 @@ export function WeeklyCalendar() {
       setErrorMessage("");
 
       try {
-        const response = await fetch(`/api/airtable/appointments?${params.toString()}`);
+        if (professionalBookingMode && professionalBookingContext) {
+          params.set("email", user?.email ?? "");
+          params.set("role", user?.role ?? "user");
+          params.set("professionalId", professionalBookingContext.professionalId);
+        }
+
+        const endpoint = professionalBookingMode ? "/api/professional-agenda-bookings" : "/api/airtable/appointments";
+        const response = await fetch(`${endpoint}?${params.toString()}`);
         const data = (await response.json()) as { appointments?: CalendarAppointment[]; message?: string };
         if (!isActive) return;
         setAppointments(Array.isArray(data.appointments) ? data.appointments : []);
@@ -521,7 +589,7 @@ export function WeeklyCalendar() {
     return () => {
       isActive = false;
     };
-  }, [range.end, range.start, refreshKey, statusFilter, typeFilter]);
+  }, [professionalBookingContext, professionalBookingMode, range.end, range.start, refreshKey, statusFilter, typeFilter, user?.email, user?.role]);
 
   function goToPrevious() {
     if (activeView === "Mês") setCurrentDate((date) => subMonths(date, 1));
@@ -588,7 +656,14 @@ export function WeeklyCalendar() {
     setSuccessMessage("");
 
     try {
-      const response = await fetch("/api/airtable/appointments", {
+      const endpoint = professionalBookingMode ? "/api/professional-agenda-bookings" : "/api/airtable/appointments";
+      const params = new URLSearchParams();
+      if (professionalBookingMode) {
+        params.set("email", user?.email ?? "");
+        params.set("role", user?.role ?? "user");
+      }
+
+      const response = await fetch(`${endpoint}${params.size ? `?${params.toString()}` : ""}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -599,6 +674,8 @@ export function WeeklyCalendar() {
           endDateTime: formData.get("endDateTime"),
           professionalId: formData.get("professionalId"),
           patientId: formData.get("patientId"),
+          patientName: formData.get("patientName"),
+          patientPhone: formData.get("patientPhone"),
           observations: formData.get("observations"),
         }),
       });
@@ -674,7 +751,14 @@ export function WeeklyCalendar() {
     setSuccessMessage("");
 
     try {
-      const response = await fetch(`/api/airtable/appointments?id=${encodeURIComponent(id)}`, {
+      const endpoint = professionalBookingMode ? "/api/professional-agenda-bookings" : "/api/airtable/appointments";
+      const params = new URLSearchParams({ id });
+      if (professionalBookingMode) {
+        params.set("email", user?.email ?? "");
+        params.set("role", user?.role ?? "user");
+      }
+
+      const response = await fetch(`${endpoint}?${params.toString()}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -685,6 +769,8 @@ export function WeeklyCalendar() {
           endDateTime: data.get("endDateTime"),
           professionalId: data.get("professionalId"),
           patientId: data.get("patientId"),
+          patientName: data.get("patientName"),
+          patientPhone: data.get("patientPhone"),
           observations: data.get("observations"),
         }),
       });
@@ -715,7 +801,15 @@ export function WeeklyCalendar() {
     setSuccessMessage("");
 
     try {
-      const response = await fetch(`/api/airtable/appointments?id=${encodeURIComponent(id)}`, {
+      const endpoint = professionalBookingMode ? "/api/professional-agenda-bookings" : "/api/airtable/appointments";
+      const params = new URLSearchParams({ id });
+      if (professionalBookingMode) {
+        params.set("email", user?.email ?? "");
+        params.set("role", user?.role ?? "user");
+        if (professionalBookingContext?.professionalId) params.set("professionalId", professionalBookingContext.professionalId);
+      }
+
+      const response = await fetch(`${endpoint}?${params.toString()}`, {
         method: "DELETE",
       });
       const data = (await response.json()) as { message?: string };
@@ -859,21 +953,23 @@ export function WeeklyCalendar() {
             <span className="truncate">Novo Agendamento</span>
           </Button>
 
-          <Button
-            type="button"
-            variant="outline"
-            className="gap-2 text-xs sm:text-sm px-3 sm:px-4"
-            onClick={() => {
-              setNewPatientName("");
-              setNewPatientPhone("");
-              setNewPatientEmail("");
-              setNewPatientObservations("");
-              setIsNewPatientDialogOpen(true);
-            }}
-          >
-            <UserPlus className="h-4 w-4 shrink-0" />
-            <span className="truncate">Novo Paciente</span>
-          </Button>
+          {!professionalBookingMode && (
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2 text-xs sm:text-sm px-3 sm:px-4"
+              onClick={() => {
+                setNewPatientName("");
+                setNewPatientPhone("");
+                setNewPatientEmail("");
+                setNewPatientObservations("");
+                setIsNewPatientDialogOpen(true);
+              }}
+            >
+              <UserPlus className="h-4 w-4 shrink-0" />
+              <span className="truncate">Novo Paciente</span>
+            </Button>
+          )}
         </div>
       </header>
 
@@ -1203,28 +1299,30 @@ export function WeeklyCalendar() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex-1 lg:space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground hidden lg:inline">Profissional</label>
-                  <Select value={professionalFilter} onValueChange={setProfessionalFilter}>
-                    <SelectTrigger className="w-full">
-                      <div className="flex flex-row items-center gap-3 overflow-hidden">
-                        <User className="h-3.5 w-3.5 text-muted-foreground" />
-                        <SelectValue placeholder="Selecione o profissional" />
-                      </div>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={allValue}>
-                        <span className="lg:hidden">Profissional</span>
-                        <span className="hidden lg:inline">Todos</span>
-                      </SelectItem>
-                      {options.professionals.map((professional) => (
-                        <SelectItem key={professional.id} value={professional.id}>
-                          {professional.label}
+                {!professionalBookingMode && (
+                  <div className="flex-1 lg:space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground hidden lg:inline">Profissional</label>
+                    <Select value={professionalFilter} onValueChange={setProfessionalFilter}>
+                      <SelectTrigger className="w-full">
+                        <div className="flex flex-row items-center gap-3 overflow-hidden">
+                          <User className="h-3.5 w-3.5 text-muted-foreground" />
+                          <SelectValue placeholder="Selecione o profissional" />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={allValue}>
+                          <span className="lg:hidden">Profissional</span>
+                          <span className="hidden lg:inline">Todos</span>
                         </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                        {options.professionals.map((professional) => (
+                          <SelectItem key={professional.id} value={professional.id}>
+                            {professional.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="col-span-3 sm:flex-[2] sm:min-w-[200px] lg:space-y-2">
                   <label className="text-xs font-medium text-muted-foreground hidden lg:inline">Paciente</label>
                   <div className="relative">
@@ -1344,7 +1442,7 @@ export function WeeklyCalendar() {
             </div>
             <div className="space-y-2">
               <DialogTitle>Excluir agendamento?</DialogTitle>
-              <DialogDescription>Esta ação remove o registro do Airtable e não pode ser desfeita.</DialogDescription>
+              <DialogDescription>Esta ação remove o agendamento, não pode ser desfeita.</DialogDescription>
             </div>
           </DialogHeader>
 
@@ -1445,6 +1543,8 @@ export function WeeklyCalendar() {
         endDate={dialogEndDate ?? undefined}
         initialPatient={initialAppointmentPatient}
         isLoading={isLoadingOptions}
+        professionalBookingMode={professionalBookingMode}
+        fixedProfessionalId={professionalBookingContext?.professionalId ?? ""}
       />
     </div>
   );

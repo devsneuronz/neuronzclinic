@@ -253,6 +253,8 @@ async function updateAirtableRecord(table: string, id: string, fields: Record<st
 }
 
 async function findContactId(contactTable: AirtableTable | undefined, { chatId, contactPhone }: { chatId: string; contactPhone: string }) {
+  if (!contactTable) return null
+
   const formulaParts: string[] = []
   const trimmedChatId = chatId.trim()
   const chatFields = getExistingFieldNames(contactTable, ["SUPABASE_CHAT", "ALT_CHAT_ID", "N_WHATS_API", "N_WHATS_WEB"])
@@ -288,7 +290,7 @@ async function findContactId(contactTable: AirtableTable | undefined, { chatId, 
     pageSize: "1",
     filterByFormula: formulaParts.length === 1 ? formulaParts[0] : `OR(${formulaParts.join(",")})`,
   })
-  const records = await fetchAirtableRecords(CONTACTS_TABLE, params)
+  const records = await fetchAirtableRecords(contactTable.name, params)
 
   return records[0]?.id ?? null
 }
@@ -339,6 +341,11 @@ export async function GET(request: Request) {
     const tables = await fetchMetadataTables()
     const historyTable = getInteractionHistoryTable(tables)
     const contactsTable = getTableByName(tables, CONTACTS_TABLE)
+
+    if (!historyTable) {
+      throw new Error(`Tabela de histórico de interações não encontrada no Airtable. Verifique AIRTABLE_INTERACTION_HISTORY_TABLE.`)
+    }
+
     const contactId = chatId || contactPhone ? await findContactId(contactsTable, { chatId, contactPhone }) : null
     const params = new URLSearchParams({ pageSize: "100" })
     const dateFields = getExistingFieldNames(historyTable, ["Data e Hora", "Criado em", "Created At", "createdAt"])
@@ -353,7 +360,7 @@ export async function GET(request: Request) {
       params.set("filterByFormula", filterByFormula)
     }
 
-    const records = await fetchAirtableRecords(INTERACTION_HISTORY_TABLE, params)
+    const records = await fetchAirtableRecords(historyTable.name, params)
     const interactions = sortInteractionsOldestFirst(records.map(mapInteractionRecord).filter((interaction) => interaction.received || interaction.iaResponse))
     const qualityOptions = getChoiceNames(historyTable, QUALITY_FIELD_CANDIDATES)
 
@@ -393,6 +400,11 @@ export async function PATCH(request: Request) {
   try {
     const tables = await fetchMetadataTables()
     const historyTable = getInteractionHistoryTable(tables)
+
+    if (!historyTable) {
+      return NextResponse.json({ message: "Tabela de histórico de interações não encontrada no Airtable." }, { status: 404 })
+    }
+
     const fieldsToUpdate: Record<string, unknown> = {}
 
     if (shouldUpdateQuality) {
@@ -420,7 +432,7 @@ export async function PATCH(request: Request) {
       fieldsToUpdate[correctedResponseField.name] = correctedResponse
     }
 
-    const record = await updateAirtableRecord(INTERACTION_HISTORY_TABLE, id, fieldsToUpdate)
+    const record = await updateAirtableRecord(historyTable.name, id, fieldsToUpdate)
 
     return NextResponse.json({ interaction: mapInteractionRecord(record, 0), message: "Alteração salva." })
   } catch (error) {

@@ -60,6 +60,7 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
   const [confirmedCorrectionIds, setConfirmedCorrectionIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [assistantName, setAssistantName] = useState("IA");
   const chatId = chat?.chat_id || "";
 
   useEffect(() => {
@@ -160,6 +161,24 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
     }
   }
 
+  async function loadAssistantName() {
+    try {
+      const response = await fetch("/api/ia-assistant?fields=name", { cache: "no-store" });
+
+      if (!response.ok) return;
+
+      const { assistants } = await response.json();
+
+      setAssistantName(assistants?.[0]?.name ?? "IA");
+    } catch {
+      setAssistantName("IA");
+    }
+  }
+
+  useEffect(() => {
+    loadAssistantName();
+  }, []);
+
   async function handleSendCorrection(item: TrainingInteraction) {
     const correctedResponse = (correctionDrafts[item.id] || "").trim();
 
@@ -178,7 +197,7 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
 
     try {
       const formData = new FormData();
-      const messageWithSignature = `*Lia*\n${correctedResponse}`;
+      const messageWithSignature = `*${assistantName}*\n${correctedResponse}`;
 
       formData.set("chat_id", chatId);
       formData.set("text", messageWithSignature);
@@ -307,7 +326,11 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
 
                       <div className="bg-blue-500/20 p-4 rounded-xl rounded-tr-none text-sm relative before:absolute before:top-0 before:right-[-6px] before:w-0 before:h-0 before:border-t-[8px] before:border-t-blue-500/20 before:border-r-[6px] before:border-r-transparent">
                         <h4 className="text-[10px] font-bold text-blue-400 mb-2 text-right uppercase tracking-tighter">Resposta IA</h4>
-                        <p className="text-foreground text-justify leading-relaxed">{item.iaResponse}</p>
+                        <p className="text-foreground leading-relaxed">
+                          <b>{assistantName}</b>
+                          <br />
+                          {item.iaResponse}
+                        </p>
                       </div>
                     </div>
                   </div>
