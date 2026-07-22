@@ -5,8 +5,8 @@ const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 type ProfessionalRow = {
-  id_profissional: string;
-  nome: string | null;
+  id: string;
+  name: string | null;
   email: string | null;
   user_id: string | null;
   users?: { email: string | null; name: string | null } | null;
@@ -78,7 +78,7 @@ function getProfessionalEmail(professional: ProfessionalRow) {
 }
 
 function getProfessionalName(professional: ProfessionalRow) {
-  return professional.users?.name || professional.nome || professional.email || professional.users?.email || "Profissional";
+  return professional.users?.name || professional.name || professional.email || professional.users?.email || "Profissional";
 }
 
 function canManageProfessional(viewer: { role: string; email: string }, professional: ProfessionalRow) {
@@ -88,8 +88,8 @@ function canManageProfessional(viewer: { role: string; email: string }, professi
 }
 
 async function getProfessionals() {
-  return selectRows<ProfessionalRow>("professional", {
-    select: "id_profissional,nome,email,user_id,users:user_id(name,email)",
+  return selectRows<ProfessionalRow>("professionals", {
+    select: "id,name,email,user_id,users:user_id(name,email)",
     limit: 1000,
   });
 }
@@ -109,14 +109,14 @@ async function getContext(request: NextRequest, requestedProfessionalId?: string
   const email = getString(request.nextUrl.searchParams.get("email")).toLowerCase();
   const professionals = await getProfessionals();
   const manageableProfessionals = role === "admin" ? professionals : professionals.filter((professional) => canManageProfessional({ role, email }, professional));
-  if (requestedProfessionalId && !manageableProfessionals.some((item) => item.id_profissional === requestedProfessionalId)) {
+  if (requestedProfessionalId && !manageableProfessionals.some((item) => item.id === requestedProfessionalId)) {
     throw new Error("Voce nao pode acessar a agenda deste profissional.");
   }
-  const professional = manageableProfessionals.find((item) => item.id_profissional === requestedProfessionalId) ?? manageableProfessionals[0] ?? null;
+  const professional = manageableProfessionals.find((item) => item.id === requestedProfessionalId) ?? manageableProfessionals[0] ?? null;
 
   if (!professional) throw new Error("Nenhum profissional vinculado a este usuario.");
 
-  const agenda = await getAgenda(professional.id_profissional);
+  const agenda = await getAgenda(professional.id);
   if (!agenda) throw new Error("Agenda profissional ainda nao criada.");
 
   return { role, email, professional, agenda };
@@ -157,7 +157,7 @@ function mapBooking(row: BookingRow, professional: ProfessionalRow) {
     attendanceMode: "Manual",
     startDateTime: row.starts_at,
     endDateTime: row.ends_at || row.starts_at,
-    professionalId: professional.id_profissional,
+    professionalId: professional.id,
     professional: getProfessionalName(professional),
     patientId: "",
     patient: sourceDetails.patientName,
@@ -188,7 +188,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       appointments: rows.map((row) => mapBooking(row, context.professional)),
-      professional: { id: context.professional.id_profissional, label: getProfessionalName(context.professional) },
+      professional: { id: context.professional.id, label: getProfessionalName(context.professional) },
       agendaId: context.agenda.id,
     });
   } catch (error) {
@@ -222,7 +222,7 @@ export async function POST(request: NextRequest) {
       headers: { Prefer: "return=representation" },
       body: JSON.stringify({
         agenda_id: context.agenda.id,
-        professional_id: context.professional.id_profissional,
+        professional_id: context.professional.id,
         source: encodeManualSource(patientName, patientPhone),
         status,
         starts_at: startDate.toISOString(),

@@ -5,8 +5,8 @@ const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 type ProfessionalRow = {
-  id_profissional: string;
-  nome: string | null;
+  id: string;
+  name: string | null;
   email: string | null;
   user_id: string | null;
   users?: { name: string | null; email: string | null } | null;
@@ -84,7 +84,7 @@ function getProfessionalEmail(professional: ProfessionalRow) {
 }
 
 function getProfessionalName(professional: ProfessionalRow) {
-  return professional.users?.name || professional.nome || professional.email || professional.users?.email || "Profissional";
+  return professional.users?.name || professional.name || professional.email || professional.users?.email || "Profissional";
 }
 
 function canUseProfessional(viewer: { role: string; email: string }, professional: ProfessionalRow) {
@@ -93,8 +93,8 @@ function canUseProfessional(viewer: { role: string; email: string }, professiona
 }
 
 async function getProfessionals() {
-  return selectRows<ProfessionalRow>("professional", {
-    select: "id_profissional,nome,email,user_id,users:user_id(name,email),professional_procedimentos(procedimentos:id_procedimento(id,nome,interest_tag_id,interesse))",
+  return selectRows<ProfessionalRow>("professionals", {
+    select: "id,name,email,user_id,users:user_id(name,email),professional_procedimentos!professional_procedimentos_id_professional_fkey(procedimentos:id_procedimento(id,nome,interest_tag_id,interesse))",
     order: "created_at.desc",
     limit: 1000,
   });
@@ -146,7 +146,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     const allowedProfessionals = professionals.filter((professional) => canUseProfessional({ role, email }, professional));
-    const selectedProfessional = allowedProfessionals.find((professional) => professional.id_profissional === requestedProfessionalId) ?? allowedProfessionals[0] ?? null;
+    const selectedProfessional = allowedProfessionals.find((professional) => professional.id === requestedProfessionalId) ?? allowedProfessionals[0] ?? null;
     const tagsByUuid = new Map(tags.map((tag) => [tag.id, tag]));
     const procedures = (selectedProfessional?.professional_procedimentos ?? [])
       .map((link) => link.procedimentos)
@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
       types: types.map((type) => type.tipo),
       typeOptions: types.map((type) => ({ id: type.id, label: type.tipo })),
       attendanceModes: ["Presencial", "Online"],
-      professionals: allowedProfessionals.map((professional) => ({ id: professional.id_profissional, label: getProfessionalName(professional) })),
+      professionals: allowedProfessionals.map((professional) => ({ id: professional.id, label: getProfessionalName(professional) })),
       procedures: procedures.map((procedure) => ({
         id: procedure.id,
         label: procedure.nome || "Procedimento",
@@ -171,7 +171,7 @@ export async function GET(request: NextRequest) {
         label: chat.nome_contato || chat.phone_contact || chat.chat_id || "Contato",
         phone: chat.phone_contact || "",
       })),
-      selectedProfessionalId: selectedProfessional?.id_profissional ?? "",
+      selectedProfessionalId: selectedProfessional?.id ?? "",
     });
   } catch (error) {
     return NextResponse.json(

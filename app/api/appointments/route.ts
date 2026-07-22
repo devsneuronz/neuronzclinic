@@ -5,11 +5,11 @@ const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DEFAULT_STATUS_ID = "30ab85a3-b35d-4065-b173-a6a029a4b58f";
 const APPOINTMENT_SELECT =
-  "id,appointment_status_id,modality,appointment_procedure_type_id,dataHoraInicio,dataHoraFim,professional_id,chat_id,observacoes,appointment_status:appointment_status_id(id,status,hex),appointment_procedure_type:appointment_procedure_type_id(id,tipo),professional:professional_id(id_profissional,nome,email,users:user_id(name,email)),chats:chat_id(id,nome_contato,phone_contact,chat_id)";
+  "id,appointment_status_id,modality,appointment_procedure_type_id,dataHoraInicio,dataHoraFim,professional_id,chat_id,observacoes,appointment_status:appointment_status_id(id,status,hex),appointment_procedure_type:appointment_procedure_type_id(id,tipo),professional:professionals!appointments_professional_id_fkey(id,name,email,users:user_id(name,email)),chats:chat_id(id,nome_contato,phone_contact,chat_id)";
 
 type ProfessionalRow = {
-  id_profissional: string;
-  nome: string | null;
+  id: string;
+  name: string | null;
   email: string | null;
   user_id: string | null;
   users?: { name: string | null; email: string | null } | null;
@@ -32,7 +32,7 @@ type AppointmentRow = {
   observacoes: string | null;
   appointment_status?: { id: string; status: string; hex: string } | null;
   appointment_procedure_type?: { id: string; tipo: string } | null;
-  professional?: { id_profissional: string; nome: string | null; email: string | null; users?: { name: string | null; email: string | null } | null } | null;
+  professional?: { id: string; name: string | null; email: string | null; users?: { name: string | null; email: string | null } | null } | null;
   chats?: { id: string; nome_contato: string | null; phone_contact: string | null; chat_id: string | null } | null;
 };
 
@@ -112,7 +112,7 @@ function getProfessionalEmail(professional: ProfessionalRow) {
 
 function getProfessionalName(professional: ProfessionalRow | NonNullable<AppointmentRow["professional"]> | null | undefined) {
   if (!professional) return "Profissional";
-  return professional.users?.name || professional.nome || professional.email || "Profissional";
+  return professional.users?.name || professional.name || professional.email || "Profissional";
 }
 
 function canUseProfessional(viewer: { role: string; email: string }, professional: ProfessionalRow) {
@@ -121,8 +121,8 @@ function canUseProfessional(viewer: { role: string; email: string }, professiona
 }
 
 async function getProfessionals() {
-  return selectRows<ProfessionalRow>("professional", {
-    select: "id_profissional,nome,email,user_id,users:user_id(name,email)",
+  return selectRows<ProfessionalRow>("professionals", {
+    select: "id,name,email,user_id,users:user_id(name,email)",
     order: "created_at.desc",
     limit: 1000,
   });
@@ -224,7 +224,7 @@ async function getContext(request: NextRequest, requestedProfessionalId = "") {
   const role = !rawRole && !email ? "admin" : normalizeUserRole(rawRole);
   const professionals = await getProfessionals();
   const allowedProfessionals = professionals.filter((professional) => canUseProfessional({ role, email }, professional));
-  const selectedProfessional = allowedProfessionals.find((professional) => professional.id_profissional === requestedProfessionalId) ?? allowedProfessionals[0] ?? null;
+  const selectedProfessional = allowedProfessionals.find((professional) => professional.id === requestedProfessionalId) ?? allowedProfessionals[0] ?? null;
   return { role, email, allowedProfessionals, selectedProfessional };
 }
 
@@ -261,14 +261,14 @@ export async function GET(request: NextRequest) {
     }
 
     const context = await getContext(request, requestedProfessionalId);
-    const selectedProfessionalId = context.selectedProfessional?.id_profissional ?? "";
+    const selectedProfessionalId = context.selectedProfessional?.id ?? "";
     const requestedProfessionalAllowed =
-      !requestedProfessionalId || context.allowedProfessionals.some((professional) => professional.id_profissional === requestedProfessionalId);
+      !requestedProfessionalId || context.allowedProfessionals.some((professional) => professional.id === requestedProfessionalId);
     if (!requestedProfessionalAllowed) {
       return NextResponse.json({ appointments: [], message: "Voce nao pode acessar a agenda deste profissional." }, { status: 403 });
     }
     const professionalIds =
-      context.role === "admin" || context.role === "manager" ? context.allowedProfessionals.map((professional) => professional.id_profissional) : context.selectedProfessional ? [context.selectedProfessional.id_profissional] : [];
+      context.role === "admin" || context.role === "manager" ? context.allowedProfessionals.map((professional) => professional.id) : context.selectedProfessional ? [context.selectedProfessional.id] : [];
 
     const query: Record<string, string | number> = {
       select: APPOINTMENT_SELECT,
@@ -311,7 +311,7 @@ export async function POST(request: NextRequest) {
     const chat = await findChat({ patientId, chatId, contactPhone });
 
     if (!professionalId || !chat || !startsAt) return NextResponse.json({ message: "Informe profissional, paciente e horario." }, { status: 400 });
-    if (!context.allowedProfessionals.some((professional) => professional.id_profissional === professionalId)) {
+    if (!context.allowedProfessionals.some((professional) => professional.id === professionalId)) {
       return NextResponse.json({ message: "Voce nao pode criar agendamento para este profissional." }, { status: 403 });
     }
 
@@ -364,7 +364,7 @@ export async function PATCH(request: NextRequest) {
     const chat = await findChat({ patientId, chatId, contactPhone });
 
     if (!id || !professionalId || !chat || !startsAt) return NextResponse.json({ message: "Informe os dados obrigatorios." }, { status: 400 });
-    if (!context.allowedProfessionals.some((professional) => professional.id_profissional === professionalId)) {
+    if (!context.allowedProfessionals.some((professional) => professional.id === professionalId)) {
       return NextResponse.json({ message: "Voce nao pode editar agendamento deste profissional." }, { status: 403 });
     }
 
@@ -405,13 +405,13 @@ export async function DELETE(request: NextRequest) {
     const professionalId = getString(request.nextUrl.searchParams.get("professionalId"));
     const context = await getContext(request, professionalId);
     if (!id) return NextResponse.json({ message: "Agendamento obrigatorio." }, { status: 400 });
-    if (professionalId && !context.allowedProfessionals.some((professional) => professional.id_profissional === professionalId)) {
+    if (professionalId && !context.allowedProfessionals.some((professional) => professional.id === professionalId)) {
       return NextResponse.json({ message: "Voce nao pode excluir agendamento deste profissional." }, { status: 403 });
     }
     if (!professionalId && context.role !== "admin" && context.role !== "manager") {
       return NextResponse.json({ message: "Informe o profissional para excluir este agendamento." }, { status: 400 });
     }
-    const allowedIds = context.allowedProfessionals.map((professional) => professional.id_profissional).filter(Boolean);
+    const allowedIds = context.allowedProfessionals.map((professional) => professional.id).filter(Boolean);
     const filter = professionalId ? `id=eq.${id}&professional_id=eq.${professionalId}` : `id=eq.${id}&professional_id=in.(${allowedIds.join(",")})`;
     await supabaseRequest(`professional_agenda_bookings?appointment_id=eq.${encodeURIComponent(id)}`, { method: "DELETE" });
     await supabaseRequest(`appointments?${filter}`, { method: "DELETE" });

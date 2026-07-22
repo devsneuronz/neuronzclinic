@@ -128,10 +128,6 @@ async function ensureSupabaseUserByEmail(email: string, name: string) {
   return null;
 }
 
-function getLegacyProfessionalId(professional: Pick<ProfessionalRow, "id" | "legacy_professional_id">) {
-  return professional.legacy_professional_id || professional.id;
-}
-
 function mapProfessional(
   prof: ProfessionalRow,
   expertisesByProfessionalId: Map<string, LinkedExpertise[]>,
@@ -140,14 +136,13 @@ function mapProfessional(
   const isUser = !!prof.users;
   const name = isUser ? prof.users?.name || prof.name : prof.name;
   const email = isUser ? prof.users?.email || prof.email : prof.email;
-  const legacyProfessionalId = getLegacyProfessionalId(prof);
 
-  const expertises = (expertisesByProfessionalId.get(legacyProfessionalId) || []).map((pe) => pe.especialidade).filter(Boolean);
-  const procedures = (proceduresByProfessionalId.get(legacyProfessionalId) || []).map((pp) => pp.procedimentos).filter(Boolean);
+  const expertises = (expertisesByProfessionalId.get(prof.id) || []).map((pe) => pe.especialidade).filter(Boolean);
+  const procedures = (proceduresByProfessionalId.get(prof.id) || []).map((pp) => pp.procedimentos).filter(Boolean);
 
   return {
     id: prof.id,
-    legacy_professional_id: legacyProfessionalId,
+    legacy_professional_id: prof.legacy_professional_id,
     airtable_record_id: prof.airtable_record_id,
     email: email || "",
     name: name || "",
@@ -213,33 +208,6 @@ function getProfessionalPayload(body: Record<string, unknown>, userId: string | 
   };
 }
 
-async function mirrorLegacyProfessional(professionalId: string, payload: ProfessionalPayload) {
-  const body = {
-    id_profissional: professionalId,
-    nome: payload.userId ? null : payload.name,
-    email: payload.userId ? null : payload.email,
-    cidade: payload.city || null,
-    cpf: payload.taxId || null,
-    doencas_atendidas: payload.treatedConditions || null,
-    user_id: payload.userId,
-  };
-
-  const response = await supabaseRequest("professional?on_conflict=id_profissional&select=id_profissional", {
-    method: "POST",
-    headers: {
-      Prefer: "resolution=merge-duplicates,return=representation",
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) throw new Error(await response.text());
-
-  await supabaseRequest(`professionals?id=eq.${encodeURIComponent(professionalId)}`, {
-    method: "PATCH",
-    body: JSON.stringify({ legacy_professional_id: professionalId }),
-  });
-}
-
 async function replaceProfessionalLinks(professionalId: string, expertises: unknown[], procedures: unknown[]) {
   await supabaseRequest(`professional_especialidades?id_professional=eq.${encodeURIComponent(professionalId)}`, {
     method: "DELETE",
@@ -294,8 +262,8 @@ export async function GET() {
     }
 
     const data = (await response.json()) as ProfessionalRow[];
-    const legacyIds = Array.from(new Set(data.map(getLegacyProfessionalId).filter(Boolean)));
-    const { expertisesByProfessionalId, proceduresByProfessionalId } = await getProfessionalLinks(legacyIds);
+    const professionalIds = Array.from(new Set(data.map((prof) => prof.id).filter(Boolean)));
+    const { expertisesByProfessionalId, proceduresByProfessionalId } = await getProfessionalLinks(professionalIds);
     const professionals = data.map((prof) => mapProfessional(prof, expertisesByProfessionalId, proceduresByProfessionalId));
 
     const supabaseUsers: ProfessionalUserOption[] = usersResponse.ok
@@ -366,7 +334,6 @@ export async function POST(request: NextRequest) {
 
     const profData = (await profResponse.json()) as ProfessionalRow[];
     const newProf = profData[0];
-    await mirrorLegacyProfessional(newProf.id, payload);
     await replaceProfessionalLinks(newProf.id, expertises, procedures);
 
     return NextResponse.json({ success: true, professional: newProf });
@@ -427,9 +394,7 @@ export async function PUT(request: NextRequest) {
     const updatedProf = profData[0];
     if (!updatedProf) return NextResponse.json({ message: "Profissional nao encontrado." }, { status: 404 });
 
-    const legacyProfessionalId = getLegacyProfessionalId(updatedProf);
-    await mirrorLegacyProfessional(legacyProfessionalId, payload);
-    await replaceProfessionalLinks(legacyProfessionalId, expertises, procedures);
+    await replaceProfessionalLinks(updatedProf.id, expertises, procedures);
 
     return NextResponse.json({ success: true, professional: updatedProf });
   } catch (error) {
@@ -445,18 +410,11 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ message: "O ID do profissional e obrigatorio para exclusao." }, { status: 400 });
     }
 
-    const profResponse = await supabaseRequest(`professionals?id=eq.${encodeURIComponent(id)}&select=id,legacy_professional_id`);
-    if (!profResponse.ok) return NextResponse.json({ message: await profResponse.text() }, { status: profResponse.status });
-
-    const rows = (await profResponse.json()) as ProfessionalRow[];
-    const professional = rows[0];
-    const legacyProfessionalId = professional ? getLegacyProfessionalId(professional) : id;
-
-    await supabaseRequest(`professional_especialidades?id_professional=eq.${encodeURIComponent(legacyProfessionalId)}`, {
+    await supabaseRequest(`professional_especialidades?id_professional=eq.${encodeURIComponent(id)}`, {
       method: "DELETE",
     });
 
-    await supabaseRequest(`professional_procedimentos?id_professional=eq.${encodeURIComponent(legacyProfessionalId)}`, {
+    await supabaseRequest(`professional_procedimentos?id_professional=eq.${encodeURIComponent(id)}`, {
       method: "DELETE",
     });
 
@@ -466,14 +424,6 @@ export async function DELETE(request: NextRequest) {
 
     if (!deleteProfessionalResponse.ok) {
       return NextResponse.json({ message: await deleteProfessionalResponse.text() }, { status: deleteProfessionalResponse.status });
-    }
-
-    const deleteLegacyResponse = await supabaseRequest(`professional?id_profissional=eq.${encodeURIComponent(legacyProfessionalId)}`, {
-      method: "DELETE",
-    });
-
-    if (!deleteLegacyResponse.ok) {
-      return NextResponse.json({ message: await deleteLegacyResponse.text() }, { status: deleteLegacyResponse.status });
     }
 
     return NextResponse.json({ success: true });

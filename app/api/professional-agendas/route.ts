@@ -6,8 +6,8 @@ const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 type SupabaseProfessional = {
-  id_profissional: string;
-  nome: string | null;
+  id: string;
+  name: string | null;
   email: string | null;
   user_id: string | null;
   users?: { id: string; name: string | null; email: string | null } | null;
@@ -111,22 +111,8 @@ async function selectRows<T>(table: string, query: Record<string, string | numbe
   return response.json() as Promise<T[]>;
 }
 
-async function selectRowsFromFirstAvailableTable<T>(tables: string[], query: Record<string, string | number>) {
-  let lastError: unknown;
-
-  for (const table of tables) {
-    try {
-      return await selectRows<T>(table, query);
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw lastError;
-}
-
 function getProfessionalName(professional: SupabaseProfessional) {
-  return professional.users?.name || professional.nome || professional.email || professional.users?.email || "Profissional";
+  return professional.users?.name || professional.name || professional.email || professional.users?.email || "Profissional";
 }
 
 function getProfessionalEmail(professional: SupabaseProfessional) {
@@ -155,9 +141,9 @@ function canManageProfessional(viewer: { role: string; email: string }, professi
 }
 
 async function getProfessionals() {
-  const select = ["id_profissional,nome,email,user_id", "users:user_id(id,name,email)", "professional_procedimentos(procedimentos:id_procedimento(id,nome,status))"].join(",");
+  const select = ["id,name,email,user_id", "users:user_id(id,name,email)", "professional_procedimentos!professional_procedimentos_id_professional_fkey(procedimentos:id_procedimento(id,nome,status))"].join(",");
 
-  return selectRowsFromFirstAvailableTable<SupabaseProfessional>(["profissional", "professional"], {
+  return selectRows<SupabaseProfessional>("professionals", {
     select,
     order: "created_at.desc",
     limit: 1000,
@@ -244,7 +230,7 @@ async function getLinkedProceduresForProfessional(professional: SupabaseProfessi
   if (embeddedProcedures.length > 0) return embeddedProcedures;
 
   try {
-    return await getLinkedProceduresByProfessionalId(professional.id_profissional);
+    return await getLinkedProceduresByProfessionalId(professional.id);
   } catch {
     return [];
   }
@@ -265,7 +251,7 @@ async function createAgenda(professional: SupabaseProfessional, viewerEmail: str
     method: "POST",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify({
-      id_profissional: professional.id_profissional,
+      id_profissional: professional.id,
       status: "active",
       title: getProfessionalName(professional),
       created_by_email: viewerEmail || null,
@@ -296,7 +282,7 @@ async function loadAgendaRules(professional: SupabaseProfessional, agenda: Agend
   if (!agenda) {
     return {
       id: null,
-      professionalId: professional.id_profissional,
+      professionalId: professional.id,
       professionalName: getProfessionalName(professional),
       professionalEmail: getProfessionalEmail(professional),
       status: "inactive",
@@ -314,7 +300,7 @@ async function loadAgendaRules(professional: SupabaseProfessional, agenda: Agend
   if (rules.length === 0) {
     return {
       id: agenda.id,
-      professionalId: professional.id_profissional,
+      professionalId: professional.id,
       professionalName: getProfessionalName(professional),
       professionalEmail: getProfessionalEmail(professional),
       status: normalizeStatus(agenda.status),
@@ -334,7 +320,7 @@ async function loadAgendaRules(professional: SupabaseProfessional, agenda: Agend
 
   return {
     id: agenda.id,
-    professionalId: professional.id_profissional,
+    professionalId: professional.id,
     professionalName: getProfessionalName(professional),
     professionalEmail: getProfessionalEmail(professional),
     status: normalizeStatus(agenda.status),
@@ -470,10 +456,10 @@ export async function GET(request: NextRequest) {
     const requestedProfessionalId = getString(request.nextUrl.searchParams.get("professionalId"));
     const professionals = await getProfessionals();
     const manageableProfessionals = viewer.role === "admin" ? professionals : professionals.filter((professional) => canManageProfessional(viewer, professional));
-    if (requestedProfessionalId && !manageableProfessionals.some((professional) => professional.id_profissional === requestedProfessionalId)) {
+    if (requestedProfessionalId && !manageableProfessionals.some((professional) => professional.id === requestedProfessionalId)) {
       return NextResponse.json({ message: "Voce nao pode acessar a agenda deste profissional." }, { status: 403 });
     }
-    const selectedProfessional = manageableProfessionals.find((professional) => professional.id_profissional === requestedProfessionalId) ?? manageableProfessionals[0] ?? null;
+    const selectedProfessional = manageableProfessionals.find((professional) => professional.id === requestedProfessionalId) ?? manageableProfessionals[0] ?? null;
 
     if (!selectedProfessional) {
       return NextResponse.json({
@@ -486,19 +472,19 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const agenda = await getAgenda(selectedProfessional.id_profissional);
+    const agenda = await getAgenda(selectedProfessional.id);
     const procedures = await getLinkedProceduresForProfessional(selectedProfessional);
     const agendaDetails = await loadAgendaRules(selectedProfessional, agenda);
     const bookedAvailability = agenda?.id ? await getBookedSlotsByDate(agenda.id) : { bookedSlotsByDate: {}, bookedIntervalsByDate: {} };
 
     return NextResponse.json({
       professionals: manageableProfessionals.map((professional) => ({
-        id: professional.id_profissional,
+        id: professional.id,
         name: getProfessionalName(professional),
         email: getProfessionalEmail(professional),
         hasUser: Boolean(professional.user_id || getProfessionalEmail(professional)),
       })),
-      selectedProfessionalId: selectedProfessional.id_profissional,
+      selectedProfessionalId: selectedProfessional.id,
       procedures,
       agenda: agendaDetails,
       bookedSlotsByDate: bookedAvailability.bookedSlotsByDate,
@@ -522,13 +508,13 @@ export async function POST(request: NextRequest) {
     }
 
     const professionals = await getProfessionals();
-    const professional = professionals.find((item) => item.id_profissional === professionalId);
+    const professional = professionals.find((item) => item.id === professionalId);
 
     if (!professional || !canManageProfessional(viewer, professional)) {
       return NextResponse.json({ message: "Voce nao pode editar esta agenda." }, { status: 403 });
     }
 
-    let agenda = await getAgenda(professional.id_profissional);
+    let agenda = await getAgenda(professional.id);
     if (!agenda && viewer.role !== "admin") {
       return NextResponse.json({ message: "A agenda ainda nao existe. Apenas administradores podem criar agendas." }, { status: 403 });
     }
