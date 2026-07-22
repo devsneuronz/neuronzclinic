@@ -10,7 +10,7 @@ type ProfessionalRow = {
   email: string | null;
   user_id: string | null;
   user_profile?: { name: string | null; email: string | null } | null;
-  professional_procedimentos?: Array<{ procedimentos?: { id: string; nome: string | null; interest_tag_id?: string | null; interesse: string | null } | null }>;
+  professional_procedimentos?: Array<{ clinic_procedures?: { id: string; name: string | null; interest_tag_id?: string | null; interest: string | null } | null }>;
 };
 
 type ChatRow = {
@@ -94,7 +94,7 @@ function canUseProfessional(viewer: { role: string; email: string }, professiona
 
 async function getProfessionals() {
   return selectRows<ProfessionalRow>("professionals", {
-    select: "id,name,email,user_id,user_profile:user_profiles!professionals_user_id_fkey(name,email),professional_procedimentos!professional_procedimentos_id_professional_fkey(procedimentos:id_procedimento(id,nome,interest_tag_id,interesse))",
+    select: "id,name,email,user_id,user_profile:user_profiles!professionals_user_id_fkey(name,email),professional_procedimentos!professional_procedimentos_id_professional_fkey(clinic_procedures:id_procedimento(id,name,interest_tag_id,interest))",
     order: "created_at.desc",
     limit: 1000,
   });
@@ -113,12 +113,12 @@ function chatMatchesInterests(chat: ChatRow, interests: string[]) {
 }
 
 function getProcedureInterestKeys(
-  procedure: { nome: string | null; interest_tag_id?: string | null; interesse: string | null },
+  procedure: { name: string | null; interest_tag_id?: string | null; interest: string | null },
   tagsByUuid: Map<string, TagRow>,
 ) {
   const keys = new Set<string>();
-  if (procedure.interesse) keys.add(procedure.interesse);
-  if (procedure.nome) keys.add(procedure.nome);
+  if (procedure.interest) keys.add(procedure.interest);
+  if (procedure.name) keys.add(procedure.name);
 
   const tag = procedure.interest_tag_id ? tagsByUuid.get(procedure.interest_tag_id) : null;
   if (tag) {
@@ -149,8 +149,8 @@ export async function GET(request: NextRequest) {
     const selectedProfessional = allowedProfessionals.find((professional) => professional.id === requestedProfessionalId) ?? allowedProfessionals[0] ?? null;
     const tagsByUuid = new Map(tags.map((tag) => [tag.id, tag]));
     const procedures = (selectedProfessional?.professional_procedimentos ?? [])
-      .map((link) => link.procedimentos)
-      .filter((procedure): procedure is { id: string; nome: string | null; interest_tag_id?: string | null; interesse: string | null } => Boolean(procedure?.id));
+      .map((link) => link.clinic_procedures)
+      .filter((procedure): procedure is { id: string; name: string | null; interest_tag_id?: string | null; interest: string | null } => Boolean(procedure?.id));
     const interests = procedures.flatMap((procedure) => getProcedureInterestKeys(procedure, tagsByUuid));
     const filteredChats = selectedProfessional ? chats.filter((chat) => chatMatchesInterests(chat, interests)) : chats;
 
@@ -163,8 +163,8 @@ export async function GET(request: NextRequest) {
       professionals: allowedProfessionals.map((professional) => ({ id: professional.id, label: getProfessionalName(professional) })),
       procedures: procedures.map((procedure) => ({
         id: procedure.id,
-        label: procedure.nome || "Procedimento",
-        interest: procedure.interesse || "",
+        label: procedure.name || procedure.interest || "Procedimento",
+        interest: procedure.interest || "",
       })),
       patients: filteredChats.map((chat) => ({
         id: chat.id,

@@ -17,9 +17,10 @@ type LinkedExpertise = {
 
 type LinkedProcedure = {
   id_professional: string;
-  procedimentos?: {
+  clinic_procedures?: {
     id: string;
-    nome: string;
+    name: string | null;
+    interest: string | null;
   } | null;
 };
 
@@ -109,7 +110,15 @@ function mapProfessional(
   const email = isUser ? prof.user_profile?.email || prof.email : prof.email;
 
   const expertises = (expertisesByProfessionalId.get(prof.id) || []).map((pe) => pe.especialidade).filter(Boolean);
-  const procedures = (proceduresByProfessionalId.get(prof.id) || []).map((pp) => pp.procedimentos).filter(Boolean);
+  const procedures = (proceduresByProfessionalId.get(prof.id) || [])
+    .map((pp) => pp.clinic_procedures)
+    .filter((procedure): procedure is NonNullable<LinkedProcedure["clinic_procedures"]> => Boolean(procedure?.id))
+    .map((procedure) => ({
+      id: procedure.id,
+      nome: procedure.name || procedure.interest || "Procedimento",
+      name: procedure.name,
+      interest: procedure.interest,
+    }));
 
   return {
     id: prof.id,
@@ -138,7 +147,7 @@ async function getProfessionalLinks(professionalIds: string[]) {
   const filter = professionalIds.map(encodeURIComponent).join(",");
   const [expertisesResponse, proceduresResponse] = await Promise.all([
     supabaseRequest(`professional_especialidades?select=id_professional,especialidade:id_especialidade(id,especialidade)&id_professional=in.(${filter})`),
-    supabaseRequest(`professional_procedimentos?select=id_professional,procedimentos:id_procedimento(id,nome)&id_professional=in.(${filter})`),
+    supabaseRequest(`professional_procedimentos?select=id_professional,clinic_procedures:id_procedimento(id,name,interest)&id_professional=in.(${filter})`),
   ]);
 
   const expertises = expertisesResponse.ok ? ((await expertisesResponse.json()) as LinkedExpertise[]) : [];

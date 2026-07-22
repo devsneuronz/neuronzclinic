@@ -98,7 +98,12 @@ export function Professionals({ sortedProfessionals, isLoadingProfessionals, pro
   const selectedUser = users.find((user) => getUserOptionKey(user) === selectedUserId);
   const hasLinkedUser = Boolean(selectedUser);
   const linkedSupabaseUserIds = new Set(sortedProfessionals.map((professional) => professional.user_id).filter((userId): userId is string => Boolean(userId && userId !== editingProfessional?.user_id)));
-  const linkedEmails = new Set(sortedProfessionals.filter((professional) => professional.id !== editingProfessional?.id).map((professional) => professional.email.trim().toLowerCase()).filter(Boolean));
+  const linkedEmails = new Set(
+    sortedProfessionals
+      .filter((professional) => professional.id !== editingProfessional?.id)
+      .map((professional) => professional.email.trim().toLowerCase())
+      .filter(Boolean),
+  );
 
   const resetForm = () => {
     setEditingProfessional(null);
@@ -203,7 +208,7 @@ export function Professionals({ sortedProfessionals, isLoadingProfessionals, pro
       const response = await fetch("/api/expertise", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ especialidade: newSpecialtyName.trim() }),
+        body: JSON.stringify({ expertise: newSpecialtyName.trim() }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Erro ao salvar especialidade");
@@ -351,7 +356,7 @@ export function Professionals({ sortedProfessionals, isLoadingProfessionals, pro
 
                         return (
                           <SelectItem key={userKey} value={userKey} disabled={isLinkedToAnotherProfessional}>
-                            {user.name} - {user.email} ({user.source === "supabase" ? "Perfil" : "Airtable"})
+                            {user.name} - {user.email}
                           </SelectItem>
                         );
                       })}

@@ -5,8 +5,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { cn } from "@/lib/utils";
 import { Bolt, Building2, CalendarClock, CopyPlus, Loader2, Sparkles, Stethoscope, Tags, Users } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { ProfessionalAgendaPreview } from "../agenda/professional-agenda-preview";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ProfessionalSchedulePreview } from "../professional-schedule/professional-schedule-preview";
 import { BackgroundOptions } from "./background-options";
 import { ClinicInfoManager, SupabaseProcedure } from "./clinic-info-manager";
 import ColorScheme from "./color-scheme";
@@ -32,7 +32,7 @@ export type ProfessionalUserOption = {
   id: string;
   name: string;
   email: string;
-  source: "supabase" | "airtable";
+  source: "supabase";
 };
 
 export default function SettingsPage() {
@@ -47,11 +47,31 @@ export default function SettingsPage() {
   const [professionalError, setProfessionalError] = useState<string | null>(null);
   const [expertises, setExpertises] = useState<Expertise[]>([]);
   const [procedures, setProcedures] = useState<SupabaseProcedure[]>([]);
+  const [activeTab, setActiveTab] = useState("geral");
+
+  const loadProcedures = useCallback(async () => {
+    try {
+      const response = await fetch("/api/clinic-info", { cache: "no-store" });
+      if (!response.ok) return;
+
+      const data = (await response.json()) as { procedures?: SupabaseProcedure[] };
+      setProcedures(data.procedures ?? []);
+    } catch {
+      setProcedures([]);
+    }
+  }, []);
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    if (value === "profissionais") {
+      void loadProcedures();
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
 
-    fetch("/api/airtable/users", { cache: "no-store" })
+    fetch("/api/users", { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("Não foi possível carregar os usuários.");
 
@@ -102,22 +122,15 @@ export default function SettingsPage() {
       })
       .catch(() => {});
 
-    fetch("/api/procedures", { cache: "no-store" })
-      .then(async (response) => {
-        if (response.ok) {
-          const data = await response.json();
-          if (isMounted) setProcedures(data.procedures ?? []);
-        }
-      })
-      .catch(() => {});
+    queueMicrotask(() => void loadProcedures());
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [loadProcedures]);
 
   useEffect(() => {
-    fetch("/api/airtable/sectors", { cache: "no-store" })
+    fetch("/api/sectors", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : Promise.reject(new Error("Não foi possível carregar os setores."))))
       .then((data: { sectorRecords?: Sector[] }) => setSectors(data.sectorRecords ?? []))
       .catch(() => setSectors([]));
@@ -161,17 +174,17 @@ export default function SettingsPage() {
 
       <main className="flex-1 flex flex-col overflow-hidden">
         <div className="w-full flex flex-col flex-1 overflow-hidden">
-          <Tabs defaultValue="geral" className="flex flex-col flex-1 overflow-hidden gap-0">
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col flex-1 overflow-hidden gap-0">
             <div className="bg-card py-3 px-4 border-b border-border shrink-0 flex justify-start md:justify-center w-full overflow-x-auto no-scrollbar">
               <TabsList className="flex w-max md:w-fit gap-1.5 rounded-full h-11! bg-secondary/50 border border-border/40 px-1.5 py-1.5">
                 {isLoading ? (
-                  <TabsTrigger value="" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
+                  <TabsTrigger value="" className="pointer-events-none group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
                     <span>Carregando</span>
                   </TabsTrigger>
                 ) : (
                   <>
-                    <TabsTrigger value="geral" className={cn("group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full", !isAdmin && "border-0! bg-transparent!")}>
+                    <TabsTrigger value="geral" className={cn("group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full")}>
                       <Bolt className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
                       <span>Geral</span>
                     </TabsTrigger>
@@ -189,12 +202,10 @@ export default function SettingsPage() {
                           <Users className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
                           <span>Usuários</span>
                         </TabsTrigger>
-                        {false && (
-                          <TabsTrigger value="profissionais" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
-                            <Stethoscope className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
-                            <span>Profissionais</span>
-                          </TabsTrigger>
-                        )}
+                        <TabsTrigger value="profissionais" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
+                          <Stethoscope className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
+                          <span>Profissionais</span>
+                        </TabsTrigger>
                         <TabsTrigger value="tags" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
                           <Tags className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
                           <span>Tags</span>
@@ -211,12 +222,10 @@ export default function SettingsPage() {
                           <CopyPlus className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
                           <span>Anexos</span>
                         </TabsTrigger>
-                        {false && (
-                          <TabsTrigger value="informacoes" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
-                            <Sparkles className="text-blue-500 w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
-                            <span>IA</span>
-                          </TabsTrigger>
-                        )}
+                        <TabsTrigger value="informacoes" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
+                          <Sparkles className="text-blue-500 w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
+                          <span>IA</span>
+                        </TabsTrigger>
                       </>
                     )}
                   </>
@@ -225,14 +234,14 @@ export default function SettingsPage() {
             </div>
             {!isLoading && (
               <>
-                <TabsContent value="geral" className="w-full flex-1 flex justify-center overflow-hidden p-6 data-[state=inactive]:hidden! data-[state=active]:flex">
-                  <Card className="w-full max-w-7xl border border-border bg-card shadow-sm flex flex-col">
+                <TabsContent value="geral" className="w-full flex-1 flex justify-center overflow-hidden p-4 sm:p-6 data-[state=inactive]:hidden! data-[state=active]:flex">
+                  <Card className="w-full max-w-7xl border border-border bg-card shadow-sm flex flex-col min-h-0 overflow-hidden">
                     <CardHeader className="space-y-1 shrink-0 px-4 sm:px-6">
                       <CardTitle className="text-xl font-semibold text-foreground">Aparência</CardTitle>
-                      <CardDescription className="text-sm text-muted-foreground">Personalize o esquema de cores do sistema para o seu conforto visual.</CardDescription>
+                      <CardDescription className="text-sm text-muted-foreground">Personalize tema, paleta de cores e tela de login para deixar o sistema mais confortável.</CardDescription>
                     </CardHeader>
-                    <CardContent className="flex-1 overflow-y-auto custom-scrollbar">
-                      <div className="flex flex-col md:flex-row gap-6">
+                    <CardContent className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+                      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
                         <ColorScheme />
                         <BackgroundOptions />
                       </div>
@@ -247,7 +256,7 @@ export default function SettingsPage() {
                         <CardDescription className="text-sm text-muted-foreground">Configure seus horários e veja os procedimentos vinculados ao seu cadastro profissional.</CardDescription>
                       </CardHeader>
                       <CardContent className="flex min-h-0 flex-1 overflow-hidden">
-                        <ProfessionalAgendaPreview />
+                        <ProfessionalSchedulePreview />
                       </CardContent>
                     </Card>
                   </TabsContent>
@@ -344,7 +353,7 @@ export default function SettingsPage() {
                         <CardDescription className="text-sm text-muted-foreground">Gerencie as diretrizes de comportamento da assistente virtual e a tabela de procedimentos.</CardDescription>
                       </CardHeader>
                       <CardContent className="flex-1 overflow-y-auto no-scrollbar">
-                        <ClinicInfoManager />
+                        <ClinicInfoManager onProceduresChanged={setProcedures} />
                       </CardContent>
                     </Card>
                   </TabsContent>
