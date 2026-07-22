@@ -13,7 +13,7 @@ import { fallbackTaskOptions, getTaskNoteAttachmentType, statusConfig, type Task
 import { getDraTatianaResponsibleFilter, isDraTatianaUser } from "@/lib/user-access";
 import { cn } from "@/lib/utils";
 import { motion, type Variants } from "framer-motion";
-import { AlertCircle, Circle, IdCardLanyard, ListPlus, Loader2, Plus, RefreshCw, Search, Shapes, User } from "lucide-react";
+import { AlertCircle, CalendarPlus, Circle, IdCardLanyard, ListPlus, Loader2, Plus, RefreshCw, Search, Shapes, User, type LucideIcon } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -25,6 +25,15 @@ import { TaskChatDialog } from "./task-chat-dialog";
 import { TaskDetailsDialog } from "./task-details-dialog";
 import { TaskStatusGrid } from "./task-grid";
 type TaskView = "todas" | TaskStatus;
+type CreatedAtFilter = " " | "today" | "last7" | "last30" | "oldestFirst" | "overdue";
+type TaskFilterConfig = {
+  id: string;
+  icon: LucideIcon;
+  value: string;
+  options: string[];
+  filterAll: string;
+  onChange: (value: string) => void;
+};
 
 const statusOrder: TaskStatus[] = ["aguardando", "resolvendo", "finalizado"];
 const taskViewOptions: Array<{ value: TaskView; label: string }> = [
@@ -33,11 +42,57 @@ const taskViewOptions: Array<{ value: TaskView; label: string }> = [
   { value: "resolvendo", label: "Resolvendo" },
   { value: "finalizado", label: "Finalizadas" },
 ];
+const createdAtFilterOptions: Array<{ value: CreatedAtFilter; label: string }> = [
+  { value: "today", label: "Hoje" },
+  { value: "last7", label: "Últimos 7 dias" },
+  { value: "last30", label: "Últimos 30 dias" },
+  { value: "oldestFirst", label: "Mais antigas primeiro" },
+  { value: "overdue", label: "Vencidas" },
+];
 
-function getTaskSortTime(task: Task) {
-  const value = task.dueDate || task.createdAt || "";
-  const date = parseDateOnly(value) ?? new Date(value || 0);
+function getTaskCreatedTime(task: Task) {
+  const date = new Date(task.createdAt || 0);
   return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function isTaskOverdue(task: Task) {
+  if (task.status === "finalizado" || !task.dueDate) return false;
+
+  const dueDate = parseDateOnly(task.dueDate);
+  if (!dueDate || Number.isNaN(dueDate.getTime())) return false;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  dueDate.setHours(0, 0, 0, 0);
+
+  return dueDate.getTime() < today.getTime();
+}
+
+function matchesCreatedAtFilter(task: Task, filter: CreatedAtFilter) {
+  if (filter === filterAll) return true;
+  if (filter === "overdue") return isTaskOverdue(task);
+  if (filter === "oldestFirst") return true;
+
+  const createdAt = new Date(task.createdAt || 0);
+  if (Number.isNaN(createdAt.getTime())) return false;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const sevenDaysAgo = new Date(today);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+
+  const thirtyDaysAgo = new Date(today);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
+
+  if (filter === "today") return createdAt >= today && createdAt < tomorrow;
+  if (filter === "last7") return createdAt >= sevenDaysAgo && createdAt < tomorrow;
+  if (filter === "last30") return createdAt >= thirtyDaysAgo && createdAt < tomorrow;
+
+  return true;
 }
 
 function getDigits(value: string) {
@@ -74,10 +129,11 @@ function getTaskPatientLookupKeys(task: Task) {
   return [task.patientChatId, task.patientPhone, digits, localDigits].map((value) => value?.trim()).filter(isNonEmptyString);
 }
 
-function sortTasksForStatus(status: TaskStatus, tasks: Task[]) {
-  if (status !== "finalizado") return tasks;
-
-  return [...tasks].sort((a, b) => getTaskSortTime(b) - getTaskSortTime(a));
+function sortTasksByCreatedAt(tasks: Task[], direction: "asc" | "desc" = "desc") {
+  return [...tasks].sort((a, b) => {
+    const diff = getTaskCreatedTime(a) - getTaskCreatedTime(b);
+    return direction === "asc" ? diff : -diff;
+  });
 }
 
 const filterAll = " ";
@@ -364,6 +420,7 @@ export function KanbanBoard() {
   const [typeFilter, setTypeFilter] = useState(filterAll);
   const [creatorFilter, setCreatorFilter] = useState(filterAll);
   const [responsibleFilter, setResponsibleFilter] = useState(filterAll);
+  const [createdAtFilter, setCreatedAtFilter] = useState<CreatedAtFilter>(filterAll);
   const [taskOptions, setTaskOptions] = useState<TaskOptions>(fallbackTaskOptions);
   const [isLoadingTaskOptions, setIsLoadingTaskOptions] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -737,7 +794,7 @@ export function KanbanBoard() {
 
   const effectiveResponsibleFilter = responsibleFilter === filterAll && !hasAppliedInitialResponsibleFilter && isDraTatianaUser(user) && initialTatianaResponsibleFilter ? initialTatianaResponsibleFilter : responsibleFilter;
 
-  const filtersConfig = [
+  const filtersConfig: TaskFilterConfig[] = [
     {
       id: "tipo",
       icon: Shapes,
@@ -764,6 +821,18 @@ export function KanbanBoard() {
     },
   ];
 
+  filtersConfig.push({
+    id: "criacao",
+    icon: CalendarPlus,
+    value: createdAtFilterOptions.find((option) => option.value === createdAtFilter)?.label ?? filterAll,
+    options: createdAtFilterOptions.map((option) => option.label),
+    filterAll: "Criação",
+    onChange: (label: string) => {
+      const option = createdAtFilterOptions.find((item) => item.label === label);
+      setCreatedAtFilter(option?.value ?? filterAll);
+    },
+  });
+
   const filteredTasks = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
@@ -772,27 +841,25 @@ export function KanbanBoard() {
       const matchesType = typeFilter === filterAll || task.type === typeFilter;
       const matchesCreator = creatorFilter === filterAll || task.creator === creatorFilter;
       const matchesResponsible = effectiveResponsibleFilter === filterAll || task.responsible === effectiveResponsibleFilter;
+      const matchesCreatedAt = matchesCreatedAtFilter(task, createdAtFilter);
 
-      return matchesQuery && matchesType && matchesCreator && matchesResponsible;
+      return matchesQuery && matchesType && matchesCreator && matchesResponsible && matchesCreatedAt;
     });
-  }, [creatorFilter, effectiveResponsibleFilter, enrichedTasks, searchQuery, typeFilter]);
+  }, [createdAtFilter, creatorFilter, effectiveResponsibleFilter, enrichedTasks, searchQuery, typeFilter]);
 
   const tasksByStatus = useMemo(
     () =>
       statusOrder.reduce(
         (acc, status) => {
-          acc[status] = sortTasksForStatus(
-            status,
-            filteredTasks.filter((task) => task.status === status),
-          );
+          acc[status] = sortTasksByCreatedAt(filteredTasks.filter((task) => task.status === status), createdAtFilter === "oldestFirst" ? "asc" : "desc");
           return acc;
         },
         {} as Record<TaskStatus, Task[]>,
       ),
-    [filteredTasks],
+    [createdAtFilter, filteredTasks],
   );
 
-  const isFiltering = Boolean(searchQuery.trim()) || typeFilter !== filterAll || creatorFilter !== filterAll || effectiveResponsibleFilter !== filterAll;
+  const isFiltering = Boolean(searchQuery.trim()) || typeFilter !== filterAll || creatorFilter !== filterAll || effectiveResponsibleFilter !== filterAll || createdAtFilter !== filterAll;
   const totalOpen = tasksByStatus.aguardando.length + tasksByStatus.resolvendo.length;
 
   return (

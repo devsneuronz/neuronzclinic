@@ -231,11 +231,11 @@ function filterTasksForContact(tasks: TaskPayload[], chatId: string, contactPhon
 }
 
 async function fetchTasks() {
-  const rows = await supabaseRequest<TaskRow[]>(`tasks?select=${TASK_SELECT}&is_active=is.true&deleted_at=is.null&order=due_date.asc.nullslast&order=created_at.asc`)
+  const rows = await supabaseRequest<TaskRow[]>(`tasks?select=${TASK_SELECT}&is_active=is.true&deleted_at=is.null&order=created_at.desc`)
   return rows.map(mapTask).sort((a, b) => {
-    const dateA = new Date(a.dueDate || a.createdAt || 0).getTime()
-    const dateB = new Date(b.dueDate || b.createdAt || 0).getTime()
-    return dateA - dateB
+    const dateA = new Date(a.createdAt || 0).getTime()
+    const dateB = new Date(b.createdAt || 0).getTime()
+    return dateB - dateA
   })
 }
 
