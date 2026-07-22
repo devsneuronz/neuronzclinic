@@ -8,7 +8,7 @@ type RoutinePayload = Partial<Omit<Routine, "id">>;
 type RoutineBody = RoutinePayload & { id?: unknown };
 
 type TagRow = { id: string; airtable_record_id: string | null; label: string; color: string | null };
-type TemplateRow = { id: string; airtable_record_id: string | null; label: string };
+type TemplateRow = { id: string; label: string };
 type UserProfileRow = { id: string; airtable_record_id: string | null; name: string; email: string };
 type RoutineActionRow = {
   id: string;
@@ -130,7 +130,7 @@ function mapAction(row: RoutineActionRow): RoutineAction {
     message: row.message || "",
     notes: row.notes || "",
     webhookUrl: row.webhook_url || "",
-    templateId: template ? externalId(template) : "",
+    templateId: template?.id || "",
     templateLabel: template?.label || "",
     tagId: tag ? externalId(tag) : "",
     tagLabel: tag?.label || "",
@@ -164,7 +164,7 @@ function mapRoutine(row: RoutineRow): Routine {
 const ROUTINE_SELECT = [
   "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,is_active,created_at,updated_at",
   "target_tag:target_tag_id(id,airtable_record_id,label,color)",
-  "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,airtable_record_id,label),tags:tag_id(id,airtable_record_id,label,color))",
+  "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,label),tags:tag_id(id,airtable_record_id,label,color))",
 ].join(",");
 
 async function fetchRoutineById(id: string) {
@@ -177,6 +177,12 @@ async function resolveExternalId(table: string, id: string) {
   if (!id) return null;
   const filter = isUuid(id) ? `id=eq.${encodeURIComponent(id)}` : `airtable_record_id=eq.${encodeURIComponent(id)}`;
   const rows = await supabaseRequest<Array<{ id: string }>>(`${table}?select=id&${filter}&limit=1`);
+  return rows[0]?.id ?? null;
+}
+
+async function resolveMessageTemplateId(id: string) {
+  if (!id || !isUuid(id)) return null;
+  const rows = await supabaseRequest<Array<{ id: string }>>(`message_templates?select=id&id=eq.${encodeURIComponent(id)}&limit=1`);
   return rows[0]?.id ?? null;
 }
 
@@ -241,7 +247,7 @@ async function getActionWritePayload(action: RoutineAction, routineId: string, i
     message: getString(action.message) || null,
     notes: getString(action.notes) || null,
     webhook_url: getString(action.webhookUrl) || null,
-    template_id: await resolveExternalId("message_templates", getString(action.templateId)),
+    template_id: await resolveMessageTemplateId(getString(action.templateId)),
     tag_id: await resolveExternalId("tags", getString(action.tagId)),
     position: index,
   };

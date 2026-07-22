@@ -22,7 +22,7 @@ type TriggerBody = {
 };
 
 type TagRow = { id: string; airtable_record_id: string | null; label: string; color: string | null };
-type TemplateRow = { id: string; airtable_record_id: string | null; label: string };
+type TemplateRow = { id: string; label: string };
 type UserProfileRow = { id: string; airtable_record_id: string | null; name: string; email: string };
 type RoutineActionRow = {
   id: string;
@@ -202,7 +202,7 @@ function mapAction(row: RoutineActionRow): RoutineAction {
     message: row.message || "",
     notes: row.notes || "",
     webhookUrl: row.webhook_url || "",
-    templateId: template ? externalId(template) : "",
+    templateId: template?.id || "",
     templateLabel: template?.label || "",
     tagId: tag ? externalId(tag) : "",
     tagLabel: tag?.label || "",
@@ -234,7 +234,7 @@ async function fetchRoutines(): Promise<Routine[]> {
   const select = [
     "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,is_active",
     "target_tag:target_tag_id(id,airtable_record_id,label,color)",
-    "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,airtable_record_id,label),tags:tag_id(id,airtable_record_id,label,color))",
+    "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,label),tags:tag_id(id,airtable_record_id,label,color))",
   ].join(",");
   const rows = (await supabaseRequest(`routines?select=${select}&is_active=is.true&order=name.asc`)) as RoutineRow[];
   return rows.map(mapRoutine);

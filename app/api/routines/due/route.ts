@@ -2,12 +2,6 @@ import { NextResponse } from "next/server";
 
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const AIRTABLE_BASE_ID = "app03ti52QQD3W9L2";
-const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY;
-const MESSAGE_TEMPLATES_TABLE = process.env.AIRTABLE_MESSAGE_TEMPLATES_TABLE || "Templates mensagens";
-const MESSAGE_TEMPLATES_READ_SOURCE = process.env.MESSAGE_TEMPLATES_READ_SOURCE || "supabase";
-const TEMPLATE_CONTENT_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_CONTENT_FIELDS, ["Mensagem", "Conteudo", "Conteúdo", "Texto", "Message", "Content"]);
-const TEMPLATE_MEDIA_FIELDS = splitFields(process.env.AIRTABLE_MESSAGE_TEMPLATE_MEDIA_FIELDS, ["Midia", "Mídia", "Media"]);
 const SEND_MESSAGE_WEBHOOK_URL = process.env.SEND_MESSAGE_WEBHOOK_URL || "https://n8n.srv1150529.hstgr.cloud/webhook/send-message";
 const ROUTINES_WEBHOOK_SECRET = process.env.ROUTINES_WEBHOOK_SECRET;
 
@@ -20,15 +14,6 @@ type SupabaseTemplateRecord = {
     mimeType?: string;
   } | null;
 };
-
-function splitFields(value: string | undefined, fallback: string[]) {
-  return (
-    value
-      ?.split(",")
-      .map((item) => item.trim())
-      .filter(Boolean) ?? fallback
-  );
-}
 
 function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -44,42 +29,6 @@ function getNestedValue(record: RawRecord, path: string) {
     if (!current || typeof current !== "object" || Array.isArray(current)) return undefined;
     return (current as RawRecord)[key];
   }, record);
-}
-
-function getStringField(fields: RawRecord, candidates: string[]) {
-  for (const candidate of candidates) {
-    const value = fields[candidate];
-
-    if (typeof value === "string" && value.trim()) return value.trim();
-    if (Array.isArray(value)) {
-      const textValue = value.find((item) => typeof item === "string" && item.trim());
-      if (typeof textValue === "string") return textValue.trim();
-    }
-  }
-
-  return "";
-}
-
-function getTemplateMedia(fields: RawRecord) {
-  for (const candidate of TEMPLATE_MEDIA_FIELDS) {
-    const value = fields[candidate];
-    if (!Array.isArray(value)) continue;
-
-    for (const item of value) {
-      if (!item || typeof item !== "object" || Array.isArray(item)) continue;
-      const attachment = item as RawRecord;
-      const url = getString(attachment.url);
-      if (!url) continue;
-
-      return {
-        url,
-        fileName: getString(attachment.filename) || "midia",
-        mimeType: getString(attachment.type) || "application/octet-stream",
-      };
-    }
-  }
-
-  return null;
 }
 
 function getMediaType(mimeType: string) {
@@ -121,12 +70,8 @@ function getValidActionRunIds(value: unknown) {
   return value.filter((item): item is string => typeof item === "string" && /^[0-9a-f-]{36}$/i.test(item));
 }
 
-function isAirtableRecordId(value: string) {
-  return /^rec[a-zA-Z0-9]+$/.test(value);
-}
-
 function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
 function getSupabaseTemplateId(value: string) {
@@ -172,43 +117,12 @@ async function supabaseRequest(path: string, init?: RequestInit) {
   return JSON.parse(text);
 }
 
-async function airtableRequest(table: string, path = "", init?: RequestInit) {
-  if (!AIRTABLE_TOKEN) throw new Error("Configure AIRTABLE_TOKEN.");
-
-  const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(table)}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
-    cache: "no-store",
-  });
-
-  if (!response.ok) throw new Error(await response.text());
-  if (response.status === 204) return null;
-
-  return response.json();
-}
-
-async function fetchAirtableRecordById(table: string, id: string) {
-  if (!isAirtableRecordId(id)) throw new Error("ID de registro do Airtable inválido.");
-
-  return airtableRequest(table, `/${encodeURIComponent(id)}`) as Promise<{ id: string; fields?: RawRecord }>;
-}
-
 async function fetchSupabaseTemplateById(templateId: string) {
   const normalizedTemplateId = getSupabaseTemplateId(templateId);
-  const idFilter = isAirtableRecordId(normalizedTemplateId)
-    ? `airtable_record_id=eq.${encodeURIComponent(normalizedTemplateId)}`
-    : isUuid(normalizedTemplateId)
-      ? `id=eq.${encodeURIComponent(normalizedTemplateId)}`
-      : "";
-
-  if (!idFilter) return null;
+  if (!isUuid(normalizedTemplateId)) return null;
 
   const templates = (await supabaseRequest(
-    `message_templates?select=content,media&${idFilter}&is_active=is.true&deleted_at=is.null&limit=1`,
+    `message_templates?select=content,media&id=eq.${encodeURIComponent(normalizedTemplateId)}&is_active=is.true&deleted_at=is.null&limit=1`,
   )) as SupabaseTemplateRecord[] | null;
   const template = templates?.[0];
 
@@ -331,20 +245,7 @@ async function fetchTemplate(templateId: string) {
     return supabaseTemplate;
   }
 
-  if (MESSAGE_TEMPLATES_READ_SOURCE !== "airtable" || !isAirtableRecordId(normalizedTemplateId)) {
-    throw new Error(`Template de mensagem nao encontrado ou sem conteudo/midia no Supabase: ${templateId}.`);
-  }
-
-  const template = await fetchAirtableRecordById(MESSAGE_TEMPLATES_TABLE, normalizedTemplateId);
-  const fields = template.fields ?? {};
-  const content = getStringField(fields, TEMPLATE_CONTENT_FIELDS);
-  const media = getTemplateMedia(fields);
-
-  if (!content && !media) {
-    throw new Error(`Template de mensagem sem conteúdo ou mídia configurada: ${templateId}.`);
-  }
-
-  return { content, media };
+  throw new Error(`Template de mensagem nao encontrado ou sem conteudo/midia no Supabase: ${templateId}.`);
 }
 
 function getPayloadRecord(run: RawRecord) {
