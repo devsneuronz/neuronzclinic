@@ -8,32 +8,29 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { parseDateOnly } from "@/lib/date";
+import type { IaRequest } from "@/lib/ia-request";
 import { fetchChats, type ChatRecord } from "@/lib/supabase-rest";
 import { fallbackTaskOptions, getTaskNoteAttachmentType, statusConfig, type Task, type TaskOptions, type TaskResolutionNote, type TaskStatus } from "@/lib/task";
 import { getDraTatianaResponsibleFilter, isDraTatianaUser } from "@/lib/user-access";
 import { cn } from "@/lib/utils";
 import { motion, type Variants } from "framer-motion";
-import { AlertCircle, CalendarPlus, Circle, IdCardLanyard, ListPlus, Loader2, Plus, RefreshCw, Search, Shapes, User, type LucideIcon } from "lucide-react";
-import type { FormEvent, ReactNode } from "react";
+import { AlertCircle, CalendarPlus, Circle, IdCardLanyard, ListPlus, Loader2, Plus, RefreshCw, Search, Shapes, Sparkles, User } from "lucide-react";
+import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 import { SkeletonShimmer } from "../ui/skeleton-shimmer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { ConfirmActionDialog, type ConfirmActionDialogState } from "./confirm-action-dialog";
 import { FilterMenu } from "./filter-menu";
+import { IaRequestDialog } from "./ia-request-dialog";
+import { canConfirmIaRequest, getIaRequestActionKind, getIaRequestStatusLabel, getIaRequestTypeFilterLabel, isIaRequestCompleted } from "./ia-request-utils";
+import { IaRequestsColumn } from "./ia-requests-column";
 import { KanbanColumn } from "./kanban-column";
 import { TaskChatDialog } from "./task-chat-dialog";
 import { TaskDetailsDialog } from "./task-details-dialog";
 import { TaskStatusGrid } from "./task-grid";
-type TaskView = "todas" | TaskStatus;
+type TaskView = "todas" | TaskStatus | "avisos-ia";
 type CreatedAtFilter = " " | "today" | "last7" | "last30" | "oldestFirst" | "overdue";
-type TaskFilterConfig = {
-  id: string;
-  icon: LucideIcon;
-  value: string;
-  options: string[];
-  filterAll: string;
-  onChange: (value: string) => void;
-};
 
 const statusOrder: TaskStatus[] = ["aguardando", "resolvendo", "finalizado"];
 const taskViewOptions: Array<{ value: TaskView; label: string }> = [
@@ -41,7 +38,63 @@ const taskViewOptions: Array<{ value: TaskView; label: string }> = [
   { value: "aguardando", label: "Aguardando" },
   { value: "resolvendo", label: "Resolvendo" },
   { value: "finalizado", label: "Finalizadas" },
+  { value: "avisos-ia", label: "Avisos da IA" },
 ];
+const closedConfirmActionDialog: ConfirmActionDialogState = {
+  open: false,
+  title: "",
+  description: "",
+  confirmLabel: "",
+  onConfirm: () => undefined,
+};
+
+function getTaskSortTime(task: Task) {
+  const value = task.dueDate || task.createdAt || "";
+  const date = parseDateOnly(value) ?? new Date(value || 0);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function getDigits(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function normalizeText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function isNonEmptyString(value: string | undefined): value is string {
+  return Boolean(value?.trim());
+}
+
+function getChatDisplayName(chat: ChatRecord) {
+  return chat.nome_contato || chat.pushname || chat.phone_contact || chat.chat_id?.replace(/@.+$/, "") || "Contato sem nome";
+}
+
+function getChatLookupKeys(chat: ChatRecord) {
+  const digits = getDigits(`${chat.chat_id || ""} ${chat.phone_contact || ""}`);
+  const localDigits = digits.startsWith("55") ? digits.slice(2) : "";
+
+  return [chat.chat_id, chat.phone_contact, digits, localDigits].map((value) => value?.trim()).filter(isNonEmptyString);
+}
+
+function getTaskPatientLookupKeys(task: Task) {
+  const digits = getDigits(`${task.patientChatId || ""} ${task.patientPhone || ""}`);
+  const localDigits = digits.startsWith("55") ? digits.slice(2) : "";
+
+  return [task.patientChatId, task.patientPhone, digits, localDigits].map((value) => value?.trim()).filter(isNonEmptyString);
+}
+
+function sortTasksForStatus(status: TaskStatus, tasks: Task[]) {
+  if (status !== "finalizado") return tasks;
+
+  return [...tasks].sort((a, b) => getTaskSortTime(b) - getTaskSortTime(a));
+}
+
+const filterAll = " ";
 const createdAtFilterOptions: Array<{ value: CreatedAtFilter; label: string }> = [
   { value: "today", label: "Hoje" },
   { value: "last7", label: "Últimos 7 dias" },
@@ -49,6 +102,7 @@ const createdAtFilterOptions: Array<{ value: CreatedAtFilter; label: string }> =
   { value: "oldestFirst", label: "Mais antigas primeiro" },
   { value: "overdue", label: "Vencidas" },
 ];
+const iaRequestTypeOptions = ["Aviso - IA", "Agendamento", "Intenção"];
 
 function getTaskCreatedTime(task: Task) {
   const date = new Date(task.createdAt || 0);
@@ -95,40 +149,6 @@ function matchesCreatedAtFilter(task: Task, filter: CreatedAtFilter) {
   return true;
 }
 
-function getDigits(value: string) {
-  return value.replace(/\D/g, "");
-}
-
-function normalizeText(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-}
-
-function isNonEmptyString(value: string | undefined): value is string {
-  return Boolean(value?.trim());
-}
-
-function getChatDisplayName(chat: ChatRecord) {
-  return chat.nome_contato || chat.pushname || chat.phone_contact || chat.chat_id?.replace(/@.+$/, "") || "Contato sem nome";
-}
-
-function getChatLookupKeys(chat: ChatRecord) {
-  const digits = getDigits(`${chat.chat_id || ""} ${chat.phone_contact || ""}`);
-  const localDigits = digits.startsWith("55") ? digits.slice(2) : "";
-
-  return [chat.chat_id, chat.phone_contact, digits, localDigits].map((value) => value?.trim()).filter(isNonEmptyString);
-}
-
-function getTaskPatientLookupKeys(task: Task) {
-  const digits = getDigits(`${task.patientChatId || ""} ${task.patientPhone || ""}`);
-  const localDigits = digits.startsWith("55") ? digits.slice(2) : "";
-
-  return [task.patientChatId, task.patientPhone, digits, localDigits].map((value) => value?.trim()).filter(isNonEmptyString);
-}
-
 function sortTasksByCreatedAt(tasks: Task[], direction: "asc" | "desc" = "desc") {
   return [...tasks].sort((a, b) => {
     const diff = getTaskCreatedTime(a) - getTaskCreatedTime(b);
@@ -136,10 +156,16 @@ function sortTasksByCreatedAt(tasks: Task[], direction: "asc" | "desc" = "desc")
   });
 }
 
-const filterAll = " ";
-
 function getTaskStatusColor(status: string) {
   const normalized = status.toLowerCase();
+
+  if (normalized.includes("avisos-ia") || normalized.includes("ia")) {
+    return {
+      base: "#0e4ce9",
+      bg: "#0e4ce91a",
+      text: "#0e4ce9",
+    };
+  }
 
   if (normalized.includes("aguard")) {
     return {
@@ -195,6 +221,27 @@ async function fetchTaskRecords({ signal, refresh = false, user }: { signal?: Ab
   }
 
   return data.tasks ?? [];
+}
+
+function getIaRequestAccessParams(user: { id?: string; email?: string; role?: string } | null | undefined) {
+  const params = new URLSearchParams();
+  if (user?.id) params.set("userId", user.id);
+  if (user?.email) params.set("email", user.email);
+  if (user?.role) params.set("role", user.role);
+  return params;
+}
+
+async function fetchIaRequests({ signal, user }: { signal?: AbortSignal; user?: { id?: string; email?: string; role?: string } | null } = {}) {
+  const params = getIaRequestAccessParams(user);
+  const query = params.toString();
+  const response = await fetch(`/api/ia-requests${query ? `?${query}` : ""}`, { cache: "no-store", signal });
+  const data = (await response.json()) as { requests?: IaRequest[]; message?: string };
+
+  if (!response.ok) {
+    throw new Error(data.message || "Nao foi possivel carregar avisos da IA.");
+  }
+
+  return data.requests ?? [];
 }
 
 async function fetchTaskOptions() {
@@ -262,10 +309,6 @@ async function deleteTaskResolutionNote(noteId: string) {
   if (!response.ok) {
     throw new Error(data?.message || "Nao foi possivel apagar a evolucao da tarefa.");
   }
-}
-
-function FieldLabel({ children }: { children: ReactNode }) {
-  return <label className="text-xs font-semibold text-foreground">{children}</label>;
 }
 
 const taskSkeletonContainerVariants: Variants = {
@@ -379,6 +422,36 @@ function TaskSkeletonColumn({ status, count = taskSkeletonCounts[status] }: { st
   );
 }
 
+function IaRequestsSkeletonColumn() {
+  const skeletonItems = Array.from({ length: 4 }, (_, index) => index);
+
+  return (
+    <section className="flex min-w-[300px] flex-1 flex-col rounded-md border border-blue-700/20 bg-blue-700/5 p-3">
+      <div className="mb-3 flex items-start justify-between gap-3 px-1">
+        <div className="flex items-start gap-2">
+          <span className="mt-1.25 h-2.5 w-2.5 rounded-full bg-blue-900" />
+          <div>
+            <div className="flex items-center gap-2 font-semibold text-blue-900">
+              <Sparkles className="h-3.5 w-3.5 " />
+              Avisos da IA
+            </div>
+            <SkeletonShimmer className="w-50 h-3 mt-1 rounded-md" />
+          </div>
+        </div>
+        <SkeletonShimmer className="h-6 w-8 rounded-md border border-blue-700/20 bg-blue-700/10 shadow-xs" />
+      </div>
+
+      <motion.div variants={taskSkeletonContainerVariants} initial="hidden" animate="show" className="flex flex-1 flex-col gap-3 overflow-y-auto p-1 custom-scrollbar">
+        {skeletonItems.map((index) => (
+          <motion.div key={index} variants={taskSkeletonItemVariants}>
+            <TaskCardSkeleton />
+          </motion.div>
+        ))}
+      </motion.div>
+    </section>
+  );
+}
+
 function TaskSkeletonGrid({ status }: { status: TaskStatus }) {
   const config = statusConfig[status];
   const Icon = config.icon;
@@ -411,9 +484,63 @@ function TaskSkeletonGrid({ status }: { status: TaskStatus }) {
   );
 }
 
+function IaRequestsSkeletonGrid() {
+  const skeletonItems = Array.from({ length: 20 }, (_, index) => index);
+
+  return (
+    <section className="flex min-w-full flex-1 flex-col rounded-md border border-blue-700/20 bg-blue-700/5 p-3">
+      <div className="mb-3 flex items-start justify-between gap-3 px-1">
+        <div className="flex items-start gap-2">
+          <span className="mt-1.25 h-2.5 w-2.5 rounded-full bg-blue-900" />
+          <div>
+            <div className="flex items-center gap-2 font-semibold text-blue-900">
+              <Sparkles className="h-3.5 w-3.5 " />
+              Avisos da IA
+            </div>
+          </div>
+        </div>
+        <SkeletonShimmer className="h-6 w-8 rounded-md border border-blue-700/20 bg-blue-700/10 shadow-xs" />
+      </div>
+
+      <motion.div variants={taskSkeletonContainerVariants} initial="hidden" animate="show" className="grid flex-1 auto-rows-max grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 overflow-y-auto p-1 pr-1 custom-scrollbar">
+        {skeletonItems.map((index) => (
+          <motion.div key={index} variants={taskSkeletonItemVariants}>
+            <TaskCardSkeleton />
+          </motion.div>
+        ))}
+      </motion.div>
+    </section>
+  );
+}
+
+function getIaRequestChatTask(request: IaRequest, chat?: ChatRecord): Task {
+  const contactName = chat ? getChatDisplayName(chat) : request.chatId;
+
+  return {
+    id: request.id,
+    subject: request.situation || "Aviso da IA",
+    description: request.context,
+    creator: "IA",
+    creatorInitials: "IA",
+    responsible: "Equipe",
+    responsibleUserId: "",
+    responsibleInitials: "EQ",
+    patient: contactName,
+    patientChatId: chat?.chat_id || request.chatId,
+    patientPhone: chat?.phone_contact || "",
+    patientPhotoUrl: chat?.url_foto_perfil || undefined,
+    type: "Aviso da IA",
+    status: "aguardando",
+    statusLabel: getIaRequestStatusLabel(request.status),
+    createdAt: request.createdAt,
+    dueDate: request.chosenDate,
+  };
+}
+
 export function KanbanBoard() {
   const { user, isLoading: isCurrentUserLoading } = useCurrentUser();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [iaRequests, setIaRequests] = useState<IaRequest[]>([]);
   const [chats, setChats] = useState<ChatRecord[]>([]);
   const [activeView, setActiveView] = useState<TaskView>("todas");
   const [searchQuery, setSearchQuery] = useState("");
@@ -429,8 +556,13 @@ export function KanbanBoard() {
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [selectedIaRequest, setSelectedIaRequest] = useState<IaRequest | null>(null);
   const [deletingTaskId, setDeletingTaskId] = useState("");
+  const [deletingIaRequestId, setDeletingIaRequestId] = useState("");
+  const [confirmingIaRequestId, setConfirmingIaRequestId] = useState("");
+  const [completingIaRequestId, setCompletingIaRequestId] = useState("");
   const [savingTaskId, setSavingTaskId] = useState("");
+  const [iaRequestActionError, setIaRequestActionError] = useState("");
   const [taskResolutionNotes, setTaskResolutionNotes] = useState<TaskResolutionNote[]>([]);
   const [taskResolutionNoteDraft, setTaskResolutionNoteDraft] = useState("");
   const [taskResolutionNoteAttachment, setTaskResolutionNoteAttachment] = useState<File | null>(null);
@@ -451,7 +583,7 @@ export function KanbanBoard() {
   const [taskResponsibleUserId, setTaskResponsibleUserId] = useState("");
   const [taskSubject, setTaskSubject] = useState("");
   const [taskObservations, setTaskObservations] = useState("");
-  const [hasAppliedInitialResponsibleFilter, setHasAppliedInitialResponsibleFilter] = useState(false);
+  const [confirmActionDialog, setConfirmActionDialog] = useState<ConfirmActionDialogState>(closedConfirmActionDialog);
 
   useEffect(() => {
     if (isCurrentUserLoading) return;
@@ -461,12 +593,14 @@ export function KanbanBoard() {
     void (async () => {
       try {
         setErrorMessage("");
-        const loadedTasks = await fetchTaskRecords({ signal: controller.signal, user });
+        const [loadedTasks, loadedIaRequests] = await Promise.all([fetchTaskRecords({ signal: controller.signal, user }), fetchIaRequests({ signal: controller.signal, user })]);
         setTasks(loadedTasks);
+        setIaRequests(loadedIaRequests);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setErrorMessage(error instanceof Error ? error.message : "Não foi possível carregar os encaminhamentos.");
         setTasks([]);
+        setIaRequests([]);
       } finally {
         setIsLoading(false);
       }
@@ -488,21 +622,23 @@ export function KanbanBoard() {
     setErrorMessage("");
 
     try {
-      const loadedTasks = await fetchTaskRecords({ refresh, user });
+      const [loadedTasks, loadedIaRequests] = await Promise.all([fetchTaskRecords({ refresh, user }), fetchIaRequests({ user })]);
       setTasks(loadedTasks);
+      setIaRequests(loadedIaRequests);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Não foi possível carregar os encaminhamentos.");
-      if (tasks.length === 0) setTasks([]);
+      if (tasks.length === 0) {
+        setTasks([]);
+        setIaRequests([]);
+      }
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
   };
 
-  const handleDeleteTask = async (task: Task) => {
-    const shouldDelete = window.confirm(`Excluir a tarefa "${task.subject || task.type || "sem assunto"}"?`);
-    if (!shouldDelete) return;
-
+  const performDeleteTask = async (task: Task) => {
+    setConfirmActionDialog((current) => ({ ...current, isLoading: true }));
     setDeletingTaskId(task.id);
     setTaskActionError("");
 
@@ -518,11 +654,24 @@ export function KanbanBoard() {
 
       setTasks((current) => current.filter((currentTask) => currentTask.id !== task.id));
       setSelectedTask(null);
+      setConfirmActionDialog(closedConfirmActionDialog);
     } catch (error) {
       setTaskActionError(error instanceof Error ? error.message : "Nao foi possivel excluir a tarefa.");
+      setConfirmActionDialog((current) => ({ ...current, isLoading: false }));
     } finally {
       setDeletingTaskId("");
     }
+  };
+
+  const handleDeleteTask = async (task: Task) => {
+    setConfirmActionDialog({
+      open: true,
+      title: "Excluir tarefa",
+      description: `Excluir a tarefa "${task.subject || task.type || "sem assunto"}"? Essa ação não pode ser desfeita.`,
+      confirmLabel: "Excluir",
+      variant: "destructive",
+      onConfirm: () => void performDeleteTask(task),
+    });
   };
 
   const handleSelectTask = (task: Task) => {
@@ -553,6 +702,125 @@ export function KanbanBoard() {
   const handleOpenPatientMessages = (task: Task) => {
     if (!task.patientChatId) return;
     setChatTask(task);
+  };
+
+  const handleOpenIaRequestChat = (request: IaRequest, chat?: ChatRecord) => {
+    if (!request.chatId && !chat?.chat_id) return;
+    setChatTask(getIaRequestChatTask(request, chat));
+  };
+
+  const handleSelectIaRequest = (request: IaRequest) => {
+    setIaRequestActionError("");
+    setSelectedIaRequest(request);
+  };
+
+  const performDeleteIaRequest = async (request: IaRequest) => {
+    setConfirmActionDialog((current) => ({ ...current, isLoading: true }));
+    setDeletingIaRequestId(request.id);
+    setIaRequestActionError("");
+
+    try {
+      const response = await fetch(`/api/ia-requests?id=${encodeURIComponent(request.id)}`, {
+        method: "DELETE",
+      });
+      const data = (await response.json()) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(data.message || "Nao foi possivel excluir o aviso da IA.");
+      }
+
+      setIaRequests((current) => current.filter((currentRequest) => currentRequest.id !== request.id));
+      setSelectedIaRequest(null);
+      setConfirmActionDialog(closedConfirmActionDialog);
+    } catch (error) {
+      setIaRequestActionError(error instanceof Error ? error.message : "Nao foi possivel excluir o aviso da IA.");
+      setConfirmActionDialog((current) => ({ ...current, isLoading: false }));
+    } finally {
+      setDeletingIaRequestId("");
+    }
+  };
+
+  const handleDeleteIaRequest = async (request: IaRequest) => {
+    setConfirmActionDialog({
+      open: true,
+      title: "Excluir aviso da IA",
+      description: `Excluir o aviso da IA "${request.situation || request.action || "sem titulo"}"?`,
+      confirmLabel: "Excluir",
+      variant: "destructive",
+      onConfirm: () => void performDeleteIaRequest(request),
+    });
+  };
+
+  const handleConfirmIaRequest = async (request: IaRequest) => {
+    if (!canConfirmIaRequest(request)) {
+      setIaRequestActionError("A confirmação de agendamento está disponível apenas para avisos do tipo Agendamento com horário selecionado.");
+      return;
+    }
+
+    setConfirmingIaRequestId(request.id);
+    setIaRequestActionError("");
+
+    try {
+      const response = await fetch(`/api/ia-requests?id=${encodeURIComponent(request.id)}`, {
+        method: "POST",
+      });
+      const data = (await response.json()) as { request?: IaRequest | null; message?: string };
+
+      if (!response.ok || !data.request) {
+        throw new Error(data.message || "Nao foi possivel confirmar o agendamento.");
+      }
+
+      setIaRequests((current) => current.map((currentRequest) => (currentRequest.id === data.request?.id ? data.request : currentRequest)));
+      setSelectedIaRequest(null);
+    } catch (error) {
+      setIaRequestActionError(error instanceof Error ? error.message : "Nao foi possivel confirmar o agendamento.");
+    } finally {
+      setConfirmingIaRequestId("");
+    }
+  };
+
+  const performCompleteIaRequest = async (request: IaRequest) => {
+    if (isIaRequestCompleted(request.status)) return;
+
+    setConfirmActionDialog((current) => ({ ...current, isLoading: true }));
+    setCompletingIaRequestId(request.id);
+    setIaRequestActionError("");
+
+    try {
+      const response = await fetch(`/api/ia-requests?id=${encodeURIComponent(request.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "done" }),
+      });
+      const data = (await response.json()) as { request?: IaRequest | null; message?: string };
+
+      if (!response.ok || !data.request) {
+        throw new Error(data.message || "Nao foi possivel concluir o aviso da IA.");
+      }
+
+      setIaRequests((current) => current.map((currentRequest) => (currentRequest.id === data.request?.id ? { ...currentRequest, ...data.request } : currentRequest)));
+      setSelectedIaRequest(null);
+      setConfirmActionDialog(closedConfirmActionDialog);
+    } catch (error) {
+      setIaRequestActionError(error instanceof Error ? error.message : "Nao foi possivel concluir o aviso da IA.");
+      setConfirmActionDialog((current) => ({ ...current, isLoading: false }));
+    } finally {
+      setCompletingIaRequestId("");
+    }
+  };
+
+  const handleCompleteIaRequest = async (request: IaRequest) => {
+    if (isIaRequestCompleted(request.status)) return;
+
+    const isScheduling = getIaRequestActionKind(request.action) === "agendamento";
+    setConfirmActionDialog({
+      open: true,
+      title: isScheduling ? "Não confirmar agendamento" : "Concluir aviso",
+      description: isScheduling ? "Este aviso será concluído sem criar o agendamento real. O bloqueio temporário criado pela IA será removido da agenda se ainda existir." : "Este aviso será marcado como concluído e ficará no fim da lista.",
+      confirmLabel: isScheduling ? "Não confirmar" : "Concluir",
+      variant: isScheduling ? "destructive" : "default",
+      onConfirm: () => void performCompleteIaRequest(request),
+    });
   };
 
   const isSmallScreen = useIsMobile(640);
@@ -732,6 +1000,8 @@ export function KanbanBoard() {
     return lookup;
   }, [chats]);
 
+  const chatsById = useMemo(() => new Map(chats.map((chat) => [chat.id, chat])), [chats]);
+
   const contactSearchResults = useMemo(() => {
     const query = normalizeText(taskPatientName);
     if (!query) return [];
@@ -772,29 +1042,12 @@ export function KanbanBoard() {
     [chatsByLookupKey, tasks],
   );
 
-  const typeOptions = useMemo(() => uniqueValues(enrichedTasks, "type"), [enrichedTasks]);
+  const typeOptions = useMemo(() => Array.from(new Set([...uniqueValues(enrichedTasks, "type"), ...iaRequestTypeOptions])), [enrichedTasks]);
   const creatorOptions = useMemo(() => uniqueValues(enrichedTasks, "creator"), [enrichedTasks]);
   const responsibleOptions = useMemo(() => uniqueValues(enrichedTasks, "responsible"), [enrichedTasks]);
-  const initialTatianaResponsibleFilter = useMemo(() => getDraTatianaResponsibleFilter(responsibleOptions), [responsibleOptions]);
+  const effectiveResponsibleFilter = isDraTatianaUser(user) ? getDraTatianaResponsibleFilter(responsibleOptions) || responsibleFilter : responsibleFilter;
 
-  useEffect(() => {
-    if (hasAppliedInitialResponsibleFilter || isCurrentUserLoading || !isDraTatianaUser(user) || !initialTatianaResponsibleFilter) return;
-
-    let isCurrent = true;
-    queueMicrotask(() => {
-      if (!isCurrent) return;
-      setHasAppliedInitialResponsibleFilter(true);
-      setResponsibleFilter(initialTatianaResponsibleFilter);
-    });
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [hasAppliedInitialResponsibleFilter, initialTatianaResponsibleFilter, isCurrentUserLoading, user]);
-
-  const effectiveResponsibleFilter = responsibleFilter === filterAll && !hasAppliedInitialResponsibleFilter && isDraTatianaUser(user) && initialTatianaResponsibleFilter ? initialTatianaResponsibleFilter : responsibleFilter;
-
-  const filtersConfig: TaskFilterConfig[] = [
+  const filtersConfig = [
     {
       id: "tipo",
       icon: Shapes,
@@ -814,24 +1067,23 @@ export function KanbanBoard() {
     {
       id: "responsavel",
       icon: IdCardLanyard,
-      value: responsibleFilter,
+      value: effectiveResponsibleFilter,
       options: responsibleOptions,
       filterAll: "Responsável",
       onChange: setResponsibleFilter,
     },
-  ];
-
-  filtersConfig.push({
-    id: "criacao",
-    icon: CalendarPlus,
-    value: createdAtFilterOptions.find((option) => option.value === createdAtFilter)?.label ?? filterAll,
-    options: createdAtFilterOptions.map((option) => option.label),
-    filterAll: "Criação",
-    onChange: (label: string) => {
-      const option = createdAtFilterOptions.find((item) => item.label === label);
-      setCreatedAtFilter(option?.value ?? filterAll);
+    {
+      id: "criacao",
+      icon: CalendarPlus,
+      value: createdAtFilterOptions.find((item) => item.value === createdAtFilter)?.label ?? filterAll,
+      options: createdAtFilterOptions.map((item) => item.label),
+      filterAll: "CriaÃ§Ã£o",
+      onChange: (label: string) => {
+        const option = createdAtFilterOptions.find((item) => item.label === label);
+        setCreatedAtFilter(option?.value ?? filterAll);
+      },
     },
-  });
+  ];
 
   const filteredTasks = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -847,11 +1099,24 @@ export function KanbanBoard() {
     });
   }, [createdAtFilter, creatorFilter, effectiveResponsibleFilter, enrichedTasks, searchQuery, typeFilter]);
 
+  const filteredIaRequests = useMemo(() => {
+    const query = normalizeText(searchQuery);
+
+    return iaRequests.filter((request) => {
+      const chat = request.chatId ? chatsById.get(request.chatId) : undefined;
+      const searchable = normalizeText([request.situation, request.context, request.status, request.action, request.procedureName, request.procedureId, request.chatId, chat ? getChatDisplayName(chat) : ""].join(" "));
+      const matchesType = typeFilter === filterAll || getIaRequestTypeFilterLabel(request.action) === typeFilter;
+
+      return matchesType && (query ? searchable.includes(query) : true);
+    });
+  }, [chatsById, iaRequests, searchQuery, typeFilter]);
+
   const tasksByStatus = useMemo(
     () =>
       statusOrder.reduce(
         (acc, status) => {
-          acc[status] = sortTasksByCreatedAt(filteredTasks.filter((task) => task.status === status), createdAtFilter === "oldestFirst" ? "asc" : "desc");
+          const statusTasks = filteredTasks.filter((task) => task.status === status);
+          acc[status] = createdAtFilter === "oldestFirst" ? sortTasksByCreatedAt(statusTasks, "asc") : sortTasksForStatus(status, sortTasksByCreatedAt(statusTasks));
           return acc;
         },
         {} as Record<TaskStatus, Task[]>,
@@ -861,6 +1126,7 @@ export function KanbanBoard() {
 
   const isFiltering = Boolean(searchQuery.trim()) || typeFilter !== filterAll || creatorFilter !== filterAll || effectiveResponsibleFilter !== filterAll || createdAtFilter !== filterAll;
   const totalOpen = tasksByStatus.aguardando.length + tasksByStatus.resolvendo.length;
+  const pendingIaRequests = iaRequests.filter((request) => normalizeText(request.status) === "pending").length;
 
   return (
     <div className="flex h-full w-full flex-1 flex-col bg-background">
@@ -873,7 +1139,7 @@ export function KanbanBoard() {
 
             <div className="flex flex-row items-center gap-3">
               {isLoading ? (
-                <div className="hidden sm:grid grid-cols-3 overflow-hidden rounded-lg border bg-background shadow-xs w-77.25">
+                <div className="hidden w-[400px] grid-cols-4 overflow-hidden rounded-lg border bg-background shadow-xs sm:grid">
                   <div className="flex flex-col items-center justify-center gap-1.5 h-[60.5px]">
                     <SkeletonShimmer className="h-6 w-8 rounded" />
                     <SkeletonShimmer className="h-3 w-12 rounded-xs" />
@@ -888,9 +1154,14 @@ export function KanbanBoard() {
                     <SkeletonShimmer className="h-6 w-8 rounded" />
                     <SkeletonShimmer className="h-3 w-16 rounded-xs" />
                   </div>
+
+                  <div className="flex flex-col items-center justify-center border-l gap-1.5 h-[60.5px]">
+                    <SkeletonShimmer className="h-6 w-8 rounded" />
+                    <SkeletonShimmer className="h-3 w-14 rounded-xs" />
+                  </div>
                 </div>
               ) : (
-                <div className="hidden sm:grid grid-cols-3 overflow-hidden rounded-lg border bg-background shadow-xs">
+                <div className="hidden sm:grid grid-cols-4 overflow-hidden rounded-lg border bg-background shadow-xs">
                   <div className="px-4 py-2 text-center">
                     <p className="text-lg font-semibold text-foreground">{filteredTasks.length}</p>
                     <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Visíveis</p>
@@ -903,6 +1174,10 @@ export function KanbanBoard() {
                     <p className="text-lg font-semibold text-foreground">{tasksByStatus.finalizado.length}</p>
                     <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Finalizadas</p>
                   </div>
+                  <div className="border-l px-4 py-2 text-center">
+                    <p className="text-lg font-semibold text-foreground">{pendingIaRequests}</p>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">IA pendente</p>
+                  </div>
                 </div>
               )}
               <Button type="button" className="gap-2 bg-theme-primary text-white hover:bg-theme-primary/90 h-10 min-[412px]:h-9" onClick={handleOpenCreateDialog}>
@@ -914,7 +1189,7 @@ export function KanbanBoard() {
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div className={cn("relative flex-1", isLoading && "cursor-not-allowed")}>
               {isLoading ? <Loader2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50 animate-spin" /> : <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />}
-              <Input placeholder="Buscar por assunto, paciente, responsável..." value={searchQuery} disabled={isLoading} onChange={(event) => setSearchQuery(event.target.value)} className="h-10 bg-background pl-9" />
+              <Input placeholder="Buscar por tarefa, paciente ou aviso da IA..." value={searchQuery} disabled={isLoading} onChange={(event) => setSearchQuery(event.target.value)} className="h-10 bg-background pl-9" />
             </div>
 
             <div className="flex items-center gap-2 flex-2 min-w-0">
@@ -951,9 +1226,11 @@ export function KanbanBoard() {
                 <TabsTrigger
                   key={view.value}
                   value={view.value}
-                  className={`group relative data-[state=active]:bg-card px-3.5 h-6 sm:px-6 sm:h-9 rounded-full text-xs sm:text-[14px] font-medium transition-all gap-2 cursor-pointer data-[state=active]:shadow-xs ${
-                    view.value === "todas" ? "hidden sm:inline-flex" : "inline-flex"
-                  }`}
+                  className={cn(
+                    "group relative data-[state=active]:bg-card px-3.5 h-6 sm:px-6 sm:h-9 rounded-full text-xs sm:text-[14px] font-medium transition-all gap-2 cursor-pointer data-[state=active]:shadow-xs",
+                    view.value === "avisos-ia" && "data-[state=active]:bg-sky-500/10 data-[state=active]:text-sky-500",
+                    view.value === "todas" ? "hidden sm:inline-flex" : "inline-flex",
+                  )}
                 >
                   <Circle
                     className="h-2 w-2 transition-all duration-300"
@@ -976,14 +1253,43 @@ export function KanbanBoard() {
             <main className="flex h-full flex-1 gap-4 overflow-x-auto p-5 custom-scrollbar">
               {isLoading || isRefreshing ? (
                 view.value === "todas" ? (
-                  statusOrder.map((status) => <TaskSkeletonColumn key={status} status={status} />)
+                  <>
+                    {statusOrder.map((status) => (
+                      <TaskSkeletonColumn key={status} status={status} />
+                    ))}
+                    <IaRequestsSkeletonColumn />
+                  </>
+                ) : view.value === "avisos-ia" ? (
+                  <IaRequestsSkeletonGrid />
                 ) : (
                   <TaskSkeletonGrid status={view.value} />
                 )
               ) : view.value === "todas" ? (
-                statusOrder.map((status) => (
-                  <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} isFiltering={isFiltering} onSelectTask={handleSelectTask} onOpenPatientMessages={handleOpenPatientMessages} statusConfig={statusConfig} />
-                ))
+                <>
+                  {statusOrder.map((status) => (
+                    <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} isFiltering={isFiltering} onSelectTask={handleSelectTask} onOpenPatientMessages={handleOpenPatientMessages} statusConfig={statusConfig} />
+                  ))}
+                  <IaRequestsColumn
+                    requests={filteredIaRequests}
+                    chatsById={chatsById}
+                    isFiltering={Boolean(searchQuery.trim())}
+                    onSelectRequest={handleSelectIaRequest}
+                    onOpenRequestChat={handleOpenIaRequestChat}
+                    getChatDisplayName={getChatDisplayName}
+                    isAdmin={user?.role === "admin"}
+                  />
+                </>
+              ) : view.value === "avisos-ia" ? (
+                <IaRequestsColumn
+                  requests={filteredIaRequests}
+                  chatsById={chatsById}
+                  isFiltering={Boolean(searchQuery.trim())}
+                  onSelectRequest={handleSelectIaRequest}
+                  onOpenRequestChat={handleOpenIaRequestChat}
+                  getChatDisplayName={getChatDisplayName}
+                  isAdmin={user?.role === "admin"}
+                  fullWidth
+                />
               ) : (
                 <TaskStatusGrid status={view.value} tasks={tasksByStatus[view.value]} isFiltering={isFiltering} onSelectTask={handleSelectTask} onOpenPatientMessages={handleOpenPatientMessages} statusConfig={statusConfig} />
               )}
@@ -1187,6 +1493,25 @@ export function KanbanBoard() {
         noteErrorMessage={taskResolutionNoteError}
         statusConfig={statusConfig}
       />
+      <IaRequestDialog
+        request={selectedIaRequest}
+        open={Boolean(selectedIaRequest)}
+        errorMessage={iaRequestActionError}
+        deletingRequestId={deletingIaRequestId}
+        confirmingRequestId={confirmingIaRequestId}
+        completingRequestId={completingIaRequestId}
+        isAdmin={user?.role === "admin"}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedIaRequest(null);
+            setIaRequestActionError("");
+          }
+        }}
+        onConfirmAppointment={handleConfirmIaRequest}
+        onComplete={handleCompleteIaRequest}
+        onDelete={handleDeleteIaRequest}
+      />
+      <ConfirmActionDialog state={confirmActionDialog} onOpenChange={(open) => !confirmActionDialog.isLoading && setConfirmActionDialog(open ? confirmActionDialog : closedConfirmActionDialog)} />
       <TaskChatDialog task={chatTask} open={Boolean(chatTask)} onOpenChange={(open) => !open && setChatTask(null)} forwardTargets={chats} />
     </div>
   );
