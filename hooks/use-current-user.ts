@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 
-import { AUTH_SESSION_EVENT, getSavedSessionDisplayName, getSavedSessionEmail } from "@/lib/auth-session"
+import { AUTH_SESSION_EVENT, getFreshSavedSession, getSavedSessionDisplayName, getSavedSessionEmail } from "@/lib/auth-session"
 import { CurrentUser, getDefaultUser } from "@/lib/user-roles"
 
 type CurrentUserState = {
@@ -32,18 +32,36 @@ export function useCurrentUser() {
       const sessionDisplayName = getSavedSessionDisplayName()
 
       try {
-        const response = await fetch(`/api/airtable/users?email=${encodeURIComponent(email)}`, {
-          cache: "no-store",
-        })
+        const session = await getFreshSavedSession()
+        const token = session?.access_token
+        let user: CurrentUser | null = null
 
-        if (!response.ok) {
-          throw new Error("Unable to load user profile")
+        if (token) {
+          const response = await fetch("/api/users/me", {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: "no-store",
+          })
+
+          if (response.ok) {
+            user = (await response.json()) as CurrentUser
+          }
         }
 
-        const user = (await response.json()) as CurrentUser
+        if (!user) {
+          const response = await fetch(`/api/airtable/users?email=${encodeURIComponent(email)}`, {
+            cache: "no-store",
+          })
+
+          if (!response.ok) {
+            throw new Error("Unable to load user profile")
+          }
+
+          user = (await response.json()) as CurrentUser
+        }
+
         if (isActive) {
           setState({
-            user: user.source === "airtable" ? user : getDefaultUser(email, sessionDisplayName),
+            user,
             isLoading: false,
           })
         }

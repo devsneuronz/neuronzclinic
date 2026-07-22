@@ -4,6 +4,7 @@ const REMEMBER_DEVICE_TTL_SECONDS = 7 * 24 * 60 * 60
 
 type SupabaseSession = {
   access_token?: string
+  refresh_token?: string
   expires_at?: number
   expires_in?: number
   user?: {
@@ -20,6 +21,7 @@ type StoredSession = SupabaseSession & {
   saved_at: number
   auth_expires_at?: number
   expires_at: number
+  remember_device?: boolean
 }
 
 function getStorage(type: "local" | "session") {
@@ -40,6 +42,7 @@ function normalizeSession(session: SupabaseSession, rememberDevice: boolean): St
     saved_at: savedAt,
     auth_expires_at: authExpiresAt,
     expires_at: appExpiresAt,
+    remember_device: rememberDevice,
   }
 }
 
@@ -89,6 +92,16 @@ export function getSavedSession() {
   return readSession("local") ?? readSession("session")
 }
 
+function getSavedSessionWithStorage() {
+  const localSession = readSession("local")
+  if (localSession) return { session: localSession, storageType: "local" as const }
+
+  const sessionSession = readSession("session")
+  if (sessionSession) return { session: sessionSession, storageType: "session" as const }
+
+  return null
+}
+
 export function getSavedSessionEmail() {
   return getSavedSession()?.user?.email ?? null
 }
@@ -134,6 +147,69 @@ export function hasValidSession() {
   const now = Math.floor(Date.now() / 1000)
 
   return Boolean(session?.access_token && session.expires_at > now + 60)
+}
+
+function getSupabaseAuthUrl(path: string) {
+  const restUrl = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const baseUrl = supabaseUrl ?? restUrl?.replace(/\/rest\/v1\/?$/, "")
+
+  if (!baseUrl) {
+    return null
+  }
+
+  return `${baseUrl.replace(/\/$/, "")}/auth/v1/${path.replace(/^\//, "")}`
+}
+
+export async function getFreshSavedSession() {
+  const saved = getSavedSessionWithStorage()
+  if (!saved) return null
+
+  const { session, storageType } = saved
+  const now = Math.floor(Date.now() / 1000)
+  const authExpiresAt = session.auth_expires_at ?? session.expires_at
+
+  if (session.access_token && authExpiresAt > now + 60) {
+    return session
+  }
+
+  if (!session.refresh_token) {
+    return session
+  }
+
+  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  const refreshUrl = getSupabaseAuthUrl("token?grant_type=refresh_token")
+
+  if (!publishableKey || !refreshUrl) {
+    return session
+  }
+
+  const response = await fetch(refreshUrl, {
+    method: "POST",
+    headers: {
+      apikey: publishableKey,
+      Authorization: `Bearer ${publishableKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ refresh_token: session.refresh_token }),
+  })
+
+  if (!response.ok) {
+    clearSavedSession()
+    return null
+  }
+
+  const refreshed = (await response.json()) as SupabaseSession
+  const rememberDevice = session.remember_device ?? storageType === "local"
+  const nextSession = {
+    ...session,
+    ...refreshed,
+    user: refreshed.user ?? session.user,
+  }
+
+  saveSession(nextSession, rememberDevice)
+
+  return getSavedSession()
 }
 
 export function saveSession(session: SupabaseSession, rememberDevice: boolean) {

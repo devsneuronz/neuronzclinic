@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-const AIRTABLE_BASE_ID = "app03ti52QQD3W9L2"
-const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY
-const APPOINTMENT_TABLE = process.env.AIRTABLE_APPOINTMENTS_TABLE || "Agendamentos"
 
 type MedicalRecordPayload = Record<string, unknown>
 
@@ -25,6 +22,10 @@ function isAirtableRecordId(value: string) {
   return /^rec[a-zA-Z0-9]+$/.test(value)
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+}
+
 async function supabaseRequest(path: string, init?: RequestInit) {
   if (!SUPABASE_REST_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error("Missing Supabase REST configuration for medical records.")
@@ -42,28 +43,38 @@ async function supabaseRequest(path: string, init?: RequestInit) {
   })
 }
 
-async function updateAirtableAppointmentStatus(appointmentId: string, status: string) {
-  if (!AIRTABLE_TOKEN) {
-    throw new Error("Missing AIRTABLE_TOKEN or AIRTABLE_API_KEY.")
-  }
+async function resolveAppointmentStatusId(status: string) {
+  const response = await supabaseRequest(`appointment_status?select=id&status=eq.${encodeURIComponent(status)}&limit=1`)
+  if (!response.ok) throw new Error(await response.text())
 
-  const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(APPOINTMENT_TABLE)}/${appointmentId}`, {
+  const rows = (await response.json()) as Array<{ id?: string }>
+  return getString(rows[0]?.id)
+}
+
+async function updateSupabaseAppointmentStatus(appointmentId: string, status: string) {
+  const statusId = await resolveAppointmentStatusId(status)
+  if (!statusId) throw new Error(`Status de agendamento nao encontrado: ${status}.`)
+
+  const filter = isUuid(appointmentId)
+    ? `id=eq.${encodeURIComponent(appointmentId)}`
+    : isAirtableRecordId(appointmentId)
+      ? `airtable_record_id=eq.${encodeURIComponent(appointmentId)}`
+      : ""
+
+  if (!filter) return false
+
+  const response = await supabaseRequest(`appointments?${filter}&select=id`, {
     method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-      "Content-Type": "application/json",
-    },
+    headers: { Prefer: "return=representation" },
     body: JSON.stringify({
-      fields: {
-        Status: status,
-      },
+      appointment_status_id: statusId,
     }),
-    cache: "no-store",
   })
 
-  if (!response.ok) {
-    throw new Error(await response.text())
-  }
+  if (!response.ok) throw new Error(await response.text())
+
+  const rows = (await response.json()) as Array<{ id?: string }>
+  return rows.length > 0
 }
 
 function buildRecordPayload(body: MedicalRecordPayload) {
@@ -190,9 +201,8 @@ export async function PUT(request: NextRequest) {
     const record = records[0] ?? null
     let appointmentStatusUpdated = false
 
-    if (payload.status === "finalized" && isAirtableRecordId(appointmentId)) {
-      await updateAirtableAppointmentStatus(appointmentId, "Finalizado")
-      appointmentStatusUpdated = true
+    if (payload.status === "finalized" && appointmentId) {
+      appointmentStatusUpdated = await updateSupabaseAppointmentStatus(appointmentId, "Finalizado")
     }
 
     return NextResponse.json({ record, appointmentStatusUpdated })
