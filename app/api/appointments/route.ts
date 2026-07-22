@@ -5,14 +5,14 @@ const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DEFAULT_STATUS_ID = "30ab85a3-b35d-4065-b173-a6a029a4b58f";
 const APPOINTMENT_SELECT =
-  "id,appointment_status_id,modality,appointment_procedure_type_id,dataHoraInicio,dataHoraFim,professional_id,chat_id,observacoes,appointment_status:appointment_status_id(id,status,hex),appointment_procedure_type:appointment_procedure_type_id(id,tipo),professional:professionals!appointments_professional_id_fkey(id,name,email,users:user_id(name,email)),chats:chat_id(id,nome_contato,phone_contact,chat_id)";
+  "id,appointment_status_id,modality,appointment_procedure_type_id,dataHoraInicio,dataHoraFim,professional_id,chat_id,observacoes,appointment_status:appointment_status_id(id,status,hex),appointment_procedure_type:appointment_procedure_type_id(id,tipo),professional:professionals!appointments_professional_id_fkey(id,name,email,user_profile:user_profiles!professionals_user_id_fkey(name,email)),chats:chat_id(id,nome_contato,phone_contact,chat_id)";
 
 type ProfessionalRow = {
   id: string;
   name: string | null;
   email: string | null;
   user_id: string | null;
-  users?: { name: string | null; email: string | null } | null;
+  user_profile?: { name: string | null; email: string | null } | null;
 };
 
 type AgendaRow = {
@@ -32,7 +32,7 @@ type AppointmentRow = {
   observacoes: string | null;
   appointment_status?: { id: string; status: string; hex: string } | null;
   appointment_procedure_type?: { id: string; tipo: string } | null;
-  professional?: { id: string; name: string | null; email: string | null; users?: { name: string | null; email: string | null } | null } | null;
+  professional?: { id: string; name: string | null; email: string | null; user_profile?: { name: string | null; email: string | null } | null } | null;
   chats?: { id: string; nome_contato: string | null; phone_contact: string | null; chat_id: string | null } | null;
 };
 
@@ -107,12 +107,12 @@ async function getRows<T>(path: string) {
 }
 
 function getProfessionalEmail(professional: ProfessionalRow) {
-  return professional.users?.email || professional.email || "";
+  return professional.user_profile?.email || professional.email || "";
 }
 
 function getProfessionalName(professional: ProfessionalRow | NonNullable<AppointmentRow["professional"]> | null | undefined) {
   if (!professional) return "Profissional";
-  return professional.users?.name || professional.name || professional.email || "Profissional";
+  return professional.user_profile?.name || professional.name || professional.email || "Profissional";
 }
 
 function canUseProfessional(viewer: { role: string; email: string }, professional: ProfessionalRow) {
@@ -122,7 +122,7 @@ function canUseProfessional(viewer: { role: string; email: string }, professiona
 
 async function getProfessionals() {
   return selectRows<ProfessionalRow>("professionals", {
-    select: "id,name,email,user_id,users:user_id(name,email)",
+    select: "id,name,email,user_id,user_profile:user_profiles!professionals_user_id_fkey(name,email)",
     order: "created_at.desc",
     limit: 1000,
   });

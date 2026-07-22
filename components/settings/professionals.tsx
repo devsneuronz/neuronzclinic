@@ -351,7 +351,7 @@ export function Professionals({ sortedProfessionals, isLoadingProfessionals, pro
 
                         return (
                           <SelectItem key={userKey} value={userKey} disabled={isLinkedToAnotherProfessional}>
-                            {user.name} - {user.email} ({user.source === "supabase" ? "Supabase" : "Airtable"})
+                            {user.name} - {user.email} ({user.source === "supabase" ? "Perfil" : "Airtable"})
                           </SelectItem>
                         );
                       })}

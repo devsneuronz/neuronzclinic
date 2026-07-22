@@ -34,7 +34,7 @@ type ProfessionalRow = {
   treated_conditions: string | null;
   user_id: string | null;
   status: string | null;
-  users?: {
+  user_profile?: {
     name: string | null;
     email: string | null;
   } | null;
@@ -50,10 +50,10 @@ type ProfessionalUserOption = {
   id: string;
   name: string;
   email: string;
-  source: "supabase" | "airtable";
+  source: "supabase";
 };
 
-type SupabaseUserRef = {
+type UserProfileRef = {
   id: string;
 };
 
@@ -83,49 +83,20 @@ async function supabaseRequest(path: string, init?: RequestInit) {
   });
 }
 
-async function findSupabaseUserByEmail(email: string) {
+async function findUserProfileByEmail(email: string) {
   if (!email) return null;
 
-  const response = await supabaseRequest(`users?select=id&email=eq.${encodeURIComponent(email)}&limit=1`);
-  const rows = response.ok ? ((await response.json()) as SupabaseUserRef[]) : [];
+  const response = await supabaseRequest(`user_profiles?select=id&email=eq.${encodeURIComponent(email.toLowerCase())}&status=eq.active&limit=1`);
+  const rows = response.ok ? ((await response.json()) as UserProfileRef[]) : [];
   return rows[0]?.id ?? null;
 }
 
-async function findSupabaseUserById(id: string) {
+async function findUserProfileById(id: string) {
   if (!id) return null;
 
-  const response = await supabaseRequest(`users?select=id&id=eq.${encodeURIComponent(id)}&limit=1`);
-  const rows = response.ok ? ((await response.json()) as SupabaseUserRef[]) : [];
+  const response = await supabaseRequest(`user_profiles?select=id&id=eq.${encodeURIComponent(id)}&status=eq.active&limit=1`);
+  const rows = response.ok ? ((await response.json()) as UserProfileRef[]) : [];
   return rows[0]?.id ?? null;
-}
-
-async function ensureSupabaseUserByEmail(email: string, name: string) {
-  const existingId = await findSupabaseUserByEmail(email);
-  if (existingId) return existingId;
-
-  const payloads = [
-    { name: name || email, email, role: "operator" },
-    { name: name || email, email },
-  ];
-
-  for (const payload of payloads) {
-    const response = await supabaseRequest("users?select=id", {
-      method: "POST",
-      headers: { Prefer: "return=representation" },
-      body: JSON.stringify(payload),
-    });
-
-    if (response.ok) {
-      const rows = (await response.json()) as SupabaseUserRef[];
-      return rows[0]?.id ?? null;
-    }
-
-    if (response.status === 409) {
-      return findSupabaseUserByEmail(email);
-    }
-  }
-
-  return null;
 }
 
 function mapProfessional(
@@ -133,9 +104,9 @@ function mapProfessional(
   expertisesByProfessionalId: Map<string, LinkedExpertise[]>,
   proceduresByProfessionalId: Map<string, LinkedProcedure[]>,
 ) {
-  const isUser = !!prof.users;
-  const name = isUser ? prof.users?.name || prof.name : prof.name;
-  const email = isUser ? prof.users?.email || prof.email : prof.email;
+  const isUser = !!prof.user_profile;
+  const name = isUser ? prof.user_profile?.name || prof.name : prof.name;
+  const email = isUser ? prof.user_profile?.email || prof.email : prof.email;
 
   const expertises = (expertisesByProfessionalId.get(prof.id) || []).map((pe) => pe.especialidade).filter(Boolean);
   const procedures = (proceduresByProfessionalId.get(prof.id) || []).map((pp) => pp.procedimentos).filter(Boolean);
@@ -191,9 +162,9 @@ async function getProfessionalLinks(professionalIds: string[]) {
 }
 
 async function resolveUserId(payload: ProfessionalPayload, linkedUserSource: string) {
-  if (payload.userId) return findSupabaseUserById(payload.userId);
-  if (linkedUserSource === "airtable" && payload.email) return ensureSupabaseUserByEmail(payload.email, payload.name);
-  if (payload.email) return findSupabaseUserByEmail(payload.email);
+  if (payload.userId) return findUserProfileById(payload.userId);
+  if (linkedUserSource === "supabase" && payload.email) return findUserProfileByEmail(payload.email);
+  if (payload.email) return findUserProfileByEmail(payload.email);
   return null;
 }
 
@@ -254,8 +225,8 @@ async function replaceProfessionalLinks(professionalId: string, expertises: unkn
 
 export async function GET() {
   try {
-    const select = "id,legacy_professional_id,airtable_record_id,name,email,city,tax_id,treated_conditions,user_id,status,users:user_id(id,name,email)";
-    const [response, usersResponse] = await Promise.all([supabaseRequest(`professionals?select=${select}&order=created_at.desc`), supabaseRequest("users?select=id,name,email&order=name.asc")]);
+    const select = "id,legacy_professional_id,airtable_record_id,name,email,city,tax_id,treated_conditions,user_id,status,user_profile:user_profiles!professionals_user_id_fkey(id,name,email)";
+    const [response, usersResponse] = await Promise.all([supabaseRequest(`professionals?select=${select}&order=created_at.desc`), supabaseRequest("user_profiles?select=id,name,email&status=eq.active&order=name.asc")]);
 
     if (!response.ok) {
       return NextResponse.json({ message: await response.text() }, { status: response.status });

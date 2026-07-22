@@ -44,11 +44,4 @@ next-env.d.ts
 # local Airtable -> Supabase migration artifacts
 /scripts/import-airtable-*.mjs
 /docs/airtable-supabase-migration-inventory.md
-/docs/supabase-airtable-pilot.sql
-/docs/supabase-interaction-history-normalization.sql
-/docs/supabase-procedure-interest-normalization.sql
-/docs/supabase-routines-normalization.sql
-/docs/supabase-sector-normalization.sql
-/docs/supabase-tasks-normalization.sql
-/docs/supabase-user-profile-normalization.sql
-/docs/supabase-auth-role-normalization.sql
+/docs/sql

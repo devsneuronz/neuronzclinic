@@ -10,7 +10,7 @@ type SupabaseProfessional = {
   name: string | null;
   email: string | null;
   user_id: string | null;
-  users?: { id: string; name: string | null; email: string | null } | null;
+  user_profile?: { id: string; name: string | null; email: string | null } | null;
   professional_procedimentos?: Array<{ procedimentos?: SupabaseProcedure | null }>;
 };
 
@@ -112,11 +112,11 @@ async function selectRows<T>(table: string, query: Record<string, string | numbe
 }
 
 function getProfessionalName(professional: SupabaseProfessional) {
-  return professional.users?.name || professional.name || professional.email || professional.users?.email || "Profissional";
+  return professional.user_profile?.name || professional.name || professional.email || professional.user_profile?.email || "Profissional";
 }
 
 function getProfessionalEmail(professional: SupabaseProfessional) {
-  return professional.users?.email || professional.email || "";
+  return professional.user_profile?.email || professional.email || "";
 }
 
 function uniqueProcedures(procedures: SupabaseProcedure[]) {
@@ -141,7 +141,7 @@ function canManageProfessional(viewer: { role: string; email: string }, professi
 }
 
 async function getProfessionals() {
-  const select = ["id,name,email,user_id", "users:user_id(id,name,email)", "professional_procedimentos!professional_procedimentos_id_professional_fkey(procedimentos:id_procedimento(id,nome,status))"].join(",");
+  const select = ["id,name,email,user_id", "user_profile:user_profiles!professionals_user_id_fkey(id,name,email)", "professional_procedimentos!professional_procedimentos_id_professional_fkey(procedimentos:id_procedimento(id,nome,status))"].join(",");
 
   return selectRows<SupabaseProfessional>("professionals", {
     select,

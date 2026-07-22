@@ -9,7 +9,7 @@ type ProfessionalRow = {
   name: string | null;
   email: string | null;
   user_id: string | null;
-  users?: { name: string | null; email: string | null } | null;
+  user_profile?: { name: string | null; email: string | null } | null;
   professional_procedimentos?: Array<{ procedimentos?: { id: string; nome: string | null; interest_tag_id?: string | null; interesse: string | null } | null }>;
 };
 
@@ -80,11 +80,11 @@ async function selectRows<T>(table: string, query: Record<string, string | numbe
 }
 
 function getProfessionalEmail(professional: ProfessionalRow) {
-  return professional.users?.email || professional.email || "";
+  return professional.user_profile?.email || professional.email || "";
 }
 
 function getProfessionalName(professional: ProfessionalRow) {
-  return professional.users?.name || professional.name || professional.email || professional.users?.email || "Profissional";
+  return professional.user_profile?.name || professional.name || professional.email || professional.user_profile?.email || "Profissional";
 }
 
 function canUseProfessional(viewer: { role: string; email: string }, professional: ProfessionalRow) {
@@ -94,7 +94,7 @@ function canUseProfessional(viewer: { role: string; email: string }, professiona
 
 async function getProfessionals() {
   return selectRows<ProfessionalRow>("professionals", {
-    select: "id,name,email,user_id,users:user_id(name,email),professional_procedimentos!professional_procedimentos_id_professional_fkey(procedimentos:id_procedimento(id,nome,interest_tag_id,interesse))",
+    select: "id,name,email,user_id,user_profile:user_profiles!professionals_user_id_fkey(name,email),professional_procedimentos!professional_procedimentos_id_professional_fkey(procedimentos:id_procedimento(id,nome,interest_tag_id,interesse))",
     order: "created_at.desc",
     limit: 1000,
   });

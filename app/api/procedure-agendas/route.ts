@@ -13,7 +13,7 @@ type AgendaRow = {
     id: string;
     name: string | null;
     email: string | null;
-    users?: { name: string | null; email: string | null } | null;
+    user_profile?: { name: string | null; email: string | null } | null;
   } | null;
 };
 
@@ -45,7 +45,7 @@ function normalizeTime(value: string) {
 
 function getProfessionalName(agenda: AgendaRow) {
   const professional = agenda.professional;
-  return professional?.users?.name || professional?.name || professional?.email || professional?.users?.email || "Profissional";
+  return professional?.user_profile?.name || professional?.name || professional?.email || professional?.user_profile?.email || "Profissional";
 }
 
 function getSupabaseConfig() {
@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
     if (!procedureId) return NextResponse.json({ message: "Procedimento obrigatorio." }, { status: 400 });
 
     const agendas = await selectRows<AgendaRow>("professional_agendas", {
-      select: "id,id_profissional,status,professional:professionals!professional_agendas_ida_profissional_fkey(id,name,email,users:user_id(name,email))",
+      select: "id,id_profissional,status,professional:professionals!professional_agendas_ida_profissional_fkey(id,name,email,user_profile:user_profiles!professionals_user_id_fkey(name,email))",
       order: "created_at.desc",
       limit: 1000,
     });

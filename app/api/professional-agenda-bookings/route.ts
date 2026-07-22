@@ -9,7 +9,7 @@ type ProfessionalRow = {
   name: string | null;
   email: string | null;
   user_id: string | null;
-  users?: { email: string | null; name: string | null } | null;
+  user_profile?: { email: string | null; name: string | null } | null;
 };
 
 type AgendaRow = {
@@ -74,11 +74,11 @@ async function selectRows<T>(table: string, query: Record<string, string | numbe
 }
 
 function getProfessionalEmail(professional: ProfessionalRow) {
-  return professional.users?.email || professional.email || "";
+  return professional.user_profile?.email || professional.email || "";
 }
 
 function getProfessionalName(professional: ProfessionalRow) {
-  return professional.users?.name || professional.name || professional.email || professional.users?.email || "Profissional";
+  return professional.user_profile?.name || professional.name || professional.email || professional.user_profile?.email || "Profissional";
 }
 
 function canManageProfessional(viewer: { role: string; email: string }, professional: ProfessionalRow) {
@@ -89,7 +89,7 @@ function canManageProfessional(viewer: { role: string; email: string }, professi
 
 async function getProfessionals() {
   return selectRows<ProfessionalRow>("professionals", {
-    select: "id,name,email,user_id,users:user_id(name,email)",
+    select: "id,name,email,user_id,user_profile:user_profiles!professionals_user_id_fkey(name,email)",
     limit: 1000,
   });
 }
