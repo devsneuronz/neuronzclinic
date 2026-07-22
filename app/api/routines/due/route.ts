@@ -129,6 +129,17 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
+function getSupabaseTemplateId(value: string) {
+  const templateId = getString(value);
+  const supabaseTemplateMatch = templateId.match(/^supabase_template:([0-9a-f-]{36})$/i);
+
+  if (supabaseTemplateMatch?.[1] && isUuid(supabaseTemplateMatch[1])) {
+    return supabaseTemplateMatch[1];
+  }
+
+  return templateId;
+}
+
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -187,7 +198,15 @@ async function fetchAirtableRecordById(table: string, id: string) {
 }
 
 async function fetchSupabaseTemplateById(templateId: string) {
-  const idFilter = isAirtableRecordId(templateId) ? `airtable_record_id=eq.${encodeURIComponent(templateId)}` : `id=eq.${encodeURIComponent(templateId)}`;
+  const normalizedTemplateId = getSupabaseTemplateId(templateId);
+  const idFilter = isAirtableRecordId(normalizedTemplateId)
+    ? `airtable_record_id=eq.${encodeURIComponent(normalizedTemplateId)}`
+    : isUuid(normalizedTemplateId)
+      ? `id=eq.${encodeURIComponent(normalizedTemplateId)}`
+      : "";
+
+  if (!idFilter) return null;
+
   const templates = (await supabaseRequest(
     `message_templates?select=content,media&${idFilter}&is_active=is.true&deleted_at=is.null&limit=1`,
   )) as SupabaseTemplateRecord[] | null;
@@ -305,23 +324,18 @@ async function createTask(run: RawRecord, action: RawRecord, type: "Aviso" | "Ta
   return { type: "create_task", taskId: rows[0]?.id ?? null, taskType: type, subject };
 }
 async function fetchTemplate(templateId: string) {
-  const supabaseTemplate = await fetchSupabaseTemplateById(templateId);
+  const normalizedTemplateId = getSupabaseTemplateId(templateId);
+  const supabaseTemplate = await fetchSupabaseTemplateById(normalizedTemplateId);
 
   if (supabaseTemplate?.content || supabaseTemplate?.media) {
     return supabaseTemplate;
   }
 
-  if (MESSAGE_TEMPLATES_READ_SOURCE === "supabase" || isUuid(templateId)) {
-    if (!supabaseTemplate?.content && !supabaseTemplate?.media) {
-      throw new Error(`Template de mensagem sem conteudo ou midia configurada no Supabase: ${templateId}.`);
-    }
+  if (MESSAGE_TEMPLATES_READ_SOURCE !== "airtable" || !isAirtableRecordId(normalizedTemplateId)) {
+    throw new Error(`Template de mensagem nao encontrado ou sem conteudo/midia no Supabase: ${templateId}.`);
   }
 
-  if (!isAirtableRecordId(templateId)) {
-    throw new Error(`Template de mensagem nao encontrado no Supabase: ${templateId}.`);
-  }
-
-  const template = await fetchAirtableRecordById(MESSAGE_TEMPLATES_TABLE, templateId);
+  const template = await fetchAirtableRecordById(MESSAGE_TEMPLATES_TABLE, normalizedTemplateId);
   const fields = template.fields ?? {};
   const content = getStringField(fields, TEMPLATE_CONTENT_FIELDS);
   const media = getTemplateMedia(fields);
