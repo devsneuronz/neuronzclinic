@@ -113,7 +113,7 @@ async function fetchDashboardData(user?: { id?: string; role?: string } | null) 
   const todayStart = startOfToday();
   const tomorrowStart = addDays(todayStart, 1);
 
-  const appointmentsUrl = new URL("/api/airtable/appointments", window.location.origin);
+  const appointmentsUrl = new URL("/api/appointments", window.location.origin);
   appointmentsUrl.searchParams.set("start", todayStart.toISOString());
   appointmentsUrl.searchParams.set("end", tomorrowStart.toISOString());
   const tasksUrl = new URL("/api/airtable/tasks", window.location.origin);
@@ -135,7 +135,7 @@ async function fetchDashboardData(user?: { id?: string; role?: string } | null) 
 }
 
 async function fetchAppointmentOptions() {
-  const response = await fetch("/api/airtable/appointment-options", { cache: "no-store" });
+  const response = await fetch("/api/appointment-options", { cache: "no-store" });
   const data = (await response.json()) as Partial<AppointmentOptions> & { message?: string };
 
   if (!response.ok) throw new Error(data.message || "Não foi possível carregar as opções de agendamento.");
@@ -537,7 +537,7 @@ export function DashboardContent() {
     setSuccessMessage("");
 
     try {
-      const response = await fetch("/api/airtable/appointments", {
+      const response = await fetch("/api/appointments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

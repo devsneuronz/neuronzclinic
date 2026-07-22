@@ -463,7 +463,7 @@ export function WeeklyCalendar() {
           return nextOptions;
         }
 
-        const response = await fetch("/api/airtable/appointment-options");
+        const response = await fetch("/api/appointment-options");
         const data = (await response.json()) as Partial<AppointmentOptions>;
         const nextOptions = {
           status: Array.isArray(data.status) ? data.status : [],
@@ -568,7 +568,7 @@ export function WeeklyCalendar() {
           params.set("professionalId", professionalBookingContext.professionalId);
         }
 
-        const endpoint = professionalBookingMode ? "/api/professional-agenda-bookings" : "/api/airtable/appointments";
+        const endpoint = professionalBookingMode ? "/api/professional-agenda-bookings" : "/api/appointments";
         const response = await fetch(`${endpoint}?${params.toString()}`);
         const data = (await response.json()) as { appointments?: CalendarAppointment[]; message?: string };
         if (!isActive) return;
@@ -656,7 +656,7 @@ export function WeeklyCalendar() {
     setSuccessMessage("");
 
     try {
-      const endpoint = professionalBookingMode ? "/api/professional-agenda-bookings" : "/api/airtable/appointments";
+      const endpoint = professionalBookingMode ? "/api/professional-agenda-bookings" : "/api/appointments";
       const params = new URLSearchParams();
       if (professionalBookingMode) {
         params.set("email", user?.email ?? "");
@@ -751,7 +751,7 @@ export function WeeklyCalendar() {
     setSuccessMessage("");
 
     try {
-      const endpoint = professionalBookingMode ? "/api/professional-agenda-bookings" : "/api/airtable/appointments";
+      const endpoint = professionalBookingMode ? "/api/professional-agenda-bookings" : "/api/appointments";
       const params = new URLSearchParams({ id });
       if (professionalBookingMode) {
         params.set("email", user?.email ?? "");
@@ -801,7 +801,7 @@ export function WeeklyCalendar() {
     setSuccessMessage("");
 
     try {
-      const endpoint = professionalBookingMode ? "/api/professional-agenda-bookings" : "/api/airtable/appointments";
+      const endpoint = professionalBookingMode ? "/api/professional-agenda-bookings" : "/api/appointments";
       const params = new URLSearchParams({ id });
       if (professionalBookingMode) {
         params.set("email", user?.email ?? "");

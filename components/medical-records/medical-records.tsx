@@ -520,7 +520,7 @@ export default function MedicalRecords() {
   }, []);
 
   useEffect(() => {
-    loadPatients(debouncedSearch);
+    queueMicrotask(() => loadPatients(debouncedSearch));
   }, [debouncedSearch, loadPatients]);
 
   const handleLoadMore = () => {
@@ -544,8 +544,10 @@ export default function MedicalRecords() {
 
   useEffect(() => {
     if (!selectedContact) {
-      setAppointments([]);
-      setExams([]);
+      queueMicrotask(() => {
+        setAppointments([]);
+        setExams([]);
+      });
       return;
     }
 
@@ -565,7 +567,7 @@ export default function MedicalRecords() {
         examParams.set("patientName", getDisplayName(contact));
 
         const [appointmentResponse, examResponse] = await Promise.all([
-          fetch(`/api/airtable/appointments?${appointmentParams}`, { cache: "no-store" }),
+          fetch(`/api/appointments?${appointmentParams}`, { cache: "no-store" }),
           fetch(`/api/medical-records/exams?${examParams}`, { cache: "no-store" }),
         ]);
 
@@ -738,18 +740,20 @@ export default function MedicalRecords() {
 
   useEffect(() => {
     if (!selectedContact || !selectedAppointment) {
-      setMedicalRecordId("");
-      setMedicalRecordStatus("draft");
-      setEditorContentHtml("");
-      setEditorContentJson(null);
-      setAiSummary("");
-      setRecordingStatus("idle");
-      setRecordingMessage("");
-      setRecordingSeconds(0);
-      recordingSecondsRef.current = 0;
-      stopRecordingResources();
-      lastSavedHtmlRef.current = "";
-      setMedicalRecordSaveStatus("idle");
+      queueMicrotask(() => {
+        setMedicalRecordId("");
+        setMedicalRecordStatus("draft");
+        setEditorContentHtml("");
+        setEditorContentJson(null);
+        setAiSummary("");
+        setRecordingStatus("idle");
+        setRecordingMessage("");
+        setRecordingSeconds(0);
+        recordingSecondsRef.current = 0;
+        stopRecordingResources();
+        lastSavedHtmlRef.current = "";
+        setMedicalRecordSaveStatus("idle");
+      });
       return;
     }
 
