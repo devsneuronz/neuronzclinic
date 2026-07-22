@@ -72,6 +72,8 @@ interface ChatWindowProps {
   onOpenIATraining: () => void;
 
   isSignatureMode: boolean;
+  isAssistantChat?: boolean;
+  isAssistantTyping?: boolean;
 }
 
 function getSupportedAudioMimeType() {
@@ -169,6 +171,8 @@ export function ChatWindow({
   isMobile,
   isSignatureMode,
   onOpenIATraining,
+  isAssistantChat = false,
+  isAssistantTyping = false,
 }: ChatWindowProps) {
   const [draft, setDraft] = useState("");
   const [draftChatId, setDraftChatId] = useState<string | null>(null);
@@ -481,6 +485,14 @@ export function ChatWindow({
   useEffect(() => {
     const chatId = chat?.chat_id ?? null;
 
+    if (isAssistantChat) {
+      const timeout = window.setTimeout(() => {
+        setInternalNotes([]);
+      }, 0);
+
+      return () => window.clearTimeout(timeout);
+    }
+
     if (!chatId) {
       const timeout = window.setTimeout(() => {
         setInternalNotes([]);
@@ -505,10 +517,18 @@ export function ChatWindow({
     return () => {
       isMounted = false;
     };
-  }, [chat?.chat_id]);
+  }, [chat?.chat_id, isAssistantChat]);
 
   useEffect(() => {
     const chatId = chat?.chat_id ?? null;
+
+    if (isAssistantChat) {
+      const timeout = window.setTimeout(() => {
+        setScheduledMessages([]);
+      }, 0);
+
+      return () => window.clearTimeout(timeout);
+    }
 
     if (!chatId) {
       const timeout = window.setTimeout(() => {
@@ -533,7 +553,7 @@ export function ChatWindow({
     return () => {
       isMounted = false;
     };
-  }, [chat?.chat_id]);
+  }, [chat?.chat_id, isAssistantChat]);
 
   useEffect(() => {
     const unsubscribe = createSupabaseRealtimeSubscription([{ table: "scheduled_messages" }], (payload) => {
@@ -601,6 +621,11 @@ export function ChatWindow({
   }, []);
 
   useEffect(() => {
+    if (isAssistantChat) {
+      setSavedAttachments([]);
+      return;
+    }
+
     let isMounted = true;
     setIsLoadingSavedAttachments(true);
 
@@ -618,7 +643,7 @@ export function ChatWindow({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isAssistantChat]);
 
   useEffect(() => {
     return () => {
@@ -675,7 +700,7 @@ export function ChatWindow({
     const text = draft.trim();
     if (!text && !attachment) return;
 
-    const textToSend = isSignatureMode && text ? `*${userName}*\n${text}` : text;
+    const textToSend = isAssistantChat ? text : isSignatureMode && text ? `*${userName}*\n${text}` : text;
 
     setIsSending(true);
 
@@ -768,7 +793,7 @@ export function ChatWindow({
   }
 
   function canReceiveDroppedAttachment() {
-    return !isInternalNoteOpen && !isRecording && !isSending;
+    return !isAssistantChat && !isInternalNoteOpen && !isRecording && !isSending;
   }
 
   function handleAttachmentDragEnter(event: DragEvent<HTMLDivElement>) {
@@ -835,6 +860,7 @@ export function ChatWindow({
   }
 
   function openInternalNote(message?: MessageRecord | null) {
+    if (isAssistantChat) return;
     setSelectedMessageIds(new Set());
     setReplyTo(null);
     setMessageActionError(null);
@@ -849,12 +875,14 @@ export function ChatWindow({
   }
 
   function openManualRoutines() {
+    if (isAssistantChat) return;
     setIsManualRoutinesOpen(true);
     void manualRoutines.loadManualRoutines();
     void manualRoutines.loadRunningRoutineStatus();
   }
 
   async function saveInternalNote() {
+    if (isAssistantChat) return;
     if (!chat?.chat_id) return;
 
     const content = noteDraft.trim();
@@ -1081,6 +1109,7 @@ export function ChatWindow({
   }
 
   async function startRecording() {
+    if (isAssistantChat) return;
     if (!onSendMessage || isSending || isRecording) return;
 
     setRecordingError(null);
@@ -1253,6 +1282,7 @@ export function ChatWindow({
           onCloseChat={onCloseChat}
           onOpenIATraining={onOpenIATraining}
           onOpenManualRoutines={openManualRoutines}
+          isAssistantChat={isAssistantChat}
         />
         <Group elementRef={messageGroupElementRef} groupRef={messageGroupRef} orientation="vertical">
           <Panel id={MESSAGE_LIST_PANEL_ID}>
@@ -1291,6 +1321,8 @@ export function ChatWindow({
               onCancel={handleCancelScheduledMessage}
               onUpdate={handleUpdateScheduledMessage}
               isInternalNoteOpen={isInternalNoteOpen}
+              canUseMessageActions={!isAssistantChat}
+              isTyping={isAssistantTyping}
             />
           </Panel>
           <Separator className="h-1.25 bg-(--chat-muted)/50 transition-colors hover:bg-theme-primary/50 border-t " />
@@ -1333,6 +1365,7 @@ export function ChatWindow({
               onSaveInternalNote={saveInternalNote}
               onScheduleMessage={handleScheduleMessage}
               isSignatureMode={isSignatureMode}
+              isAssistantChat={isAssistantChat}
               onRegisterFocus={(focusFn) => {
                 focusInputRef.current = focusFn;
               }}
@@ -1341,7 +1374,7 @@ export function ChatWindow({
         </Group>
       </div>
 
-      {attachment && isAttachmentPreviewOpen && (
+      {!isAssistantChat && attachment && isAttachmentPreviewOpen && (
         <AttachmentPreviewModal
           attachment={attachment}
           attachmentKind={attachmentKind}
@@ -1356,7 +1389,7 @@ export function ChatWindow({
 
       {expandedImage && <ExpandedImageModal image={expandedImage} onClose={() => setExpandedImage(null)} />}
 
-      <ManualRoutinesDialog
+      {!isAssistantChat && <ManualRoutinesDialog
         open={isManualRoutinesOpen}
         onOpenChange={setIsManualRoutinesOpen}
         routines={manualRoutines.manualRoutines}
@@ -1368,9 +1401,9 @@ export function ChatWindow({
         runStatus={manualRoutines.runStatus}
         onRunRoutine={(routine) => void manualRoutines.triggerManualRoutine(routine)}
         onCancelStartedRoutine={() => void manualRoutines.cancelStartedRoutine()}
-      />
+      />}
 
-      <ForwardMessageDialog
+      {!isAssistantChat && <ForwardMessageDialog
         chat={chat}
         messages={forwardingMessages}
         selectedForwardTarget={selectedForwardTarget}
@@ -1387,9 +1420,9 @@ export function ChatWindow({
         onSelectTarget={setSelectedForwardTarget}
         onLoadMore={loadMoreForwardTargets}
         onSubmit={handleForwardSubmit}
-      />
+      />}
 
-      <DeleteMessageDialog chat={chat} messages={deleteConfirmationMessages} messageActionError={messageActionError} onClose={() => setDeleteConfirmationMessages([])} onConfirm={handleDeleteMessage} />
+      {!isAssistantChat && <DeleteMessageDialog chat={chat} messages={deleteConfirmationMessages} messageActionError={messageActionError} onClose={() => setDeleteConfirmationMessages([])} onConfirm={handleDeleteMessage} />}
     </div>
   );
 }

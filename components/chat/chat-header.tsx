@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import type { ChatRecord } from "@/lib/supabase-rest";
+import { cn } from "@/lib/utils";
 import { Bot, CheckCircle2, ChevronLeft, Forward, Info, Play, RotateCcw, Trash2, X } from "lucide-react";
 import { getDisplayName } from "./message-utils";
 
@@ -22,6 +23,7 @@ type ChatHeaderProps = {
   onCloseChat?: () => void;
   onOpenIATraining: () => void;
   onOpenManualRoutines: () => void;
+  isAssistantChat?: boolean;
 };
 
 export function ChatHeader({
@@ -39,6 +41,7 @@ export function ChatHeader({
   onCloseChat,
   onOpenIATraining,
   onOpenManualRoutines,
+  isAssistantChat = false,
 }: ChatHeaderProps) {
   const hasContactPhoto = !!chat.url_foto_perfil;
 
@@ -68,7 +71,7 @@ export function ChatHeader({
         </>
       ) : (
         <>
-          <div onClick={onToggleDetails} className="flex cursor-pointer items-center gap-3">
+          <div onClick={isAssistantChat ? undefined : onToggleDetails} className={cn("flex items-center gap-3", !isAssistantChat && "cursor-pointer")}>
             {isMobile && onCloseChat && (
               <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onCloseChat}>
                 <ChevronLeft className="h-5 w-5" />
@@ -80,6 +83,7 @@ export function ChatHeader({
               aria-label={hasContactPhoto ? "Ampliar foto do contato" : "Abrir detalhes do contato"}
               onClick={(event) => {
                 event.stopPropagation();
+                if (isAssistantChat) return;
                 if (hasContactPhoto) {
                   onOpenContactPhoto?.();
                   return;
@@ -95,11 +99,11 @@ export function ChatHeader({
             </button>
             <div className="flex min-w-0 flex-col">
               <span className="truncate font-medium leading-none text-foreground">{getDisplayName(chat)}</span>
-              <span className="mt-1 text-[10px] text-muted-foreground">{chat.finalizada ? "Finalizada" : chat.ia_responde ? "IA responde" : "Atendimento aberto"}</span>
+              <span className="mt-1 text-[10px] text-muted-foreground">{isAssistantChat ? "Chat interno" : chat.finalizada ? "Finalizada" : chat.ia_responde ? "IA responde" : "Atendimento aberto"}</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {!isAssistantChat && <div className="flex items-center gap-2">
             <Button type="button" variant="outline" className="h-9 w-9 border-2 px-0 text-xs text-foreground shadow-sm transition-all md:w-auto md:px-4" onClick={onOpenManualRoutines} aria-label="Executar automacao manual">
               <span className="hidden md:inline">Rotinas</span>
               <Play className="h-4 w-4" />
@@ -118,7 +122,7 @@ export function ChatHeader({
             <Button onClick={onToggleDetails} variant="ghost" size="icon" className="cursor-pointer text-muted-foreground hover:text-foreground">
               <Info className="h-5 w-5" />
             </Button>
-          </div>
+          </div>}
         </>
       )}
     </div>

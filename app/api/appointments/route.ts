@@ -57,6 +57,10 @@ function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function hasOwn(object: Record<string, unknown> | null | undefined, key: string) {
+  return Boolean(object && Object.prototype.hasOwnProperty.call(object, key));
+}
+
 function onlyDigits(value: string) {
   return value.replace(/\D/g, "");
 }
@@ -240,6 +244,17 @@ async function getAppointmentsForChat(chat: ChatRow) {
   return rows.map(mapAppointment);
 }
 
+async function getAppointmentById(id: string) {
+  const rows = await selectRows<AppointmentRow>("appointments", {
+    select: APPOINTMENT_SELECT,
+    id: `eq.${id}`,
+    deleted_at: "is.null",
+    limit: 1,
+  });
+
+  return rows[0] ?? null;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl;
@@ -356,22 +371,62 @@ export async function PATCH(request: NextRequest) {
     const contactPhone = getString(body?.contactPhone) || getString(body?.patientPhone);
     const startsAt = getString(body?.startDateTime);
     const endsAt = getString(body?.endDateTime);
-    const modality = getString(body?.attendanceMode) || "Presencial";
+    const modality = getString(body?.attendanceMode);
     const observations = getString(body?.observations);
-    const statusId = await resolveStatusId(getString(body?.status));
-    const typeId = await resolveTypeId(getString(body?.type));
-    const context = await getContext(request, professionalId);
-    const chat = await findChat({ patientId, chatId, contactPhone });
 
-    if (!id || !professionalId || !chat || !startsAt) return NextResponse.json({ message: "Informe os dados obrigatorios." }, { status: 400 });
-    if (!context.allowedProfessionals.some((professional) => professional.id === professionalId)) {
+    if (!id) return NextResponse.json({ message: "Agendamento obrigatorio." }, { status: 400 });
+
+    const currentAppointment = await getAppointmentById(id);
+    if (!currentAppointment) return NextResponse.json({ message: "Agendamento nao encontrado." }, { status: 404 });
+
+    const nextProfessionalId = professionalId || currentAppointment.professional_id || "";
+    const context = await getContext(request, nextProfessionalId);
+    if (!nextProfessionalId || !context.allowedProfessionals.some((professional) => professional.id === nextProfessionalId)) {
       return NextResponse.json({ message: "Voce nao pode editar agendamento deste profissional." }, { status: 403 });
     }
 
-    const startDate = new Date(startsAt);
-    const endDate = endsAt ? new Date(endsAt) : new Date(startDate.getTime() + 60 * 60_000);
+    const updatePayload: Record<string, string | null> = {};
+
+    if (professionalId) updatePayload.professional_id = professionalId;
+
+    if (hasOwn(body, "patientId") || hasOwn(body, "chatId") || hasOwn(body, "contactPhone") || hasOwn(body, "patientPhone")) {
+      const chat = await findChat({ patientId, chatId, contactPhone });
+      if (!chat) return NextResponse.json({ message: "Paciente nao encontrado." }, { status: 400 });
+      updatePayload.chat_id = chat.id;
+    }
+
+    if (hasOwn(body, "status")) {
+      const status = getString(body?.status);
+      if (status) updatePayload.appointment_status_id = await resolveStatusId(status);
+    }
+
+    if (hasOwn(body, "type")) {
+      const type = getString(body?.type);
+      updatePayload.appointment_procedure_type_id = type ? await resolveTypeId(type) : null;
+    }
+
+    if (hasOwn(body, "attendanceMode") && modality) updatePayload.modality = modality;
+    if (hasOwn(body, "observations")) updatePayload.observacoes = observations || null;
+
+    const currentStartDate = new Date(currentAppointment.dataHoraInicio);
+    const currentEndDate = new Date(currentAppointment.dataHoraFim);
+    const startDate = startsAt ? new Date(startsAt) : currentStartDate;
+    let endDate = endsAt ? new Date(endsAt) : currentEndDate;
+
+    if (startsAt && !endsAt) {
+      const currentDuration = currentEndDate.getTime() - currentStartDate.getTime();
+      endDate = new Date(startDate.getTime() + (currentDuration > 0 ? currentDuration : 60 * 60_000));
+    }
+
     if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate.getTime() <= startDate.getTime()) {
       return NextResponse.json({ message: "Horario invalido." }, { status: 400 });
+    }
+
+    if (hasOwn(body, "startDateTime")) updatePayload.dataHoraInicio = startDate.toISOString();
+    if (hasOwn(body, "endDateTime") || (startsAt && !endsAt)) updatePayload.dataHoraFim = endDate.toISOString();
+
+    if (Object.keys(updatePayload).length === 0) {
+      return NextResponse.json({ appointment: mapAppointment(currentAppointment), message: "Nenhuma alteracao enviada." });
     }
 
     const response = await supabaseRequest(
@@ -379,16 +434,7 @@ export async function PATCH(request: NextRequest) {
       {
         method: "PATCH",
         headers: { Prefer: "return=representation" },
-        body: JSON.stringify({
-          appointment_status_id: statusId,
-          modality,
-          appointment_procedure_type_id: typeId,
-          dataHoraInicio: startDate.toISOString(),
-          dataHoraFim: endDate.toISOString(),
-          professional_id: professionalId,
-          chat_id: chat.id,
-          observacoes: observations || null,
-        }),
+        body: JSON.stringify(updatePayload),
       },
     );
     const rows = (await response.json()) as AppointmentRow[];

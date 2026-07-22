@@ -26,10 +26,11 @@ export type MessageBubbleProps = {
   onCreateNote: (m: MessageRecord) => void;
   onExpandImage: (url: string, alt: string) => void;
   onScrollToMessage?: (id: string) => void;
+  canUseActions?: boolean;
 };
 
 export const MessageBubble = memo(
-  function MessageBubble({ message, chat, messagesByRemoteId, selected, isSelectionMode, onToggleSelection, onReply, onForward, onDelete, onCreateNote, onExpandImage, isHighlighted, onScrollToMessage }: MessageBubbleProps) {
+  function MessageBubble({ message, chat, messagesByRemoteId, selected, isSelectionMode, onToggleSelection, onReply, onForward, onDelete, onCreateNote, onExpandImage, isHighlighted, onScrollToMessage, canUseActions = true }: MessageBubbleProps) {
     const fromMe = !!message.from_me;
     const isGroupChat = chat.chat_id?.endsWith("@g.us") || chat.grupo === true;
     const incomingSenderName = isGroupChat ? message.participant : getDisplayName(chat);
@@ -49,7 +50,7 @@ export const MessageBubble = memo(
 
     return (
       <div id={`message-${message.id}`} className={cn("mb-2 flex items-center gap-2", fromMe ? "justify-end" : "justify-start")}>
-        {isSelectionMode && !deleted && (
+        {canUseActions && isSelectionMode && !deleted && (
           <button
             type="button"
             className={cn(
@@ -105,7 +106,7 @@ export const MessageBubble = memo(
         >
           {message.participant && !fromMe && <p className="mb-1 text-sm font-medium text-(--chat-primary)">{incomingSenderName}</p>}
 
-          {!deleted && !isSelectionMode && (
+          {canUseActions && !deleted && !isSelectionMode && (
             <div className={cn("absolute top-1 flex rounded-full bg-(--chat-card)/90 p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100", fromMe ? "right-full mr-2" : "left-full ml-2")}>
               <Button type="button" variant="ghost" size="icon-sm" className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground" onClick={() => onReply(message)} aria-label="Responder mensagem">
                 <Reply className="h-4 w-4" />

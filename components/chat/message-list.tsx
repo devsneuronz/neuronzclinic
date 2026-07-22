@@ -59,6 +59,8 @@ type MessageListProps = {
   onCancel: (messageId: string) => Promise<void>;
   onUpdate: ({ id, text, scheduledAt }: { id: string; text: string; scheduledAt: string }) => Promise<void>;
   isInternalNoteOpen: boolean;
+  canUseMessageActions?: boolean;
+  isTyping?: boolean;
 };
 
 function InternalNoteBubble({
@@ -232,6 +234,8 @@ export function MessageList({
   onCancel,
   onUpdate,
   isInternalNoteOpen,
+  canUseMessageActions = true,
+  isTyping = false,
 }: MessageListProps) {
   return (
     <>
@@ -250,7 +254,7 @@ export function MessageList({
             <div className="shadow-x m-auto rounded-full border border-input/30 bg-input/20 px-4 py-2 text-sm shadow-sm backdrop-blur-[1px]">Carregando mensagens...</div>
           ) : error ? (
             <div className="m-auto max-w-md rounded-full bg-red-400/30 px-4 py-3 text-sm text-red-500 shadow-sm backdrop-blur-[1px]">{error}</div>
-          ) : groupedMessages.length === 0 ? (
+          ) : groupedMessages.length === 0 && !isTyping ? (
             <div className="shadow-x m-auto rounded-full border border-input/30 bg-input/20 px-4 py-2 text-sm text-foreground/75 shadow-sm backdrop-blur-[1px]">Esta conversa ainda não tem mensagens visíveis.</div>
           ) : (
             <>
@@ -289,15 +293,27 @@ export function MessageList({
                         onCreateNote={onCreateNote}
                         onExpandImage={onExpandImage}
                         onScrollToMessage={onScrollToMessage}
+                        canUseActions={canUseMessageActions}
                       />
                     ),
                   )}
                 </div>
               ))}
+              {isTyping && (
+                <div className="mb-2 flex justify-start">
+                  <div className="group relative max-w-[72%] rounded-lg p-3 shadow-sm transition-all rounded-tl-none bg-chat-other before:absolute before:-left-2 before:top-0 before:h-0 before:w-0 before:border-t-10 before:border-l-10 before:border-t-chat-other before:border-l-transparent before:content-['']">
+                    <div className="flex items-center gap-1" aria-label={`${getDisplayName(chat)} digitando`}>
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/70 [animation-delay:-0.2s]" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/70 [animation-delay:-0.1s]" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/70" />
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
-        {!isInternalNoteOpen && <ScheduledMessagesStrip messages={messages} onCancel={onCancel} onUpdate={onUpdate} />}
+        {!isInternalNoteOpen && canUseMessageActions && <ScheduledMessagesStrip messages={messages} onCancel={onCancel} onUpdate={onUpdate} />}
         {showScrollButton && (
           <Button size="icon" variant="outline" onClick={onScrollToLastMessage} className="sticky bottom-2 left-1/2 -translate-x-2/3 rounded-full backdrop-blur-sm transition-all active:scale-95 animate-in fade-in zoom-in-95">
             <ArrowDown className="h-4 w-4 stroke-[2.5]" />

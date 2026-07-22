@@ -2,6 +2,7 @@ export type UserRole = "admin" | "manager" | "user"
 
 export type CurrentUser = {
   id?: string
+  profileId?: string
   email: string
   name: string
   role: UserRole

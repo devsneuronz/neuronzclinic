@@ -42,6 +42,7 @@ type ChatComposerProps = {
   isLoadingSavedAttachments: boolean;
 
   isSignatureMode: boolean;
+  isAssistantChat?: boolean;
 
   onSubmit: (event?: FormEvent<HTMLFormElement>) => void;
   onRegisterFocus?: (focusFn: () => void) => void;
@@ -101,12 +102,13 @@ export function ChatComposer({
   onSaveInternalNote,
   isSignatureMode,
   onScheduleMessage,
+  isAssistantChat = false,
 }: ChatComposerProps) {
   const mentionMatch = noteDraft.match(/(^|\s)@([\p{L}\p{N}._-]*)$/u);
   const mentionQuery = mentionMatch?.[2] ?? "";
 
   const isMobile = useIsMobile();
-  const canSend = !!draft.trim() || !!attachment;
+  const canSend = !!draft.trim() || (!isAssistantChat && !!attachment);
 
   const mentionSuggestions = useMemo(() => {
     if (!isInternalNoteOpen || !mentionMatch) return [];
@@ -146,16 +148,7 @@ export function ChatComposer({
         <p className="mb-2 px-1 text-xs font-medium text-muted-foreground">Anexos salvos</p>
         <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
           {savedAttachments.map((savedAttachment) => {
-            const Icon =
-              savedAttachment.kind === "text"
-                ? MessageSquareText
-                : savedAttachment.kind === "audio"
-                  ? FileAudio
-                  : savedAttachment.kind === "video"
-                    ? Video
-                    : savedAttachment.kind === "document"
-                      ? FileText
-                      : FileImage;
+            const Icon = savedAttachment.kind === "text" ? MessageSquareText : savedAttachment.kind === "audio" ? FileAudio : savedAttachment.kind === "video" ? Video : savedAttachment.kind === "document" ? FileText : FileImage;
             const description = savedAttachment.body?.trim() || savedAttachment.file_name?.trim() || savedAttachment.media_url?.trim() || "Anexo";
 
             return (
@@ -269,7 +262,7 @@ export function ChatComposer({
         </div>
       )}
 
-      {!isInternalNoteOpen && attachment && (
+      {!isInternalNoteOpen && !isAssistantChat && attachment && (
         <div className="mb-2 overflow-hidden rounded-md border border-border bg-secondary text-sm">
           <div className="flex items-center justify-between px-3 py-2">
             <button type="button" className="min-w-0 text-left" onClick={onOpenAttachmentPreview} disabled={isSending}>
@@ -367,7 +360,7 @@ export function ChatComposer({
             </div>
           ) : (
             <>
-              {!isMobile && (
+              {!isAssistantChat && !isMobile && (
                 <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-yellow-300" onClick={onOpenInternalNote} aria-label="Criar anotação interna">
                   <StickyNote className="h-5 w-5" />
                 </Button>
@@ -386,7 +379,7 @@ export function ChatComposer({
           <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(event) => onAttachmentSelected(event.target.files?.[0])} />
           {!isRecording && (
             <>
-              {!isMobile ? (
+              {!isAssistantChat && !isMobile ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-foreground" aria-label="Anexar arquivo">
@@ -435,11 +428,11 @@ export function ChatComposer({
                     {renderSavedAttachmentsMenu()}
                   </DropdownMenuContent>
                 </DropdownMenu>
-              ) : (
+              ) : !isAssistantChat ? (
                 <ScheduleMessagePopover canSend={canSend} isSending={isSending} attachment={attachment} draft={draft} onScheduleMessage={onScheduleMessage} />
-              )}
+              ) : null}
               <div className="relative flex flex-1 gap-2 items-center h-full">
-                {isSignatureMode && !attachment && <span className="shrink-0 select-none rounded-md text-xs py-1.5 px-2 ml-2 bg-theme-primary text-theme-primary-fg font-bold">{userName}</span>}
+                {isSignatureMode && !isAssistantChat && !attachment && <span className="shrink-0 select-none rounded-md text-xs py-1.5 px-2 ml-2 bg-theme-primary text-theme-primary-fg font-bold">{userName}</span>}
 
                 <Textarea
                   ref={textareaRef}
@@ -452,7 +445,7 @@ export function ChatComposer({
                   onFocus={() => setIsInputActive(true)}
                   onBlur={() => setIsInputActive(false)}
                 />
-                {isMobile && (
+                {!isAssistantChat && isMobile && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild className="absolute right-0">
                       <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-foreground" aria-label="Anexar arquivo">
@@ -513,14 +506,21 @@ export function ChatComposer({
                   </DropdownMenu>
                 )}
               </div>
-              {!isMobile && <ScheduleMessagePopover isSending={isSending} attachment={attachment} draft={draft} onScheduleMessage={onScheduleMessage} canSend={canSend} />}
+              {!isAssistantChat && !isMobile && <ScheduleMessagePopover isSending={isSending} attachment={attachment} draft={draft} onScheduleMessage={onScheduleMessage} canSend={canSend} />}
 
               {canSend ? (
                 <Button type="submit" disabled={isSending} size="icon" className="h-10 w-10 shrink-0 rounded-full bg-teal-500 text-white hover:bg-teal-600" aria-label="Enviar mensagem">
                   {isSending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                 </Button>
               ) : (
-                <Button type="button" disabled={isSending} size="icon" className="h-10 w-10 shrink-0 rounded-full bg-input/30 text-foreground/50 hover:bg-input/80 hover:text-foreground" onClick={onStartRecording} aria-label="Gravar áudio">
+                <Button
+                  type="button"
+                  disabled={isSending || isAssistantChat}
+                  size="icon"
+                  className={cn("h-10 w-10 shrink-0 rounded-full bg-input/30 text-foreground/50 hover:bg-input/80 hover:text-foreground", isAssistantChat && "hidden")}
+                  onClick={onStartRecording}
+                  aria-label="Gravar áudio"
+                >
                   <Mic className="h-5 w-5" />
                 </Button>
               )}

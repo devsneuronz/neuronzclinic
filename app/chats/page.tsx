@@ -7,8 +7,10 @@ import type { ContactInfoValues } from "@/components/contact-details/profile-vie
 import { useChatOptions } from "@/hooks/use-chat-options";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { getFreshSavedSession } from "@/lib/auth-session";
 import { type ChatStatusOption } from "@/lib/chat-status";
 import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, type ChatTag } from "@/lib/chat-tags";
+import { createInternalAiMessage, isInternalAiChat } from "@/lib/internal-ai-chat";
 import { createSupabaseRealtimeSubscription, type SupabasePostgresChangePayload } from "@/lib/supabase-realtime";
 import {
   ChatRecord,
@@ -374,6 +376,10 @@ export default function ChatsPage() {
   const [chats, setChats] = useState<ChatRecord[]>([]);
   const [searchChats, setSearchChats] = useState<ChatRecord[]>([]);
   const [messagesByChatId, setMessagesByChatId] = useState<Record<string, MessageRecord[]>>({});
+  const [internalAiChat, setInternalAiChat] = useState<ChatRecord | null>(null);
+  const [internalAiMessages, setInternalAiMessages] = useState<MessageRecord[]>([]);
+  const [isLoadingInternalAiChat, setIsLoadingInternalAiChat] = useState(false);
+  const [isInternalAiTyping, setIsInternalAiTyping] = useState(false);
   const [latestMessageStatuses, setLatestMessageStatuses] = useState<Record<string, LatestMessageStatus>>({});
   const [selectedChatId, setSelectedChatId] = useState<string>();
   const [search, setSearch] = useState("");
@@ -395,14 +401,23 @@ export default function ChatsPage() {
   const searchQuery = normalizedSearch ? debouncedSearch.trim() : "";
   const isSearching = !!searchQuery;
   const isSearchingChats = !!normalizedSearch && (normalizedSearch !== searchQuery || searchChatsTerm !== searchQuery);
-  const visibleChats = useMemo(() => (isCurrentUserLoading ? [] : filterChatsForUser(user, isSearching ? searchChats : chats)), [chats, isCurrentUserLoading, isSearching, searchChats, user]);
-  const visibleChatRemoteIds = useMemo(() => Array.from(new Set(visibleChats.map((chat) => chat.chat_id).filter(Boolean))), [visibleChats]);
+  const canUseInternalAiChat = user?.role === "admin";
+  const baseVisibleChats = useMemo(() => {
+    const sourceChats = isSearching ? searchChats : chats;
+    if (!canUseInternalAiChat || !internalAiChat) return sourceChats;
+
+    const matchesSearch = !isSearching || ["secretaria ia", "secretária ia", "ia interna", "assistente", "admin"].some((term) => term.includes(searchQuery.toLowerCase()) || searchQuery.toLowerCase().includes(term));
+    return matchesSearch ? [internalAiChat, ...sourceChats.filter((chat) => !isInternalAiChat(chat))] : sourceChats;
+  }, [canUseInternalAiChat, chats, internalAiChat, isSearching, searchChats, searchQuery]);
+  const visibleChats = useMemo(() => (isCurrentUserLoading ? [] : filterChatsForUser(user, baseVisibleChats)), [baseVisibleChats, isCurrentUserLoading, user]);
+  const visibleChatRemoteIds = useMemo(() => Array.from(new Set(visibleChats.filter((chat) => !isInternalAiChat(chat)).map((chat) => chat.chat_id).filter(Boolean))), [visibleChats]);
   const visibleChatRemoteIdsKey = useMemo(() => visibleChatRemoteIds.join("\n"), [visibleChatRemoteIds]);
   const knownChats = useMemo(() => {
     const indexedChats = new Map<string, ChatRecord>();
     for (const chat of [...chats, ...searchChats]) indexedChats.set(chat.id, chat);
+    if (canUseInternalAiChat && internalAiChat) indexedChats.set(internalAiChat.id, internalAiChat);
     return isCurrentUserLoading ? [] : filterChatsForUser(user, Array.from(indexedChats.values()));
-  }, [chats, isCurrentUserLoading, searchChats, user]);
+  }, [canUseInternalAiChat, chats, internalAiChat, isCurrentUserLoading, searchChats, user]);
   const knownChatsRef = useRef<ChatRecord[]>([]);
   const selectedChat = useMemo(() => knownChats.find((chat) => chat.id === selectedChatId), [knownChats, selectedChatId]);
 
@@ -412,10 +427,11 @@ export default function ChatsPage() {
     if (chatOptionsError) setError(chatOptionsError);
   }, [chatOptionsError]);
   const selectedChatRemoteId = selectedChat?.chat_id;
-  const messages = selectedChatRemoteId ? (messagesByChatId[selectedChatRemoteId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES;
-  const hasMoreMessages = selectedChatRemoteId ? (hasMoreMessagesByChatId[selectedChatRemoteId] ?? false) : false;
-  const hasLoadedSelectedMessages = !!selectedChatRemoteId && selectedChatRemoteId in messagesByChatId;
-  const isLoadingSelectedMessages = !!selectedChatRemoteId && !hasLoadedSelectedMessages;
+  const isSelectedInternalAiChat = isInternalAiChat(selectedChat);
+  const messages = isSelectedInternalAiChat ? internalAiMessages : selectedChatRemoteId ? (messagesByChatId[selectedChatRemoteId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES;
+  const hasMoreMessages = isSelectedInternalAiChat ? false : selectedChatRemoteId ? (hasMoreMessagesByChatId[selectedChatRemoteId] ?? false) : false;
+  const hasLoadedSelectedMessages = isSelectedInternalAiChat || (!!selectedChatRemoteId && selectedChatRemoteId in messagesByChatId);
+  const isLoadingSelectedMessages = isSelectedInternalAiChat ? isLoadingInternalAiChat : !!selectedChatRemoteId && !hasLoadedSelectedMessages;
   const selectedChatRemoteIdRef = useRef<string | undefined>(undefined);
   const messagesByChatIdRef = useRef(messagesByChatId);
   const readReceiptKeyByChatIdRef = useRef<Record<string, string>>({});
@@ -470,6 +486,45 @@ export default function ChatsPage() {
   useEffect(() => {
     messagesByChatIdRef.current = messagesByChatId;
   }, [messagesByChatId]);
+
+  const loadInternalAiChat = useCallback(async () => {
+    if (!canUseInternalAiChat) {
+      setInternalAiChat(null);
+      setInternalAiMessages([]);
+      return;
+    }
+
+    setIsLoadingInternalAiChat(true);
+
+    try {
+      const session = await getFreshSavedSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Sessao ausente.");
+
+      const response = await fetch("/api/internal-ai-chat", {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      const payload = (await response.json().catch(() => null)) as { chat?: ChatRecord; messages?: MessageRecord[]; message?: string } | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.message || "Nao foi possivel carregar o chat interno da IA.");
+      }
+
+      setInternalAiChat(payload?.chat ?? null);
+      setInternalAiMessages(payload?.messages ?? []);
+    } catch (err) {
+      setInternalAiChat(null);
+      setInternalAiMessages([]);
+      setError(err instanceof Error ? err.message : "Nao foi possivel carregar o chat interno da IA.");
+    } finally {
+      setIsLoadingInternalAiChat(false);
+    }
+  }, [canUseInternalAiChat]);
+
+  useEffect(() => {
+    void loadInternalAiChat();
+  }, [loadInternalAiChat]);
 
   useEffect(() => {
     if (!selectedChatRemoteId) return;
@@ -550,6 +605,7 @@ export default function ChatsPage() {
         window.localStorage.setItem(LAST_OPEN_CHAT_STORAGE_KEY, chat.chat_id);
         setStoredTargetChatId(chat.chat_id);
       }
+      if (isInternalAiChat(chat)) setShowDetails(false);
       setSelectedChatId(id);
     },
     [knownChats],
@@ -629,7 +685,7 @@ export default function ChatsPage() {
   }, []);
 
   const loadOlderMessages = useCallback(async () => {
-    if (!selectedChatRemoteId || isLoadingOlderMessages || !hasMoreMessages) return 0;
+    if (isSelectedInternalAiChat || !selectedChatRemoteId || isLoadingOlderMessages || !hasMoreMessages) return 0;
 
     setIsLoadingOlderMessages(true);
     const currentMessages = messagesByChatId[selectedChatRemoteId] ?? [];
@@ -662,7 +718,7 @@ export default function ChatsPage() {
     } finally {
       setIsLoadingOlderMessages(false);
     }
-  }, [hasMoreMessages, isLoadingOlderMessages, messagesByChatId, selectedChatRemoteId, setChatHasMoreMessages]);
+  }, [hasMoreMessages, isLoadingOlderMessages, isSelectedInternalAiChat, messagesByChatId, selectedChatRemoteId, setChatHasMoreMessages]);
 
   const replaceChatMessages = useCallback((chatId: string, nextMessages: MessageRecord[]) => {
     setMessagesByChatId((current) => ({
@@ -761,6 +817,17 @@ export default function ChatsPage() {
       return;
     }
 
+    if (targetChatId && isInternalAiChat({ id: targetChatId, chat_id: targetChatId })) {
+      window.queueMicrotask(() => {
+        if (!canUseInternalAiChat || !internalAiChat) return;
+        setSelectedChatId(internalAiChat.id);
+        setStoredTargetChatId(internalAiChat.chat_id);
+        window.localStorage.setItem(LAST_OPEN_CHAT_STORAGE_KEY, internalAiChat.chat_id);
+        clearChatIdFromUrl();
+      });
+      return;
+    }
+
     let isMounted = true;
 
     fetchChats({ limit: 1, offset: 0, search: targetChatId })
@@ -787,7 +854,7 @@ export default function ChatsPage() {
     return () => {
       isMounted = false;
     };
-  }, [knownChats, mergeFreshChats, targetChatId, chatIdFromUrl, storedTargetChatId, setSelectedChatId, user]);
+  }, [canUseInternalAiChat, internalAiChat, knownChats, mergeFreshChats, targetChatId, chatIdFromUrl, storedTargetChatId, setSelectedChatId, user]);
 
   const updateChatPreviewForMessages = useCallback((chatId: string, freshMessages: MessageRecord[]) => {
     if (freshMessages.length === 0) return;
@@ -896,6 +963,53 @@ export default function ChatsPage() {
     async ({ text, file }: { text: string; file: File | null }) => {
       if (!selectedChatRemoteId) return;
 
+      if (isSelectedInternalAiChat) {
+        if (file) throw new Error("O chat interno da IA aceita apenas texto.");
+
+        const textToSend = text.trim();
+        if (!textToSend) return;
+
+        const userMessage = createInternalAiMessage({ chatId: selectedChatRemoteId, content: textToSend, fromMe: true, status: "sending" });
+        setInternalAiMessages((current) => [...current, userMessage]);
+        setIsInternalAiTyping(true);
+        setError(undefined);
+
+        try {
+          const session = await getFreshSavedSession();
+          const token = session?.access_token;
+          if (!token) throw new Error("Sessao ausente.");
+
+          const response = await fetch("/api/internal-ai-chat", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              text: textToSend,
+            }),
+          });
+          const payload = (await response.json().catch(() => null)) as { chat?: ChatRecord; userMessage?: MessageRecord; assistantMessage?: MessageRecord; reply?: string; message?: string } | null;
+
+          if (!response.ok) {
+            throw new Error(payload?.message || "Nao foi possivel conversar com a IA.");
+          }
+
+          if (payload?.chat) setInternalAiChat(payload.chat);
+          setInternalAiMessages((current) => {
+            const withoutOptimistic = current.filter((message) => message.id !== userMessage.id);
+            return [...withoutOptimistic, ...(payload?.userMessage ? [payload.userMessage] : []), ...(payload?.assistantMessage ? [payload.assistantMessage] : [])];
+          });
+        } catch (err) {
+          setInternalAiMessages((current) => current.map((message) => (message.id === userMessage.id ? { ...message, status: "error" } : message)));
+          setError(err instanceof Error ? err.message : "Nao foi possivel conversar com a IA.");
+          throw err;
+        } finally {
+          setIsInternalAiTyping(false);
+        }
+        return;
+      }
+
       const timestamp = new Date().toISOString();
       const optimisticId = `optimistic-${crypto.randomUUID()}`;
       const localMediaUrl = file ? URL.createObjectURL(file) : null;
@@ -935,7 +1049,7 @@ export default function ChatsPage() {
         }
       }
     },
-    [appendChatMessage, refreshMessagesAfterSend, selectedChatRemoteId, updateChatMessages, updateChatPreviewForMessages],
+    [appendChatMessage, isSelectedInternalAiChat, refreshMessagesAfterSend, selectedChatRemoteId, updateChatMessages, updateChatPreviewForMessages],
   );
 
   const handleReplyMessage = useCallback(
@@ -1226,7 +1340,7 @@ export default function ChatsPage() {
   }, [searchQuery]);
 
   useEffect(() => {
-    if (!selectedChatRemoteId) {
+    if (!selectedChatRemoteId || isSelectedInternalAiChat) {
       return;
     }
 
@@ -1257,10 +1371,10 @@ export default function ChatsPage() {
     return () => {
       isMounted = false;
     };
-  }, [replaceChatMessages, selectedChatRemoteId, setChatHasMoreMessages, updateChatPreviewForMessages, updateLatestMessageStatus]);
+  }, [isSelectedInternalAiChat, replaceChatMessages, selectedChatRemoteId, setChatHasMoreMessages, updateChatPreviewForMessages, updateLatestMessageStatus]);
 
   useEffect(() => {
-    if (!selectedChatRemoteId) return;
+    if (!selectedChatRemoteId || isSelectedInternalAiChat) return;
 
     let isMounted = true;
     let isRefreshing = false;
@@ -1294,14 +1408,14 @@ export default function ChatsPage() {
       isMounted = false;
       window.clearInterval(intervalId);
     };
-  }, [mergeFreshMessages, selectedChatRemoteId, setChatHasMoreMessages]);
+  }, [isSelectedInternalAiChat, mergeFreshMessages, selectedChatRemoteId, setChatHasMoreMessages]);
 
   useEffect(() => {
     latestMessageStatusesRef.current = latestMessageStatuses;
   }, [latestMessageStatuses]);
 
   useEffect(() => {
-    const chatsNeedingStatus = visibleChats.filter((chat) => chat.last_message_fromMe && !hasFreshLatestStatus(chat, latestMessageStatusesRef.current[chat.chat_id]));
+    const chatsNeedingStatus = visibleChats.filter((chat) => !isInternalAiChat(chat) && chat.last_message_fromMe && !hasFreshLatestStatus(chat, latestMessageStatusesRef.current[chat.chat_id]));
     const chatIds = chatsNeedingStatus.map((chat) => chat.chat_id);
 
     if (chatIds.length === 0) return;
@@ -1336,7 +1450,7 @@ export default function ChatsPage() {
   }, [visibleChats]);
 
   useEffect(() => {
-    const chatIds = visibleChatRemoteIdsKey ? visibleChats.filter((chat) => chat.chat_id && (!chat.last_message_time || !chat.text_last_message)).map((chat) => chat.chat_id) : [];
+    const chatIds = visibleChatRemoteIdsKey ? visibleChats.filter((chat) => !isInternalAiChat(chat) && chat.chat_id && (!chat.last_message_time || !chat.text_last_message)).map((chat) => chat.chat_id) : [];
 
     if (chatIds.length === 0) return;
 
@@ -1542,12 +1656,12 @@ export default function ChatsPage() {
   }, [selectedChatId, effectiveGhostMode, handleMarkAsRead]);
 
   useEffect(() => {
-    if (!selectedChatRemoteId || effectiveGhostMode || !hasLoadedSelectedMessages) return;
+    if (!selectedChatRemoteId || isSelectedInternalAiChat || effectiveGhostMode || !hasLoadedSelectedMessages) return;
 
     window.queueMicrotask(() => {
       void sendReadReceiptForChat(selectedChatRemoteId, messages);
     });
-  }, [hasLoadedSelectedMessages, effectiveGhostMode, messages, selectedChatRemoteId, sendReadReceiptForChat]);
+  }, [hasLoadedSelectedMessages, isSelectedInternalAiChat, effectiveGhostMode, messages, selectedChatRemoteId, sendReadReceiptForChat]);
 
   const handleMarkAsUnread = useCallback(async () => {
     if (!selectedChat) return;
@@ -1867,7 +1981,7 @@ export default function ChatsPage() {
       );
     }
 
-    if (showDetails) {
+    if (showDetails && !isSelectedInternalAiChat) {
       return (
         <ContactDetails
           chat={selectedChat}
@@ -1915,8 +2029,10 @@ export default function ChatsPage() {
         onToggleStatus={handleToggleStatus}
         onChangeQueueState={handleChangeQueueState}
         isMobile={true}
-        isSignatureMode={effectiveSignatureMode}
+        isSignatureMode={isSelectedInternalAiChat ? false : effectiveSignatureMode}
         onOpenIATraining={handleOpenIATraining}
+        isAssistantChat={isSelectedInternalAiChat}
+        isAssistantTyping={isInternalAiTyping}
       />
     );
   }
@@ -1968,12 +2084,14 @@ export default function ChatsPage() {
             isDetailsOpen={showDetails}
             onToggleStatus={handleToggleStatus}
             onChangeQueueState={handleChangeQueueState}
-            isSignatureMode={effectiveSignatureMode}
+            isSignatureMode={isSelectedInternalAiChat ? false : effectiveSignatureMode}
             onOpenIATraining={handleOpenIATraining}
+            isAssistantChat={isSelectedInternalAiChat}
+            isAssistantTyping={isInternalAiTyping}
           />
         </Panel>
 
-        {selectedChat && showDetails && (
+        {selectedChat && showDetails && !isSelectedInternalAiChat && (
           <>
             <Separator className="w-1 bg-(--chat-muted)/50 transition-colors hover:bg-theme-primary/50" />
             <Panel id="details-panel" defaultSize="360px" minSize="360px" maxSize="600px" className="bg-(--chat-card) border-l border-(--chat-muted)">
