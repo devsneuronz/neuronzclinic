@@ -1077,7 +1077,7 @@ export function KanbanBoard() {
       icon: CalendarPlus,
       value: createdAtFilterOptions.find((item) => item.value === createdAtFilter)?.label ?? filterAll,
       options: createdAtFilterOptions.map((item) => item.label),
-      filterAll: "CriaÃ§Ã£o",
+      filterAll: "Criação",
       onChange: (label: string) => {
         const option = createdAtFilterOptions.find((item) => item.label === label);
         setCreatedAtFilter(option?.value ?? filterAll);
