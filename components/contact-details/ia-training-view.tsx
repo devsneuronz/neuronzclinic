@@ -62,12 +62,14 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
   const [errorMessage, setErrorMessage] = useState("");
   const [assistantName, setAssistantName] = useState("IA");
   const chatId = chat?.chat_id || "";
+  const chatRowId = chat?.id || "";
 
   useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams();
 
     if (chatId) params.set("chatId", chatId);
+    if (chatRowId) params.set("chatRowId", chatRowId);
     if (contactPhone) params.set("contactPhone", contactPhone);
 
     queueMicrotask(() => {
@@ -109,7 +111,7 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
       });
 
     return () => controller.abort();
-  }, [chatId, contactPhone]);
+  }, [chatId, chatRowId, contactPhone]);
 
   async function handleQualityChange(interactionId: string, quality: string) {
     if (quality === EMPTY_QUALITY_VALUE) return;

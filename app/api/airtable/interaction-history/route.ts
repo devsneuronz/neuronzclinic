@@ -8,6 +8,8 @@ type InteractionHistoryRow = {
   id: string
   airtable_record_id: string | null
   chat_id: string | null
+  chat_row_id?: string | null
+  contact_id?: string | null
   contact_phone: string | null
   received: string | null
   ia_response: string | null
@@ -23,6 +25,10 @@ function getString(value: unknown) {
 
 function onlyDigits(value: string) {
   return value.replace(/\D/g, "")
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
 
 function getBrazilPhoneVariants(value: string) {
@@ -87,11 +93,18 @@ function sortInteractionsOldestFirst(interactions: ReturnType<typeof mapInteract
     .map((interaction, index) => ({ ...interaction, number: index + 1 }))
 }
 
-function buildContactFilters(chatId: string, contactPhone: string) {
+function buildContactFilters(chatId: string, contactPhone: string, chatRowId: string) {
   const filters: string[] = []
+  if (chatRowId) {
+    filters.push(`chat_row_id.eq.${encodeURIComponent(chatRowId)}`)
+  }
+
   if (chatId) {
     filters.push(`chat_id.eq.${encodeURIComponent(chatId)}`)
     filters.push(`chat_id.ilike.*${encodeURIComponent(chatId)}*`)
+    if (isUuid(chatId)) {
+      filters.push(`contact_id.eq.${encodeURIComponent(chatId)}`)
+    }
   }
 
   for (const phone of getBrazilPhoneVariants(contactPhone || chatId)) {
@@ -128,16 +141,17 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const chatId = getString(searchParams.get("chatId"))
   const contactPhone = getString(searchParams.get("contactPhone"))
+  const chatRowId = getString(searchParams.get("chatRowId"))
 
   try {
     const params = new URLSearchParams({
-      select: "id,airtable_record_id,chat_id,contact_phone,received,ia_response,corrected_response,quality,occurred_at,created_at",
+      select: "*",
       is_active: "is.true",
       deleted_at: "is.null",
       order: "occurred_at.asc.nullslast,created_at.asc",
       limit: "10000",
     })
-    const filters = buildContactFilters(chatId, contactPhone)
+    const filters = buildContactFilters(chatId, contactPhone, chatRowId)
     if (filters.length > 0) params.set("or", `(${filters.join(",")})`)
 
     const [rows, qualityOptions] = await Promise.all([supabaseRequest<InteractionHistoryRow[]>(`interaction_history?${params}`), fetchQualityOptions()])
