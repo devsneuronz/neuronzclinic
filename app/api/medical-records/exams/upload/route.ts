@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 
-const EXAM_WEBHOOK_URL = process.env.MEDICAL_EXAM_WEBHOOK_URL || "https://n8n.srv1150529.hstgr.cloud/webhook/pdf-exame"
+const EXAM_WEBHOOK_URL = process.env.MEDICAL_EXAM_WEBHOOK_URL
 const MAX_FILE_SIZE = 25 * 1024 * 1024
 
 function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
+}
+
+function requireWebhookUrl(value: string | undefined, envName: string) {
+  if (!value) throw new Error(`Configure ${envName} no .env.local.`)
+  return value
 }
 
 function isAllowedExamFile(file: File) {
@@ -79,7 +84,7 @@ export async function POST(request: NextRequest) {
       if (value) webhookPayload[field] = value
     }
 
-    const webhookResponse = await fetch(EXAM_WEBHOOK_URL, {
+    const webhookResponse = await fetch(requireWebhookUrl(EXAM_WEBHOOK_URL, "MEDICAL_EXAM_WEBHOOK_URL"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

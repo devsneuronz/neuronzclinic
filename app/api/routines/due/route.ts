@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const SEND_MESSAGE_WEBHOOK_URL = process.env.SEND_MESSAGE_WEBHOOK_URL || "https://n8n.srv1150529.hstgr.cloud/webhook/send-message";
+const SEND_MESSAGE_WEBHOOK_URL = process.env.SEND_MESSAGE_WEBHOOK_URL;
 const ROUTINES_WEBHOOK_SECRET = process.env.ROUTINES_WEBHOOK_SECRET;
 
 type RawRecord = Record<string, unknown>;
@@ -17,6 +17,11 @@ type SupabaseTemplateRecord = {
 
 function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function requireWebhookUrl(value: string | undefined, envName: string) {
+  if (!value) throw new Error(`Configure ${envName} no .env.local.`);
+  return value;
 }
 
 function getNumber(value: unknown) {
@@ -315,7 +320,7 @@ async function sendMessage(run: RawRecord, action: RawRecord) {
   const { text, media } = await resolveMessage(run, action);
   const contactName = getString(run.contact_name);
 
-  const response = await fetch(SEND_MESSAGE_WEBHOOK_URL, {
+  const response = await fetch(requireWebhookUrl(SEND_MESSAGE_WEBHOOK_URL, "SEND_MESSAGE_WEBHOOK_URL"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(

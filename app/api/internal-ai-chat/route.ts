@@ -2,7 +2,7 @@ import { getInternalAiChatId } from "@/lib/internal-ai-chat";
 import { normalizeUserRole } from "@/lib/user-roles";
 import { NextResponse } from "next/server";
 
-const INTERNAL_AI_WEBHOOK_URL = process.env.INTERNAL_AI_CHAT_WEBHOOK_URL || "https://n8n.srv1150529.hstgr.cloud/webhook/ea7e385b-4c09-4f9f-9f57-e7b896713f34";
+const INTERNAL_AI_WEBHOOK_URL = process.env.INTERNAL_AI_CHAT_WEBHOOK_URL;
 const INTERNAL_AI_TIMEOUT_MS = 90000;
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -99,6 +99,11 @@ type MessageRow = {
 
 function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function requireWebhookUrl(value: string | undefined, envName: string) {
+  if (!value) throw new Error(`Configure ${envName} no .env.local.`);
+  return value;
 }
 
 function getSupabaseBaseUrl() {
@@ -324,7 +329,7 @@ export async function POST(request: Request) {
     const chat = await ensureInternalAiChat(profile);
     const userMessage = await insertInternalAiMessage({ chat, content: text, fromMe: true });
 
-    const webhookResponse = await fetch(INTERNAL_AI_WEBHOOK_URL, {
+    const webhookResponse = await fetch(requireWebhookUrl(INTERNAL_AI_WEBHOOK_URL, "INTERNAL_AI_CHAT_WEBHOOK_URL"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -388,4 +393,3 @@ export async function POST(request: Request) {
     clearTimeout(timeoutId);
   }
 }
-

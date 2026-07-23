@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 
-const SEND_MESSAGE_WEBHOOK_URL = process.env.SEND_MESSAGE_WEBHOOK_URL || "https://n8n.srv1150529.hstgr.cloud/webhook/send-message"
+const SEND_MESSAGE_WEBHOOK_URL = process.env.SEND_MESSAGE_WEBHOOK_URL
 const FORWARD_MESSAGE_WEBHOOK_URL = process.env.FORWARD_MESSAGE_WEBHOOK_URL || SEND_MESSAGE_WEBHOOK_URL
-const DELETE_MESSAGE_WEBHOOK_URL = process.env.DELETE_MESSAGE_WEBHOOK_URL || "https://n8n.srv1150529.hstgr.cloud/webhook/apagar-mensagem"
-const READ_MESSAGE_WEBHOOK_URL = process.env.READ_MESSAGE_WEBHOOK_URL || "https://n8n.srv1150529.hstgr.cloud/webhook/520de9de-1b62-4987-97bf-49ee2ba938d9"
+const DELETE_MESSAGE_WEBHOOK_URL = process.env.DELETE_MESSAGE_WEBHOOK_URL
+const READ_MESSAGE_WEBHOOK_URL = process.env.READ_MESSAGE_WEBHOOK_URL
 
 type MessageActionBody = Record<string, unknown>
 type ForwardPayload = ReturnType<typeof buildForwardPayload>
@@ -16,6 +16,11 @@ function isMessageActionBody(value: unknown): value is MessageActionBody {
 
 function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
+}
+
+function requireWebhookUrl(value: string | undefined, envName: string) {
+  if (!value) throw new Error(`Configure ${envName} no .env.local.`)
+  return value
 }
 
 function getMessageType(message: MessageActionBody) {
@@ -150,7 +155,7 @@ export async function POST(request: NextRequest) {
       const results: Array<{ payload: ForwardPayload; webhook: unknown; status: number }> = []
 
       for (const payload of payloads) {
-        const result = await postWebhook(FORWARD_MESSAGE_WEBHOOK_URL, payload)
+        const result = await postWebhook(requireWebhookUrl(FORWARD_MESSAGE_WEBHOOK_URL, "FORWARD_MESSAGE_WEBHOOK_URL ou SEND_MESSAGE_WEBHOOK_URL"), payload)
         results.push({ payload, webhook: result.body, status: result.status })
 
         if (!result.ok) {
@@ -177,7 +182,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ message: "chat_id e obrigatório." }, { status: 400 })
       }
 
-      const result = await postWebhook(READ_MESSAGE_WEBHOOK_URL, payload)
+      const result = await postWebhook(requireWebhookUrl(READ_MESSAGE_WEBHOOK_URL, "READ_MESSAGE_WEBHOOK_URL"), payload)
 
       if (!result.ok) {
         return NextResponse.json(
@@ -204,7 +209,7 @@ export async function POST(request: NextRequest) {
     const results: Array<{ payload: DeletePayload; webhook: unknown; status: number }> = []
 
     for (const payload of payloads) {
-      const result = await postWebhook(DELETE_MESSAGE_WEBHOOK_URL, payload)
+      const result = await postWebhook(requireWebhookUrl(DELETE_MESSAGE_WEBHOOK_URL, "DELETE_MESSAGE_WEBHOOK_URL"), payload)
       results.push({ payload, webhook: result.body, status: result.status })
 
       if (!result.ok) {
