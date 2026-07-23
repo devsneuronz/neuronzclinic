@@ -973,81 +973,85 @@ export function ClinicInfoManager({ onProceduresChanged }: ClinicInfoManagerProp
                         </SelectContent>
                       </Select>
                     </div>
+                    <div
+                      className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
+                      onClick={() => setAssistantDraft((c) => ({ ...c, emoji: !c.emoji }))}
+                    >
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                          <Smile className="h-4 w-4" />
+                        </div>
+                        <div className="space-y-0.5 min-w-0">
+                          <Label htmlFor="assistant-emojis" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
+                            Permitir o uso de emojis
+                          </Label>
+                          <p className="text-[11px] text-muted-foreground leading-tight">{assistantDraft.emoji ? "A IA usará reações visuais moderadas nas respostas." : "Respostas estritamente textuais e limpas."}</p>
+                        </div>
+                      </div>
+                      <Switch id="assistant-emojis" checked={!!assistantDraft.emoji} onClick={(e) => e.stopPropagation()} onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, emoji: v }))} disabled={isSavingAssistant} />
+                    </div>
                   </div>
                 </div>
               </div>
-              <Separator className="my-2 bg-border/60" />
-              <div className="space-y-4 pt-2">
-                <div>
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Comportamento e Notificações</h3>
-                  <p className="text-xs text-muted-foreground">Ajuste como a assistente interage e quando ela deve enviar notificações.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div
-                    className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
-                    onClick={() => setAssistantDraft((c) => ({ ...c, emoji: !c.emoji }))}
-                  >
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
-                        <Smile className="h-4 w-4" />
+              {false && (
+                <>
+                  <Separator className="my-2 bg-border/60" />
+                  <div className="space-y-4 pt-2">
+                    <div>
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Comportamento e Notificações</h3>
+                      <p className="text-xs text-muted-foreground">Ajuste como a assistente interage e quando ela deve enviar notificações.</p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div
+                        className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
+                        onClick={() => setAssistantDraft((c) => ({ ...c, avisar_agendamento: !c.avisar_agendamento }))}
+                      >
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                            <CalendarPlus className="h-4 w-4" />
+                          </div>
+                          <div className="space-y-0.5 min-w-0">
+                            <Label htmlFor="assistant-notify-booking" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
+                              Avisar sobre agendamentos
+                            </Label>
+                            <p className="text-[11px] text-muted-foreground leading-tight">Notificar quando um novo agendamento for solicitado ou realizado.</p>
+                          </div>
+                        </div>
+                        <Switch
+                          id="assistant-notify-booking"
+                          checked={!!assistantDraft.avisar_agendamento}
+                          onClick={(e) => e.stopPropagation()}
+                          onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, avisar_agendamento: v }))}
+                          disabled={isSavingAssistant}
+                        />
                       </div>
-                      <div className="space-y-0.5 min-w-0">
-                        <Label htmlFor="assistant-emojis" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
-                          Permitir o uso de emojis
-                        </Label>
-                        <p className="text-[11px] text-muted-foreground leading-tight">{assistantDraft.emoji ? "A IA usará reações visuais moderadas nas respostas." : "Respostas estritamente textuais e limpas."}</p>
+                      <div
+                        className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
+                        onClick={() => setAssistantDraft((c) => ({ ...c, avisar_encaminhamento: !c.avisar_encaminhamento }))}
+                      >
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                            <ArrowUpRight className="h-4 w-4" />
+                          </div>
+                          <div className="space-y-0.5 min-w-0">
+                            <Label htmlFor="assistant-notify-forward" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
+                              Avisar sobre encaminhamentos
+                            </Label>
+                            <p className="text-[11px] text-muted-foreground leading-tight">Notificar quando a conversa for encaminhada para atendimento humano.</p>
+                          </div>
+                        </div>
+                        <Switch
+                          id="assistant-notify-forward"
+                          checked={!!assistantDraft.avisar_encaminhamento}
+                          onClick={(e) => e.stopPropagation()}
+                          onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, avisar_encaminhamento: v }))}
+                          disabled={isSavingAssistant}
+                        />
                       </div>
                     </div>
-                    <Switch id="assistant-emojis" checked={!!assistantDraft.emoji} onClick={(e) => e.stopPropagation()} onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, emoji: v }))} disabled={isSavingAssistant} />
                   </div>
-                  <div
-                    className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
-                    onClick={() => setAssistantDraft((c) => ({ ...c, avisar_agendamento: !c.avisar_agendamento }))}
-                  >
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
-                        <CalendarPlus className="h-4 w-4" />
-                      </div>
-                      <div className="space-y-0.5 min-w-0">
-                        <Label htmlFor="assistant-notify-booking" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
-                          Avisar sobre agendamentos
-                        </Label>
-                        <p className="text-[11px] text-muted-foreground leading-tight">Notificar quando um novo agendamento for solicitado ou realizado.</p>
-                      </div>
-                    </div>
-                    <Switch
-                      id="assistant-notify-booking"
-                      checked={!!assistantDraft.avisar_agendamento}
-                      onClick={(e) => e.stopPropagation()}
-                      onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, avisar_agendamento: v }))}
-                      disabled={isSavingAssistant}
-                    />
-                  </div>
-                  <div
-                    className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
-                    onClick={() => setAssistantDraft((c) => ({ ...c, avisar_encaminhamento: !c.avisar_encaminhamento }))}
-                  >
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
-                        <ArrowUpRight className="h-4 w-4" />
-                      </div>
-                      <div className="space-y-0.5 min-w-0">
-                        <Label htmlFor="assistant-notify-forward" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
-                          Avisar sobre encaminhamentos
-                        </Label>
-                        <p className="text-[11px] text-muted-foreground leading-tight">Notificar quando a conversa for encaminhada para atendimento humano.</p>
-                      </div>
-                    </div>
-                    <Switch
-                      id="assistant-notify-forward"
-                      checked={!!assistantDraft.avisar_encaminhamento}
-                      onClick={(e) => e.stopPropagation()}
-                      onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, avisar_encaminhamento: v }))}
-                      disabled={isSavingAssistant}
-                    />
-                  </div>
-                </div>
-              </div>
+                </>
+              )}
             </div>
           </>
         )}
