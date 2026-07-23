@@ -20,7 +20,15 @@ type ChatRow = {
 const CHAT_SELECT = ["id", "chat_id", "contact_id", "nome_contato", "pushname", "phone_contact", "ia_responde", "finalizada"].join(",")
 
 function getRecord(value: unknown) {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>
+  if (typeof value !== "string") return null
+
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
 }
 
 function requireWebhookUrl(value: string | undefined, envName: string) {
@@ -33,10 +41,14 @@ function getPayloadSources(body: IncomingMessageBody) {
   const nestedBody = getRecord(body.body)
   const data = getRecord(body.data)
   const nestedDataBody = getRecord(data?.body)
+  const nestedPayload = getRecord(body.payload)
+  const nestedDataPayload = getRecord(data?.payload)
 
   if (nestedBody) sources.push(nestedBody)
   if (data) sources.push(data)
   if (nestedDataBody) sources.push(nestedDataBody)
+  if (nestedPayload) sources.push(nestedPayload)
+  if (nestedDataPayload) sources.push(nestedDataPayload)
 
   return sources
 }
@@ -50,6 +62,12 @@ function getNestedString(source: IncomingMessageBody, path: string[]) {
   }
 
   return getString(current)
+}
+
+function getPlainString(value: unknown) {
+  const text = getString(value)
+  if (!text) return ""
+  return getRecord(text) ? "" : text
 }
 
 function getBoolean(value: unknown) {
@@ -90,7 +108,16 @@ function getIncomingText(body: IncomingMessageBody) {
     const directText =
       getString(source["mensagem-texto"]) ||
       getString(source.text) ||
+      getString(source.texto) ||
+      getString(source.mensagem) ||
       getString(source.content) ||
+      getPlainString(source.body) ||
+      getNestedString(source, ["data", "message", "conversation"]) ||
+      getNestedString(source, ["data", "message", "extendedTextMessage", "text"]) ||
+      getNestedString(source, ["data", "message", "imageMessage", "caption"]) ||
+      getNestedString(source, ["data", "message", "videoMessage", "caption"]) ||
+      getNestedString(source, ["data", "message", "documentMessage", "caption"]) ||
+      getNestedString(source, ["message", "text"]) ||
       getNestedString(source, ["message", "conversation"]) ||
       getNestedString(source, ["message", "extendedTextMessage", "text"]) ||
       getNestedString(source, ["message", "imageMessage", "caption"]) ||
@@ -104,7 +131,7 @@ function getIncomingText(body: IncomingMessageBody) {
     const message = source.message
     if (typeof message === "string") return message.trim()
 
-    const image = source["mensagem-imagem"] ?? source.image ?? source.media_url ?? source.public_media_url
+    const image = source["mensagem-imagem"] ?? source.image ?? source.media_url ?? source.public_media_url ?? source.mediaUrl
     const imageText = getString(image)
     if (imageText) return imageText
 
