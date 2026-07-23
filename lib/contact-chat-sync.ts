@@ -1,4 +1,5 @@
-import { getBrazilPhoneVariants, getNullableString, getString, isUuid, onlyDigits, supabaseJson } from "@/lib/supabase-server"
+import { getCanonicalWhatsappChatId, normalizeWhatsappPhone } from "@/lib/phone"
+import { getBrazilPhoneVariants, getNullableString, getString, isUuid, supabaseJson } from "@/lib/supabase-server"
 
 type ContactRow = {
   id: string
@@ -37,19 +38,6 @@ export type ContactChatInput = {
   cityInterest?: unknown
   notes?: unknown
   status?: unknown
-}
-
-export function normalizeWhatsappPhone(value: unknown) {
-  const digits = onlyDigits(getString(value))
-  if (!digits) return ""
-  return digits.startsWith("55") ? digits : `55${digits}`
-}
-
-export function getCanonicalWhatsappChatId(value: unknown) {
-  const text = getString(value)
-  if (text.endsWith("@s.whatsapp.net") || text.endsWith("@g.us")) return text
-  const normalizedPhone = normalizeWhatsappPhone(text)
-  return normalizedPhone ? `${normalizedPhone}@s.whatsapp.net` : ""
 }
 
 function getLocalPhone(value: unknown) {

@@ -11,6 +11,7 @@ import { getFreshSavedSession } from "@/lib/auth-session";
 import { type ChatStatusOption } from "@/lib/chat-status";
 import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, resolveChatTags, type ChatTag } from "@/lib/chat-tags";
 import { createInternalAiMessage, isInternalAiChat } from "@/lib/internal-ai-chat";
+import { getCanonicalWhatsappChatId, onlyPhoneDigits } from "@/lib/phone";
 import { createSupabaseRealtimeSubscription, type SupabasePostgresChangePayload } from "@/lib/supabase-realtime";
 import {
   ChatRecord,
@@ -82,7 +83,7 @@ function wait(milliseconds: number) {
 }
 
 function getPhoneDigits(value: string) {
-  return value.replace(/\D/g, "");
+  return onlyPhoneDigits(value);
 }
 
 function normalizeNewContactChatId(phone: string) {
@@ -90,14 +91,14 @@ function normalizeNewContactChatId(phone: string) {
 
   if (trimmedPhone.includes("@")) return trimmedPhone;
 
-  const digits = getPhoneDigits(trimmedPhone).replace(/^0+/, "");
-  const normalizedDigits = digits.startsWith("55") || (digits.length !== 10 && digits.length !== 11) ? digits : `55${digits}`;
+  const chatId = getCanonicalWhatsappChatId(trimmedPhone);
+  const normalizedDigits = getPhoneDigits(chatId);
 
   if (normalizedDigits.length < 8) {
     throw new Error("Informe um telefone válido.");
   }
 
-  return `${normalizedDigits}@s.whatsapp.net`;
+  return chatId;
 }
 
 function getNewContactSearchTerms(phone: string, chatId: string) {
