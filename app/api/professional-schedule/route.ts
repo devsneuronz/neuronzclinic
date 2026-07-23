@@ -10,7 +10,8 @@ type SupabaseProfessional = {
   name: string | null;
   email: string | null;
   user_id: string | null;
-  metadata: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  user_profile?: { id: string; name: string | null; email: string | null } | null;
 };
 
 type SupabaseProcedure = {
@@ -19,6 +20,11 @@ type SupabaseProcedure = {
   interest: string | null;
   interest_tag_id: string | null;
   status: boolean | null;
+};
+
+type LinkedProcedureRow = {
+  id_professional: string;
+  clinic_procedures?: SupabaseProcedure | null;
 };
 
 type TagRow = {
@@ -132,11 +138,11 @@ async function selectRowsFromFirstAvailableTable<T>(tables: string[], query: Rec
 }
 
 function getProfessionalName(professional: SupabaseProfessional) {
-  return professional.name || professional.email || "Profissional";
+  return professional.user_profile?.name || professional.name || professional.user_profile?.email || professional.email || "Profissional";
 }
 
 function getProfessionalEmail(professional: SupabaseProfessional) {
-  return professional.email || "";
+  return professional.user_profile?.email || professional.email || "";
 }
 
 async function getTagColorsById(tagIds: string[]) {
@@ -167,40 +173,36 @@ async function uniqueProcedures(procedures: SupabaseProcedure[]) {
   }));
 }
 
-function canManageProfessional(viewer: { role: string; email: string }, professional: SupabaseProfessional) {
-  if (viewer.role === "admin") return true;
+function isLinkedProfessional(viewer: { userId: string; email: string }, professional: SupabaseProfessional) {
+  if (viewer.userId && (professional.user_id === viewer.userId || professional.user_profile?.id === viewer.userId)) return true;
   if (!viewer.email) return false;
 
   const professionalEmail = getProfessionalEmail(professional).trim().toLowerCase();
   return Boolean(professionalEmail && professionalEmail === viewer.email);
 }
 
+function canManageProfessional(viewer: { role: string; userId: string; email: string }, professional: SupabaseProfessional) {
+  if (viewer.role === "admin") return true;
+  return isLinkedProfessional(viewer, professional);
+}
+
 async function getProfessionals() {
   return selectRowsFromFirstAvailableTable<SupabaseProfessional>(["professionals"], {
-    select: "id,name,email,user_id,metadata",
-    active: "is.true",
+    select: "id,name,email,user_id,user_profile:user_profiles!professionals_user_id_fkey(id,name,email)",
+    status: "eq.active",
     order: "name.asc",
     limit: 1000,
   });
 }
 
 async function getLinkedProceduresByProfessionalId(professionalId: string) {
-  const [professional] = await selectRows<SupabaseProfessional>("professionals", {
-    select: "id,metadata",
-    id: `eq.${professionalId}`,
-    limit: 1,
-  });
-  const metadata = professional?.metadata && typeof professional.metadata === "object" ? professional.metadata : {};
-  const procedureIds = Array.isArray(metadata.procedure_ids) ? Array.from(new Set(metadata.procedure_ids.map(getString).filter(Boolean))) : [];
-
-  if (procedureIds.length === 0) return [];
-
-  const procedures = await selectRows<SupabaseProcedure>("clinic_procedures", {
-    select: "id,name,interest,interest_tag_id,status",
-    id: `in.(${procedureIds.join(",")})`,
+  const links = await selectRows<LinkedProcedureRow>("professional_procedimentos", {
+    select: "id_professional,clinic_procedures:id_procedimento(id,name,interest,interest_tag_id,status)",
+    id_professional: `eq.${professionalId}`,
     limit: 1000,
   });
 
+  const procedures = links.map((link) => link.clinic_procedures).filter((procedure): procedure is SupabaseProcedure => Boolean(procedure?.id));
   return uniqueProcedures(procedures);
 }
 
@@ -492,17 +494,20 @@ async function replaceRules(agendaId: string, rules: ProfessionalScheduleRule[])
 
 function getViewer(request: NextRequest) {
   const role = normalizeUserRole(request.nextUrl.searchParams.get("role"));
+  const userId = getString(request.nextUrl.searchParams.get("userId"));
   const email = getString(request.nextUrl.searchParams.get("email")).toLowerCase();
-  return { role, email };
+  return { role, userId, email };
 }
 
 export async function GET(request: NextRequest) {
   try {
     const viewer = getViewer(request);
     const requestedProfessionalId = getString(request.nextUrl.searchParams.get("professionalId"));
+    const preferLinkedOnly = request.nextUrl.searchParams.get("preferLinkedOnly") === "true";
     const professionals = await getProfessionals();
     const manageableProfessionals = viewer.role === "admin" ? professionals : professionals.filter((professional) => canManageProfessional(viewer, professional));
-    const selectedProfessional = manageableProfessionals.find((professional) => professional.id === requestedProfessionalId) ?? manageableProfessionals[0] ?? null;
+    const linkedProfessional = manageableProfessionals.find((professional) => isLinkedProfessional(viewer, professional));
+    const selectedProfessional = manageableProfessionals.find((professional) => professional.id === requestedProfessionalId) ?? linkedProfessional ?? (preferLinkedOnly ? null : manageableProfessionals[0] ?? null);
 
     if (!selectedProfessional) {
       return NextResponse.json({

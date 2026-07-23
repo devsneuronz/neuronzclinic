@@ -30,6 +30,7 @@ type AgendaPreviewPayload = {
 
 type ProfessionalAgendaPreviewProps = {
   professionalId?: string;
+  isDoctorCardPreview?: boolean;
 };
 
 type CarouselApi = UseEmblaCarouselType[1];
@@ -165,7 +166,7 @@ function mergeIaRequestBookedSlots({
   return { bookedSlotsByDate: nextSlots, bookedIntervalsByDate: nextIntervals };
 }
 
-export function ProfessionalSchedulePreview({ professionalId }: ProfessionalAgendaPreviewProps) {
+export function ProfessionalSchedulePreview({ professionalId, isDoctorCardPreview = true }: ProfessionalAgendaPreviewProps) {
   const { user, isLoading: isLoadingUser } = useCurrentUser();
   const [agenda, setAgenda] = useState<ProfessionalAgenda | null>(null);
   const [selectedProfessionalId, setSelectedProfessionalId] = useState("");
@@ -176,7 +177,6 @@ export function ProfessionalSchedulePreview({ professionalId }: ProfessionalAgen
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [api, setApi] = useState<CarouselApi>();
-  const isDoctorCardPreview = Boolean(professionalId);
 
   const previewDates = useMemo(() => getNextDates(isDoctorCardPreview ? 7 : 14), [isDoctorCardPreview]);
 
@@ -190,6 +190,8 @@ export function ProfessionalSchedulePreview({ professionalId }: ProfessionalAgen
       email: user.email,
       role: user.role,
     });
+    const userProfileId = user.profileId || user.id || "";
+    if (userProfileId) params.set("userId", userProfileId);
     if (professionalId) params.set("professionalId", professionalId);
 
     setIsLoading(true);
@@ -323,7 +325,8 @@ export function ProfessionalSchedulePreview({ professionalId }: ProfessionalAgen
   }
 
   if (!agenda?.id) {
-    const canStartAgenda = canCreateAgenda || canEditAgenda;
+    const canStartAgenda = canCreateAgenda || canEditAgenda || user?.role === "admin";
+    const startAgendaLabel = canCreateAgenda || user?.role === "admin" ? "Criar agenda" : "Configurar agenda";
 
     return (
       <div className={isDoctorCardPreview ? "space-y-2" : "flex min-h-40 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-muted/20 p-8 text-center"}>
@@ -337,7 +340,7 @@ export function ProfessionalSchedulePreview({ professionalId }: ProfessionalAgen
             onClick={() => setIsDialogOpen(true)}
           >
             <Settings className="h-3.5 w-3.5" />
-            Criar agenda
+            {startAgendaLabel}
           </Button>
         ) : null}
         {isDialogOpen && <ScheduleRulesManagerDialog professionalId={selectedProfessionalId || professionalId} open={isDialogOpen} onOpenChange={handleDialogOpenChange} />}
@@ -356,17 +359,19 @@ export function ProfessionalSchedulePreview({ professionalId }: ProfessionalAgen
         </span>
         <div className="flex items-center gap-2">
           {agenda.status !== "active" && <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800">Inativa</span>}
-          <Button
-            type="button"
-            variant={isDoctorCardPreview ? "ghost" : "outline"}
-            size={isDoctorCardPreview ? "icon-sm" : "sm"}
-            className={isDoctorCardPreview ? "h-7 w-7 rounded-tr-xl" : "gap-2 "}
-            onClick={() => setIsDialogOpen(true)}
-            title="Configurar agenda"
-          >
-            <Settings className="h-3.5 w-3.5" />
-            {!isDoctorCardPreview && "Configurar"}
-          </Button>
+          {canEditAgenda && (
+            <Button
+              type="button"
+              variant={isDoctorCardPreview ? "ghost" : "outline"}
+              size={isDoctorCardPreview ? "icon-sm" : "sm"}
+              className={isDoctorCardPreview ? "h-7 w-7 rounded-tr-xl" : "gap-2 "}
+              onClick={() => setIsDialogOpen(true)}
+              title="Configurar agenda"
+            >
+              <Settings className="h-3.5 w-3.5" />
+              {!isDoctorCardPreview && "Configurar"}
+            </Button>
+          )}
         </div>
       </div>
 

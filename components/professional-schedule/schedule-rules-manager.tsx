@@ -159,14 +159,16 @@ export function ScheduleRulesManagerDialog({ professionalId, open, onOpenChange 
 
   const viewerEmail = user?.email ?? "";
   const viewerRole = user?.role ?? "user";
+  const viewerUserId = user?.profileId || user?.id || "";
   const isAdmin = viewerRole === "admin";
 
   const viewerQuery = useMemo(() => {
     const params = new URLSearchParams();
     if (viewerEmail) params.set("email", viewerEmail);
     if (viewerRole) params.set("role", viewerRole);
+    if (viewerUserId) params.set("userId", viewerUserId);
     return params.toString();
-  }, [viewerEmail, viewerRole]);
+  }, [viewerEmail, viewerRole, viewerUserId]);
 
   const selectedProfessional = useMemo(() => professionals.find((professional) => professional.id === selectedProfessionalId), [professionals, selectedProfessionalId]);
   const validation = useMemo(() => validateAgendaRules(rules), [rules]);
@@ -345,6 +347,12 @@ export function ScheduleRulesManagerDialog({ professionalId, open, onOpenChange 
                   <SkeletonShimmer className="h-[68px] w-full rounded-lg border border-border/40 " />
                 </div>
               </aside>
+            </div>
+          ) : error ? (
+            <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-2 p-6 text-center">
+              <Stethoscope className="h-8 w-8 text-destructive" />
+              <p className="text-sm font-semibold text-foreground">Nao foi possivel carregar esta agenda.</p>
+              <p className="max-w-md rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2.5 text-xs font-medium text-destructive">{error}</p>
             </div>
           ) : !user ? (
             <div className="p-6 text-sm text-muted-foreground">Entre no sistema para configurar agendas.</div>

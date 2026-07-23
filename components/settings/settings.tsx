@@ -165,6 +165,18 @@ export default function SettingsPage() {
 
   const { user, isLoading } = useCurrentUser();
   const isAdmin = user?.role === "admin";
+  const currentUserProfessional = useMemo(() => {
+    const currentUserId = user?.profileId || user?.id || "";
+    const currentUserEmail = user?.email?.trim().toLowerCase() || "";
+
+    return (
+      professionals.find((professional) => {
+        if (currentUserId && professional.user_id === currentUserId) return true;
+        return Boolean(currentUserEmail && professional.email.trim().toLowerCase() === currentUserEmail);
+      }) ?? null
+    );
+  }, [professionals, user?.email, user?.id, user?.profileId]);
+  const isProfessionalUser = Boolean(currentUserProfessional);
 
   return (
     <div className="flex h-screen w-full flex-col bg-background overflow-hidden">
@@ -189,7 +201,7 @@ export default function SettingsPage() {
                       <span>Geral</span>
                     </TabsTrigger>
 
-                    {!isAdmin && (
+                    {isProfessionalUser && (
                       <TabsTrigger value="minha-agenda" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
                         <CalendarClock className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
                         <span>Minha agenda</span>
@@ -248,7 +260,7 @@ export default function SettingsPage() {
                     </CardContent>
                   </Card>
                 </TabsContent>
-                {!isAdmin && (
+                {isProfessionalUser && (
                   <TabsContent value="minha-agenda" className="w-full flex-1 flex justify-center overflow-hidden p-6 data-[state=inactive]:hidden! data-[state=active]:flex">
                     <Card className="w-full max-w-7xl border border-border bg-card shadow-sm flex flex-col">
                       <CardHeader className="space-y-1 shrink-0">
@@ -256,7 +268,7 @@ export default function SettingsPage() {
                         <CardDescription className="text-sm text-muted-foreground">Configure seus horários e veja os procedimentos vinculados ao seu cadastro profissional.</CardDescription>
                       </CardHeader>
                       <CardContent className="flex min-h-0 flex-1 overflow-hidden">
-                        <ProfessionalSchedulePreview />
+                        <ProfessionalSchedulePreview professionalId={currentUserProfessional?.id} isDoctorCardPreview={false} />
                       </CardContent>
                     </Card>
                   </TabsContent>
