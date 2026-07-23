@@ -18,9 +18,10 @@ type IaRequestRow = {
 };
 type ProcedureRow = { id: string; name: string | null; interest: string | null; modality?: string | null };
 type ProfessionalScheduleRow = { id: string; id_profissional: string | null };
-type ProfessionalRow = { id: string; name: string | null; email: string | null; user_id: string | null };
+type ProfessionalRow = { id: string; name: string | null; email: string | null; user_id: string | null; user_profile?: { name: string | null; email: string | null } | null };
 type ScheduleRuleRow = { id: string; weekday: string | null };
 type SchedulePeriodRow = { start_time: string; end_time: string; slot_duration_minutes: number | null };
+type AppointmentStatusRow = { id: string; status: string };
 type AppointmentRow = {
   id: string;
   professional_id: string | null;
@@ -47,6 +48,7 @@ type IaRequestBody = {
 const weekdayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 const blockingBookingStatuses = new Set(["blocked", "scheduled", "confirmed"]);
 const DEFAULT_STATUS_ID = "30ab85a3-b35d-4065-b173-a6a029a4b58f";
+const DEFAULT_WAITING_STATUS_LABEL = "Aguardando";
 
 function hasOwn(object: object, key: keyof IaRequestBody) {
   return Object.prototype.hasOwnProperty.call(object, key);
@@ -78,6 +80,16 @@ function normalizeStatus(value: string) {
     .trim();
 }
 
+function getProfessionalName(professional: ProfessionalRow) {
+  return professional.user_profile?.name || professional.name || professional.user_profile?.email || professional.email || "Profissional";
+}
+
+function normalizeAppointmentModality(value: string | null | undefined) {
+  const normalized = normalizeStatus(value || "");
+  if (normalized === "online") return "Online";
+  return "Presencial";
+}
+
 function getIaRequestActionKind(action: string) {
   const normalized = normalizeStatus(action);
   if (normalized === "agendamento") return "agendamento";
@@ -101,7 +113,7 @@ async function getViewerProfessionalId({ userId, email }: { userId: string; emai
   if (email) conditions.push(`email.eq.${encodeURIComponent(email)}`);
   if (conditions.length === 0) return "";
 
-  const rows = await supabaseJson<ProfessionalRow[]>(`professionals?select=id,email,user_id&active=is.true&or=(${conditions.join(",")})&limit=1`);
+  const rows = await supabaseJson<ProfessionalRow[]>(`professionals?select=id,email,user_id,user_profile:user_profiles!professionals_user_id_fkey(name,email)&status=eq.active&or=(${conditions.join(",")})&limit=1`);
   return rows[0]?.id || "";
 }
 
@@ -118,8 +130,8 @@ async function getProfessionalNamesByScheduleId(records: IaRequestRow[]) {
   const professionalIds = Array.from(new Set(Array.from(professionalIdByScheduleId.values()).filter(Boolean)));
   if (professionalIds.length === 0) return new Map<string, string>();
 
-  const professionals = await supabaseJson<ProfessionalRow[]>(`professionals?select=id,name,email&id=in.(${professionalIds.map(encodeURIComponent).join(",")})`);
-  const professionalNameById = new Map(professionals.map((professional) => [professional.id, professional.name || professional.email || "Profissional"]));
+  const professionals = await supabaseJson<ProfessionalRow[]>(`professionals?select=id,name,email,user_id,user_profile:user_profiles!professionals_user_id_fkey(name,email)&id=in.(${professionalIds.map(encodeURIComponent).join(",")})`);
+  const professionalNameById = new Map(professionals.map((professional) => [professional.id, getProfessionalName(professional)]));
   return new Map(Array.from(professionalIdByScheduleId.entries()).map(([scheduleId, professionalId]) => [scheduleId, professionalNameById.get(professionalId) || ""]));
 }
 
@@ -203,6 +215,14 @@ async function getAppointmentDurationMinutes(request: IaRequestRow, chosenDate: 
   return Number(period?.slot_duration_minutes) > 0 ? Number(period?.slot_duration_minutes) : 60;
 }
 
+async function getAppointmentStatusId(statusLabel: string) {
+  const rows = await supabaseJson<AppointmentStatusRow[]>(
+    `appointment_status?select=id,status&status=eq.${encodeURIComponent(statusLabel)}&limit=1`,
+  );
+
+  return rows[0]?.id || DEFAULT_STATUS_ID;
+}
+
 async function assertNoBookingConflict(scheduleId: string, startDate: Date, endDate: Date, sourceToIgnore: string) {
   const rows = await supabaseJson<BookingRow[]>(
     `professional_schedule_bookings?select=id,appointment_id,source,status,starts_at,ends_at&professional_schedule_id=eq.${encodeURIComponent(scheduleId)}&starts_at=lt.${encodeURIComponent(endDate.toISOString())}&ends_at=gt.${encodeURIComponent(startDate.toISOString())}&limit=20`,
@@ -242,13 +262,14 @@ async function confirmIaRequest(id: string) {
   const chatRowId = await getChatRowId(request.chat_id || "");
   if (!chatRowId) throw new Error("Chat do contato nao encontrado para criar o agendamento.");
   const observations = [request.situation, request.context].filter(Boolean).join("\n\n");
+  const waitingStatusId = await getAppointmentStatusId(DEFAULT_WAITING_STATUS_LABEL);
   const [appointment] = await supabaseJson<AppointmentRow[]>("appointments?select=id,appointment_status_id,modality,appointment_procedure_type_id,dataHoraInicio,dataHoraFim,professional_id,chat_id,observacoes", {
     method: "POST",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify({
-      appointment_status_id: DEFAULT_STATUS_ID,
+      appointment_status_id: waitingStatusId,
       appointment_procedure_type_id: null,
-      modality: procedure?.modality || "Presencial",
+      modality: normalizeAppointmentModality(procedure?.modality),
       dataHoraInicio: startDate.toISOString(),
       dataHoraFim: endDate.toISOString(),
       professional_id: schedule.id_profissional,

@@ -14,6 +14,7 @@ type ProfessionalRow = {
   name: string | null;
   email: string | null;
   user_id: string | null;
+  user_profile?: { name: string | null; email: string | null } | null;
 };
 
 type AgendaRow = {
@@ -49,14 +50,7 @@ type AppointmentRow = {
   chats?: { id: string; nome_contato: string | null; phone_contact: string | null; chat_id: string | null } | null;
 };
 
-type ContactRow = {
-  id: string;
-  chat_id: string | null;
-  alt_chat_id: string | null;
-  name: string | null;
-  phone: string | null;
-};
-type ChatRow = { id: string; chat_id: string | null; phone_contact: string | null };
+type ChatRow = { id: string; chat_id: string | null; nome_contato?: string | null; phone_contact: string | null };
 
 type IaRequestRow = {
   id: string;
@@ -194,11 +188,11 @@ async function findOrCreateChatRowId(body: Record<string, unknown>) {
 }
 
 function getProfessionalEmail(professional: ProfessionalRow) {
-  return professional.email || "";
+  return professional.user_profile?.email || professional.email || "";
 }
 
 function getProfessionalName(professional: ProfessionalRow) {
-  return professional.name || professional.email || "Profissional";
+  return professional.user_profile?.name || professional.name || professional.user_profile?.email || professional.email || "Profissional";
 }
 
 function isActiveIaRequest(row: IaRequestRow) {
@@ -214,8 +208,8 @@ function canManageProfessional(viewer: { role: string; email: string }, professi
 
 async function getProfessionals() {
   return selectRows<ProfessionalRow>("professionals", {
-    select: "id,name,email,user_id",
-    active: "is.true",
+    select: "id,name,email,user_id,user_profile:user_profiles!professionals_user_id_fkey(name,email)",
+    status: "eq.active",
     order: "name.asc",
     limit: 1000,
   });
@@ -324,6 +318,8 @@ function mapBooking(row: BookingRow, professional: ProfessionalRow, appointment?
     patient: isAppointment ? appointment?.chats?.nome_contato || appointment?.chats?.phone_contact || "Paciente sem nome" : "Bloqueio",
     phone: appointment?.chats?.phone_contact || "",
     observations: appointment?.observacoes || row.source || "manual",
+    source: row.source || "professional_schedule_booking",
+    appointmentId: row.appointment_id || "",
   };
 }
 
@@ -366,7 +362,7 @@ async function mapBookingsForProfessionals(rows: BookingRow[], professionalsById
 async function mapIaRequestIntentions(rows: IaRequestRow[], professional: ProfessionalRow, agendaId: string, bookingsBySource: Map<string, BookingRow>) {
   const activeRows = rows.filter((row) => row.chosen_date && isActiveIaRequest(row));
   const procedureIds = Array.from(new Set(activeRows.map((row) => row.procedure_id).filter((id): id is string => Boolean(id))));
-  const contactIds = Array.from(new Set(activeRows.map((row) => row.chat_id).filter((id): id is string => typeof id === "string" && isUuid(id))));
+  const chatIds = Array.from(new Set(activeRows.map((row) => row.chat_id).filter((id): id is string => typeof id === "string" && isUuid(id))));
 
   const rules = activeRows.length
     ? await selectRows<RuleRow>("professional_schedule_rules", {
@@ -377,7 +373,7 @@ async function mapIaRequestIntentions(rows: IaRequestRow[], professional: Profes
       })
     : [];
   const ruleIds = rules.map((rule) => rule.id);
-  const [procedures, contacts, periods] = await Promise.all([
+  const [procedures, chats, periods] = await Promise.all([
     procedureIds.length > 0
       ? selectRows<ProcedureRow>("clinic_procedures", {
           select: "id,name,interest",
@@ -385,10 +381,10 @@ async function mapIaRequestIntentions(rows: IaRequestRow[], professional: Profes
           limit: 1000,
         })
       : Promise.resolve([]),
-    contactIds.length > 0
-      ? selectRows<ContactRow>("contacts", {
-          select: "id,chat_id,alt_chat_id,name,phone",
-          id: `in.(${contactIds.map(encodeURIComponent).join(",")})`,
+    chatIds.length > 0
+      ? selectRows<ChatRow>("chats", {
+          select: "id,chat_id,nome_contato,phone_contact",
+          id: `in.(${chatIds.map(encodeURIComponent).join(",")})`,
           limit: 1000,
         })
       : Promise.resolve([]),
@@ -404,7 +400,7 @@ async function mapIaRequestIntentions(rows: IaRequestRow[], professional: Profes
   ]);
 
   const procedureById = new Map(procedures.map((procedure) => [procedure.id, procedure]));
-  const contactById = new Map(contacts.map((contact) => [contact.id, contact]));
+  const chatById = new Map(chats.map((chat) => [chat.id, chat]));
   const ruleById = new Map(rules.map((rule) => [rule.id, rule]));
 
   function getDuration(row: IaRequestRow, startDate: Date) {
@@ -425,7 +421,7 @@ async function mapIaRequestIntentions(rows: IaRequestRow[], professional: Profes
     const booking = bookingsBySource.get(`ia_request:${row.id}`);
     const endDate = Number.isNaN(startDate.getTime()) ? null : booking?.ends_at ? new Date(booking.ends_at) : new Date(startDate.getTime() + getDuration(row, startDate) * 60_000);
     const procedure = row.procedure_id ? procedureById.get(row.procedure_id) : null;
-    const contact = row.chat_id ? contactById.get(row.chat_id) : null;
+    const chat = row.chat_id ? chatById.get(row.chat_id) : null;
 
     return {
       id: `ia-request:${row.id}`,
@@ -436,9 +432,9 @@ async function mapIaRequestIntentions(rows: IaRequestRow[], professional: Profes
       endDateTime: endDate ? endDate.toISOString() : row.chosen_date || "",
       professionalId: professional.id,
       professional: getProfessionalName(professional),
-      patientId: contact?.id || "",
-      patient: contact?.name || contact?.phone || "Intenção de agendamento",
-      phone: contact?.phone || "",
+      patientId: chat?.id || "",
+      patient: chat?.nome_contato || chat?.phone_contact || chat?.chat_id || "Intencao de agendamento",
+      phone: chat?.phone_contact || "",
       observations: [row.situation, row.context].filter(Boolean).join("\n\n") || row.action || "Intenção de agendamento criada pela IA.",
       source: "ia_request",
       iaRequestId: row.id,

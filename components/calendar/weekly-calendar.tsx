@@ -10,7 +10,30 @@ import { cn, normalizeText } from "@/lib/utils";
 import { addDays, addMonths, addWeeks, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek, subMonths, subWeeks } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { motion, type Variants } from "framer-motion";
-import { AlertTriangle, Calendar1, CalendarDays, CalendarIcon, CalendarPlus, ChevronLeft, ChevronRight, Circle, Clock, Columns3, List, Loader2, Phone, Pin, Plus, Search, SquarePen, Stethoscope, Trash2, User, UserPlus } from "lucide-react";
+import {
+  AlertTriangle,
+  Calendar1,
+  CalendarDays,
+  CalendarIcon,
+  CalendarPlus,
+  ChevronLeft,
+  ChevronRight,
+  Circle,
+  Clock,
+  Columns3,
+  List,
+  Loader2,
+  Phone,
+  Pin,
+  Plus,
+  Search,
+  Sparkles,
+  SquarePen,
+  Stethoscope,
+  Trash2,
+  User,
+  UserPlus,
+} from "lucide-react";
 
 import type { MouseEvent } from "react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -18,9 +41,28 @@ import { Calendar } from "../ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { SkeletonShimmer } from "../ui/skeleton-shimmer";
 import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { AppointmentCreationDialog } from "./appointment-creation-dialog";
 
 type ViewType = "Mês" | "Semana" | "Dia" | "Lista";
+
+type ProfessionalSchedulePeriod = {
+  id: string;
+  procedureId: string;
+  procedureName: string;
+  procedureColor?: string;
+  enabled: boolean;
+  startTime: string;
+  endTime: string;
+  slotDurationMinutes: number;
+};
+
+type ProfessionalScheduleRule = {
+  id: string;
+  weekday: string;
+  isOpen: boolean;
+  periods: ProfessionalSchedulePeriod[];
+};
 
 export type CalendarAppointment = {
   id: string;
@@ -35,6 +77,9 @@ export type CalendarAppointment = {
   patient: string;
   phone: string;
   observations: string;
+  source?: string;
+  iaRequestId?: string;
+  appointmentId?: string;
 };
 
 export type AppointmentOptions = {
@@ -189,6 +234,64 @@ function getAppointmentStyle(appointment: CalendarAppointment) {
     top: Math.max(4, relativeMinutes * correctHeightAspect + 2),
     height: Math.max(44, durationMinutes * correctHeightAspect - 4),
   };
+}
+
+function getSameSlotLayout(appointment: CalendarAppointment, dayAppointments: CalendarAppointment[]) {
+  const startDate = getAppointmentDate(appointment)?.getTime() ?? 0;
+  const endDate = getAppointmentEndDate(appointment)?.getTime() ?? startDate;
+  const sameSlotAppointments = dayAppointments.filter((item) => {
+    const itemStartDate = getAppointmentDate(item)?.getTime() ?? 0;
+    const itemEndDate = getAppointmentEndDate(item)?.getTime() ?? itemStartDate;
+    return itemStartDate === startDate && itemEndDate === endDate;
+  });
+  const count = sameSlotAppointments.length;
+  const index = Math.max(
+    0,
+    sameSlotAppointments.findIndex((item) => item.id === appointment.id),
+  );
+
+  if (count <= 1) return { left: "4px", right: "4px" };
+
+  return {
+    left: `calc(${(index / count) * 100}% + 4px)`,
+    right: `calc(${((count - index - 1) / count) * 100}% + 4px)`,
+  };
+}
+
+function timeLabelToMinutes(time: string) {
+  const [hourText = "0", minuteText = "0"] = time.slice(0, 5).split(":");
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  return hour * 60 + minute;
+}
+
+function getTimeBlockStyle(startTime: string, endTime: string) {
+  const visibleStartMinutes = dayStartHour * 60;
+  const startMinutes = timeLabelToMinutes(startTime);
+  const endMinutes = timeLabelToMinutes(endTime);
+  const relativeMinutes = startMinutes - visibleStartMinutes;
+  const durationMinutes = Math.max(slotStepMinutes, endMinutes - startMinutes);
+
+  return {
+    top: Math.max(0, relativeMinutes * correctHeightAspect + 2),
+    height: Math.max(28, durationMinutes * correctHeightAspect - 4),
+  };
+}
+
+function getAvailabilityColor(period: ProfessionalSchedulePeriod) {
+  return /^#[0-9a-f]{6}$/i.test(period.procedureColor ?? "") ? (period.procedureColor as string) : "#0d9488";
+}
+
+function mergeCalendarAppointments(regularAppointments: CalendarAppointment[], scheduleAppointments: CalendarAppointment[]) {
+  const regularIds = new Set(regularAppointments.map((appointment) => appointment.id));
+  const extras = scheduleAppointments.filter((appointment) => {
+    if (appointment.source === "appointment" && appointment.appointmentId && regularIds.has(appointment.appointmentId)) return false;
+    return appointment.source !== "appointment";
+  });
+
+  return [...regularAppointments, ...extras].sort((a, b) => {
+    return new Date(a.startDateTime).getTime() - new Date(b.startDateTime).getTime();
+  });
 }
 
 const calendarSkeletonContainerVariants: Variants = {
@@ -391,6 +494,8 @@ export function WeeklyCalendar() {
   const [initialAppointmentPatient, setInitialAppointmentPatient] = useState<{ id: string; label: string } | null>(null);
   const [professionalBookingMode, setProfessionalBookingMode] = useState(false);
   const [professionalBookingContext, setProfessionalBookingContext] = useState<{ professionalId: string; label: string } | null>(null);
+  const [professionalContextResolved, setProfessionalContextResolved] = useState(false);
+  const [professionalScheduleRules, setProfessionalScheduleRules] = useState<ProfessionalScheduleRule[]>([]);
 
   const range = useMemo(() => getRange(currentDate, activeView), [activeView, currentDate]);
   const professionalLabels = useMemo(() => new Map(options.professionals.map((professional) => [professional.id, professional.label])), [options.professionals]);
@@ -405,6 +510,22 @@ export function WeeklyCalendar() {
 
     return Array.from({ length }, (_, index) => addDays(start, index));
   }, [activeView, currentDate, range.start]);
+
+  const aiAvailabilityByDate = useMemo(() => {
+    const weekdayKeys = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const rulesByWeekday = new Map(professionalScheduleRules.map((rule) => [rule.weekday, rule]));
+    const blocksByDate = new Map<string, ProfessionalSchedulePeriod[]>();
+
+    for (const day of visibleDays) {
+      const rule = rulesByWeekday.get(weekdayKeys[day.getDay()]);
+      if (!rule?.isOpen) continue;
+
+      const blocks = rule.periods.filter((period) => period.enabled && timeLabelToMinutes(period.startTime) < timeLabelToMinutes(period.endTime));
+      if (blocks.length > 0) blocksByDate.set(getDateKey(day), blocks);
+    }
+
+    return blocksByDate;
+  }, [professionalScheduleRules, visibleDays]);
 
   const filteredAppointments = useMemo(() => {
     const patientQuery = normalizeText(patientFilter);
@@ -450,20 +571,28 @@ export function WeeklyCalendar() {
       if (!optionsConfig?.silent) setIsLoadingOptions(true);
 
       try {
+        const appointmentOptionsParams = new URLSearchParams();
+        if (user?.email) appointmentOptionsParams.set("email", user.email);
+        if (user?.role) appointmentOptionsParams.set("role", user.role);
+        if (professionalBookingContext?.professionalId) appointmentOptionsParams.set("professionalId", professionalBookingContext.professionalId);
+        const appointmentOptionsUrl = `/api/appointment-options${appointmentOptionsParams.size ? `?${appointmentOptionsParams.toString()}` : ""}`;
+
         if (professionalBookingMode && professionalBookingContext) {
+          const response = await fetch(appointmentOptionsUrl);
+          const data = (await response.json()) as Partial<AppointmentOptions>;
           const nextOptions = {
-            status: ["scheduled", "confirmed", "cancelled"],
-            types: ["Consulta"],
-            attendanceModes: ["Manual"],
+            status: Array.isArray(data.status) && data.status.length > 0 ? data.status : ["scheduled", "confirmed", "cancelled"],
+            types: Array.isArray(data.types) && data.types.length > 0 ? data.types : ["Consulta"],
+            attendanceModes: Array.isArray(data.attendanceModes) && data.attendanceModes.length > 0 ? data.attendanceModes : ["Manual"],
             professionals: [{ id: professionalBookingContext.professionalId, label: professionalBookingContext.label }],
-            patients: [],
+            patients: Array.isArray(data.patients) ? data.patients : [],
           };
 
           setOptions(nextOptions);
           return nextOptions;
         }
 
-        const response = await fetch("/api/appointment-options");
+        const response = await fetch(appointmentOptionsUrl);
         const data = (await response.json()) as Partial<AppointmentOptions>;
         const nextOptions = {
           status: Array.isArray(data.status) ? data.status : [],
@@ -482,14 +611,20 @@ export function WeeklyCalendar() {
         if (!optionsConfig?.silent) setIsLoadingOptions(false);
       }
     },
-    [professionalBookingContext, professionalBookingMode],
+    [professionalBookingContext, professionalBookingMode, user],
   );
 
   useEffect(() => {
-    if (isLoadingUser || !user?.email || user.role !== "user") {
+    queueMicrotask(() => setProfessionalContextResolved(false));
+
+    if (isLoadingUser) return;
+
+    if (!user?.email) {
       const resetTimer = window.setTimeout(() => {
         setProfessionalBookingMode(false);
         setProfessionalBookingContext(null);
+        setProfessionalScheduleRules([]);
+        setProfessionalContextResolved(true);
       }, 0);
       return () => window.clearTimeout(resetTimer);
     }
@@ -497,28 +632,37 @@ export function WeeklyCalendar() {
     let isActive = true;
     const timer = window.setTimeout(() => {
       const params = new URLSearchParams({ email: user.email, role: user.role });
+      const viewerUserId = user.profileId || user.id || "";
+      if (viewerUserId) params.set("userId", viewerUserId);
+      if ((user.role === "admin" || user.role === "manager") && professionalFilter !== allValue) params.set("professionalId", professionalFilter);
+      else params.set("preferLinkedOnly", "true");
 
-      fetch(`/api/professional-agendas?${params.toString()}`, { cache: "no-store" })
+      fetch(`/api/professional-schedule?${params.toString()}`, { cache: "no-store" })
         .then(async (response) => (response.ok ? response.json() : null))
-        .then((payload: { agenda?: { id?: string | null; professionalName?: string; professionalId?: string } | null; selectedProfessionalId?: string } | null) => {
+        .then((payload: { agenda?: { id?: string | null; professionalName?: string; professionalId?: string; rules?: ProfessionalScheduleRule[] } | null; selectedProfessionalId?: string } | null) => {
           if (!isActive) return;
 
           const professionalId = payload?.selectedProfessionalId || payload?.agenda?.professionalId || "";
           if (payload?.agenda?.id && professionalId) {
-            setProfessionalBookingMode(true);
+            setProfessionalBookingMode(user.role === "user");
             setProfessionalBookingContext({
               professionalId,
               label: payload.agenda.professionalName || "Minha agenda",
             });
+            setProfessionalScheduleRules(Array.isArray(payload.agenda.rules) ? payload.agenda.rules : []);
           } else {
             setProfessionalBookingMode(false);
             setProfessionalBookingContext(null);
+            setProfessionalScheduleRules([]);
           }
+          setProfessionalContextResolved(true);
         })
         .catch(() => {
           if (!isActive) return;
           setProfessionalBookingMode(false);
           setProfessionalBookingContext(null);
+          setProfessionalScheduleRules([]);
+          setProfessionalContextResolved(true);
         });
     }, 0);
 
@@ -526,7 +670,7 @@ export function WeeklyCalendar() {
       isActive = false;
       window.clearTimeout(timer);
     };
-  }, [isLoadingUser, user?.email, user?.role]);
+  }, [isLoadingUser, professionalFilter, user?.email, user?.id, user?.profileId, user?.role]);
 
   useEffect(() => {
     let isActive = true;
@@ -558,22 +702,40 @@ export function WeeklyCalendar() {
       await Promise.resolve();
       if (!isActive) return;
 
+      if (isLoadingUser || (user?.role === "user" && !professionalContextResolved)) {
+        setIsLoadingAppointments(true);
+        return;
+      }
+
       setIsLoadingAppointments(true);
       setErrorMessage("");
 
       try {
+        const appointmentsParams = new URLSearchParams(params);
+        if (user?.email) appointmentsParams.set("email", user.email);
+        if (user?.role) appointmentsParams.set("role", user.role);
+        if (!professionalBookingMode && professionalFilter !== allValue) appointmentsParams.set("professionalId", professionalFilter);
+
+        const shouldLoadProfessionalBookings = user?.role === "admin" || user?.role === "manager" || professionalBookingMode;
+        const bookingParams = new URLSearchParams(params);
         if (professionalBookingMode && professionalBookingContext) {
-          params.set("email", user?.email ?? "");
-          params.set("role", user?.role ?? "user");
-          params.set("professionalId", professionalBookingContext.professionalId);
+          bookingParams.set("email", user?.email ?? "");
+          bookingParams.set("role", user?.role ?? "user");
+          bookingParams.set("professionalId", professionalBookingContext.professionalId);
+        } else if (shouldLoadProfessionalBookings) {
+          bookingParams.set("email", user?.email ?? "");
+          bookingParams.set("role", user?.role ?? "user");
+          if (professionalFilter !== allValue) bookingParams.set("professionalId", professionalFilter);
         }
 
-        const endpoint = professionalBookingMode ? "/api/professional-agenda-bookings" : "/api/appointments";
-        const response = await fetch(`${endpoint}?${params.toString()}`);
-        const data = (await response.json()) as { appointments?: CalendarAppointment[]; message?: string };
+        const appointmentsResponse = await fetch(`/api/appointments?${appointmentsParams.toString()}`);
+        const appointmentsData = (await appointmentsResponse.json()) as { appointments?: CalendarAppointment[]; message?: string };
+        const scheduleData = shouldLoadProfessionalBookings
+          ? ((await fetch(`/api/professional-schedule-bookings?${bookingParams.toString()}`).then((response) => response.json())) as { appointments?: CalendarAppointment[]; message?: string })
+          : { appointments: [] };
         if (!isActive) return;
-        setAppointments(Array.isArray(data.appointments) ? data.appointments : []);
-        if (data.message) setErrorMessage(data.message);
+        setAppointments(mergeCalendarAppointments(Array.isArray(appointmentsData.appointments) ? appointmentsData.appointments : [], Array.isArray(scheduleData.appointments) ? scheduleData.appointments : []));
+        if (appointmentsData.message || scheduleData.message) setErrorMessage(appointmentsData.message || scheduleData.message || "");
       } catch {
         if (isActive) {
           setAppointments([]);
@@ -589,7 +751,7 @@ export function WeeklyCalendar() {
     return () => {
       isActive = false;
     };
-  }, [professionalBookingContext, professionalBookingMode, range.end, range.start, refreshKey, statusFilter, typeFilter, user?.email, user?.role]);
+  }, [isLoadingUser, professionalBookingContext, professionalBookingMode, professionalContextResolved, professionalFilter, range.end, range.start, refreshKey, statusFilter, typeFilter, user?.email, user?.role]);
 
   function goToPrevious() {
     if (activeView === "Mês") setCurrentDate((date) => subMonths(date, 1));
@@ -656,12 +818,10 @@ export function WeeklyCalendar() {
     setSuccessMessage("");
 
     try {
-      const endpoint = professionalBookingMode ? "/api/professional-agenda-bookings" : "/api/appointments";
+      const endpoint = "/api/appointments";
       const params = new URLSearchParams();
-      if (professionalBookingMode) {
-        params.set("email", user?.email ?? "");
-        params.set("role", user?.role ?? "user");
-      }
+      if (user?.email) params.set("email", user.email);
+      if (user?.role) params.set("role", user.role);
 
       const response = await fetch(`${endpoint}${params.size ? `?${params.toString()}` : ""}`, {
         method: "POST",
@@ -705,7 +865,7 @@ export function WeeklyCalendar() {
     setSuccessMessage("");
 
     try {
-      const response = await fetch("/api/airtable/contacts", {
+      const response = await fetch("/api/contacts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -751,12 +911,13 @@ export function WeeklyCalendar() {
     setSuccessMessage("");
 
     try {
-      const endpoint = professionalBookingMode ? "/api/professional-agenda-bookings" : "/api/appointments";
+      const appointment = editingAppointment ?? appointments.find((item) => item.id === id);
+      const shouldUseProfessionalBookings = Boolean(appointment?.source && appointment.source !== "appointment" && appointment.source !== "ia_request");
+      const endpoint = shouldUseProfessionalBookings ? "/api/professional-schedule-bookings" : "/api/appointments";
       const params = new URLSearchParams({ id });
-      if (professionalBookingMode) {
-        params.set("email", user?.email ?? "");
-        params.set("role", user?.role ?? "user");
-      }
+      if (user?.email) params.set("email", user.email);
+      if (user?.role) params.set("role", user.role);
+      if (shouldUseProfessionalBookings && appointment?.professionalId) params.set("professionalId", appointment.professionalId);
 
       const response = await fetch(`${endpoint}?${params.toString()}`, {
         method: "PATCH",
@@ -801,12 +962,15 @@ export function WeeklyCalendar() {
     setSuccessMessage("");
 
     try {
-      const endpoint = professionalBookingMode ? "/api/professional-agenda-bookings" : "/api/appointments";
+      const appointment = appointments.find((item) => item.id === id) ?? selectedAppointment ?? pendingDeleteAppointment;
+      const shouldUseProfessionalBookings = Boolean(appointment?.source && appointment.source !== "appointment");
+      const endpoint = shouldUseProfessionalBookings ? "/api/professional-schedule-bookings" : "/api/appointments";
       const params = new URLSearchParams({ id });
-      if (professionalBookingMode) {
-        params.set("email", user?.email ?? "");
-        params.set("role", user?.role ?? "user");
-        if (professionalBookingContext?.professionalId) params.set("professionalId", professionalBookingContext.professionalId);
+      if (user?.email) params.set("email", user.email);
+      if (user?.role) params.set("role", user.role);
+      if (shouldUseProfessionalBookings) {
+        const professionalId = appointment?.professionalId || professionalBookingContext?.professionalId;
+        if (professionalId) params.set("professionalId", professionalId);
       }
 
       const response = await fetch(`${endpoint}?${params.toString()}`, {
@@ -831,6 +995,33 @@ export function WeeklyCalendar() {
     }
   };
 
+  const handleConfirmIaRequestAppointment = async (appointment: CalendarAppointment) => {
+    if (!appointment.iaRequestId) return;
+
+    setIsSavingAppointment(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const response = await fetch(`/api/ia-requests?id=${encodeURIComponent(appointment.iaRequestId)}`, {
+        method: "POST",
+      });
+      const data = (await response.json()) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(data.message || "Nao foi possivel confirmar o agendamento.");
+      }
+
+      setSelectedAppointment(null);
+      setSuccessMessage(data.message || "Agendamento confirmado.");
+      setRefreshKey((key) => key + 1);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Nao foi possivel confirmar o agendamento.");
+    } finally {
+      setIsSavingAppointment(false);
+    }
+  };
+
   function requestDeleteAppointment(appointment: CalendarAppointment) {
     setPendingDeleteAppointment(appointment);
   }
@@ -838,14 +1029,25 @@ export function WeeklyCalendar() {
   function renderAppointmentCard(appointment: CalendarAppointment) {
     const startDate = getAppointmentDate(appointment);
     const professional = professionalLabels.get(appointment.professionalId) || appointment.professional;
+    const isIaRequestIntent = appointment.source === "ia_request";
 
     return (
-      <button
+      <div
         key={appointment.id}
-        type="button"
-        className="p-1 gap-2 group flex flex-row h-full max-h-full w-full rounded-md border border-border/70 bg-secondary text-left shadow-sm transition-all hover:ring-2 hover:ring-theme-primary/50 hover:shadow-xl cursor-pointer items-stretch"
+        role="button"
+        tabIndex={0}
+        className={cn(
+          "p-1 gap-2 group flex flex-row h-full max-h-full w-full rounded-md border text-left shadow-sm transition-all hover:ring-2 hover:ring-theme-primary/50 hover:shadow-xl cursor-pointer items-stretch",
+          isIaRequestIntent ? "border-dashed border-blue-700/30 bg-blue-700/5 opacity-75" : "border-border/70 bg-secondary",
+        )}
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => {
+          event.stopPropagation();
+          setSelectedAppointment(appointment);
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
           event.stopPropagation();
           setSelectedAppointment(appointment);
         }}
@@ -871,7 +1073,10 @@ export function WeeklyCalendar() {
           </div>
 
           <div className="mt-auto flex items-center justify-between gap-2 pt-1.5 border-t border-border/30 shrink-0">
-            <span className="truncate text-[10px] font-bold tracking-wider text-primary uppercase">{appointment.type || "Geral"}</span>
+            <span className="inline-flex min-w-0 items-center gap-1 truncate text-[10px] font-bold tracking-wider text-primary uppercase">
+              {isIaRequestIntent ? <Sparkles className="h-3 w-3 shrink-0 text-blue-700" /> : null}
+              <span className="truncate">{appointment.type || "Geral"}</span>
+            </span>
 
             <span
               className="shrink-0 w-fit rounded px-2 py-0.5 text-[10px] font-bold tracking-wide border transition-all"
@@ -885,7 +1090,7 @@ export function WeeklyCalendar() {
             </span>
           </div>
         </div>
-      </button>
+      </div>
     );
   }
 
@@ -1156,6 +1361,7 @@ export function WeeklyCalendar() {
                   </div>
                   {visibleDays.map((day, dayIndex) => {
                     const dayAppointments = appointmentsByDay.get(getDateKey(day)) ?? [];
+                    const aiAvailabilityBlocks = aiAvailabilityByDate.get(getDateKey(day)) ?? [];
                     const daySelection = selection && getDateKey(selection.day) === getDateKey(day) ? selection : null;
                     const selectionTop = daySelection ? (Math.min(daySelection.startMinute, daySelection.endMinute) - dayStartHour * 60) * correctHeightAspect : 0;
                     const selectionHeight = daySelection ? Math.max(slotStepMinutes, Math.abs(daySelection.endMinute - daySelection.startMinute)) * correctHeightAspect : 0;
@@ -1175,6 +1381,37 @@ export function WeeklyCalendar() {
                           <div key={hour} className="h-[90px] border-b border-border" />
                         ))}
 
+                        {aiAvailabilityBlocks.map((period) => {
+                          const style = getTimeBlockStyle(period.startTime, period.endTime);
+                          const color = getAvailabilityColor(period);
+
+                          return (
+                            <div
+                              key={period.id}
+                              className="absolute left-0.5 right-0.5 flex justify-end rounded-md border border-dashed px-1 py-1"
+                              style={{
+                                top: style.top,
+                                height: style.height,
+                                borderColor: color,
+                                backgroundColor: `${color}20`,
+                              }}
+                              title={`${period.procedureName} - IA agenda ${period.startTime} as ${period.endTime}`}
+                            >
+                              <TooltipProvider delayDuration={150}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Sparkles className="h-3 w-3 fill-blue-300 text-blue-300 transition-colors hover:fill-blue-400 hover:text-blue-400" />
+                                  </TooltipTrigger>
+
+                                  <TooltipContent side="top" className="z-[110] px-2.5 py-1 text-xs">
+                                    {`${period.procedureName} - IA agenda ${period.startTime} as ${period.endTime}`}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                          );
+                        })}
+
                         {daySelection && <div className="pointer-events-none absolute left-1 right-1 z-20 rounded-md border border-dashed border-primary bg-primary/15" style={{ top: selectionTop, height: selectionHeight }} />}
 
                         {isLoadingAppointments ? (
@@ -1182,11 +1419,12 @@ export function WeeklyCalendar() {
                         ) : (
                           dayAppointments.map((appointment) => {
                             const style = getAppointmentStyle(appointment);
+                            const slotLayout = getSameSlotLayout(appointment, dayAppointments);
                             return (
                               <div
                                 key={appointment.id}
-                                className="absolute left-1 right-1 z-10"
-                                style={{ top: style.top, height: style.height }}
+                                className="absolute z-10"
+                                style={{ top: style.top, height: style.height, left: slotLayout.left, right: slotLayout.right }}
                                 onMouseDown={(event) => event.stopPropagation()}
                                 onTouchStart={(event) => event.stopPropagation()}
                               >
@@ -1353,38 +1591,82 @@ export function WeeklyCalendar() {
             <>
               <DialogHeader className="flex flex-row justify-between pr-5">
                 <DialogTitle className="flex items-center gap-2 text-base">
-                  <Stethoscope className="h-4 w-4 text-primary" />
+                  {selectedAppointment.source === "ia_request" ? <Sparkles className="h-4 w-4 text-blue-700" /> : <Stethoscope className="h-4 w-4 text-primary" />}
                   {selectedAppointment.type || "Agendamento"}
                 </DialogTitle>
-                <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      if (selectedAppointment) {
-                        openEditAppointmentDialog(selectedAppointment);
-                      }
-                    }}
-                    disabled={isSavingAppointment}
-                    aria-label="Editar"
-                  >
-                    <SquarePen className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    onClick={() => {
-                      if (selectedAppointment) requestDeleteAppointment(selectedAppointment);
-                    }}
-                    disabled={isSavingAppointment}
-                    aria-label="Excluir"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+                {selectedAppointment.source !== "ia_request" && (
+                  <div className="flex gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        if (selectedAppointment) {
+                          openEditAppointmentDialog(selectedAppointment);
+                        }
+                      }}
+                      disabled={isSavingAppointment}
+                      aria-label="Editar"
+                    >
+                      <SquarePen className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      onClick={() => {
+                        if (selectedAppointment) requestDeleteAppointment(selectedAppointment);
+                      }}
+                      disabled={isSavingAppointment}
+                      aria-label="Excluir"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
               </DialogHeader>
 
               <div className="space-y-4">
+                {selectedAppointment.source === "ia_request" && (
+                  <div className="space-y-3 rounded-md border border-blue-700/20 bg-blue-700/5 p-3 text-sm">
+                    <div className="flex items-start gap-2">
+                      <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground">Agendamento sugerido pela IA</p>
+                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Este horario esta reservado temporariamente ate a equipe confirmar ou remover o aviso.</p>
+                      </div>
+                    </div>
+                    <div className="grid gap-2 rounded-md border border-blue-700/10 bg-background/70 p-3 text-xs">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Status</span>
+                        <span className="rounded bg-amber-500/10 px-2 py-0.5 font-semibold text-amber-700 dark:text-amber-300">Aguardando confirmacao</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Profissional</span>
+                        <span className="truncate font-medium text-foreground">{professionalLabels.get(selectedAppointment.professionalId) || selectedAppointment.professional}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Contato</span>
+                        <span className="truncate font-medium text-foreground">{selectedAppointment.patient}</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Button
+                        type="button"
+                        onClick={() => handleConfirmIaRequestAppointment(selectedAppointment)}
+                        disabled={isSavingAppointment || !selectedAppointment.iaRequestId}
+                        className="h-9 flex-1 gap-1.5 bg-blue-800 text-xs text-white hover:bg-blue-900"
+                      >
+                        {isSavingAppointment ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
+                        {isSavingAppointment ? "Confirmando..." : "Confirmar agendamento"}
+                      </Button>
+                      <Button type="button" variant="outline" className="h-9 flex-1 gap-1.5 text-xs" onClick={() => requestDeleteAppointment(selectedAppointment)} disabled={isSavingAppointment}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Remover aviso
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <div className="rounded-md p-1 bg-card flex flex-row gap-1">
                   <div className="min-w-1 min-h-full rounded-full" style={{ backgroundColor: getStatusColorHex(selectedAppointment.status).base }} />
                   <div className="flex items-start justify-between gap-4 p-1 w-full">
