@@ -1,4 +1,4 @@
-import { encodeEq, getBrazilPhoneVariants, getString, isUuid, supabaseJson } from "@/lib/supabase-server"
+import { encodeEq, getBrazilPhoneVariants, getString, isUuid, onlyDigits, supabaseJson } from "@/lib/supabase-server"
 import { NextRequest, NextResponse } from "next/server"
 
 const AI_RECEIVE_MESSAGE_WEBHOOK_URL = process.env.AI_RECEIVE_MESSAGE_WEBHOOK_URL
@@ -167,8 +167,11 @@ function getExternalChatId(body: IncomingMessageBody) {
       getString(source.contact_id) ||
       getString(source.chat_id) ||
       getString(source.remoteJid) ||
+      getString(source.remoteJidAlt) ||
       getString(key?.remoteJid) ||
+      getString(key?.remoteJidAlt) ||
       getNestedString(source, ["data", "key", "remoteJid"]) ||
+      getNestedString(source, ["data", "key", "remoteJidAlt"]) ||
       getString(source.phone_contact) ||
       getString(source.sessionId)
 
@@ -176,6 +179,27 @@ function getExternalChatId(body: IncomingMessageBody) {
   }
 
   return ""
+}
+
+function getChatIdCandidates(externalChatId: string) {
+  const candidates = new Set<string>()
+  const normalized = externalChatId.trim()
+  const digits = onlyDigits(normalized)
+
+  if (normalized) candidates.add(normalized)
+  if (digits) {
+    candidates.add(digits)
+    candidates.add(`${digits}@s.whatsapp.net`)
+    candidates.add(`${digits}@c.us`)
+  }
+
+  for (const phone of getBrazilPhoneVariants(normalized)) {
+    candidates.add(phone)
+    candidates.add(`${phone}@s.whatsapp.net`)
+    candidates.add(`${phone}@c.us`)
+  }
+
+  return Array.from(candidates).filter(Boolean)
 }
 
 async function fetchChatByFilter(filter: string) {
@@ -192,7 +216,8 @@ async function fetchChat(body: IncomingMessageBody) {
 
   const externalChatId = getExternalChatId(body)
   if (externalChatId) {
-    const directFilters = [`chat_id=eq.${encodeEq(externalChatId)}`, `lid_id=eq.${encodeEq(externalChatId)}`]
+    const chatIdCandidates = getChatIdCandidates(externalChatId)
+    const directFilters = chatIdCandidates.flatMap((candidate) => [`chat_id=eq.${encodeEq(candidate)}`, `lid_id=eq.${encodeEq(candidate)}`])
     if (isUuid(externalChatId)) directFilters.push(`contact_id=eq.${encodeEq(externalChatId)}`)
 
     for (const filter of directFilters) {
@@ -200,8 +225,10 @@ async function fetchChat(body: IncomingMessageBody) {
       if (chat) return chat
     }
 
-    for (const phone of getBrazilPhoneVariants(externalChatId)) {
-      const chat = await fetchChatByFilter(`phone_contact=ilike.${encodeURIComponent(`*${phone}*`)}`)
+    for (const candidate of chatIdCandidates) {
+      const digits = onlyDigits(candidate)
+      const searchValue = digits || candidate
+      const chat = await fetchChatByFilter(`or=(chat_id.ilike.${encodeURIComponent(`*${searchValue}*`)},lid_id.ilike.${encodeURIComponent(`*${searchValue}*`)},phone_contact.ilike.${encodeURIComponent(`*${searchValue}*`)})`)
       if (chat) return chat
     }
   }
