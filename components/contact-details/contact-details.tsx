@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { getChatStatusColor, type ChatStatusOption } from "@/lib/chat-status";
 import type { ChatTag } from "@/lib/chat-tags";
 import { ChatRecord, type ChatStateOverride } from "@/lib/supabase-rest";
@@ -160,6 +161,9 @@ export function ContactDetails({
       setIsDeletingChat(false);
     }
   }
+
+  const { user } = useCurrentUser();
+  const isAdmin = user?.role === "admin";
 
   return (
     <div className="flex h-full w-full flex-col border-l border-border bg-card">
@@ -340,33 +344,35 @@ export function ContactDetails({
               </div>
             </div>
             {/* IA */}
-            <div className="flex flex-col items-center gap-1 shrink-0">
-              <Button
-                variant="outline"
-                className={cn("border-2 shadow-sm transition-all text-xs text-foreground cursor-pointer", view !== "profile" && "text-(--chat-primary)")}
-                onClick={() => {
-                  if (!chat?.ia_responde) {
-                    onToggleIA();
+            {isAdmin && (
+              <div className="flex flex-col items-center gap-1 shrink-0">
+                <Button
+                  variant="outline"
+                  className={cn("border-2 shadow-sm transition-all text-xs text-foreground cursor-pointer", view !== "profile" && "text-(--chat-primary)")}
+                  onClick={() => {
+                    if (!chat?.ia_responde) {
+                      onToggleIA();
 
-                    setTimeout(() => {
-                      setView((prev) => (prev === "profile" ? "training" : "profile"));
-                    }, 180);
+                      setTimeout(() => {
+                        setView((prev) => (prev === "profile" ? "training" : "profile"));
+                      }, 180);
 
-                    return;
-                  }
+                      return;
+                    }
 
-                  setView((prev) => (prev === "profile" ? "training" : "profile"));
-                }}
-              >
-                Treine sua IA
-                <Bot />
-              </Button>
+                    setView((prev) => (prev === "profile" ? "training" : "profile"));
+                  }}
+                >
+                  Treine sua IA
+                  <Bot />
+                </Button>
 
-              <div className="flex flex-row items-center gap-2">
-                <span className="text-[10px] font-medium text-muted-foreground tracking-wider">IA neste contato</span>
-                <Switch checked={!!chat?.ia_responde} onCheckedChange={onToggleIA} />
+                <div className="flex flex-row items-center gap-2">
+                  <span className="text-[10px] font-medium text-muted-foreground tracking-wider">IA neste contato</span>
+                  <Switch checked={!!chat?.ia_responde} onCheckedChange={onToggleIA} />
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 

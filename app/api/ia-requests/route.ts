@@ -142,14 +142,14 @@ async function filterIaRequestsForViewer(records: IaRequestRow[], searchParams: 
   const userId = getString(searchParams.get("userId"));
   const email = getString(searchParams.get("email")).toLowerCase();
   const viewerProfessionalId = await getViewerProfessionalId({ userId, email });
-  const professionalIdByScheduleId = await getScheduleProfessionalIds(records);
-
-  if (!viewerProfessionalId) {
-    return records.filter((record) => !record.professional_schedule_id && getIaRequestActionKind(record.action || "") === "aviso");
-  }
+  const schedulingRecords = records.filter((record) => getIaRequestActionKind(record.action || "") === "agendamento" && record.professional_schedule_id);
+  const professionalIdByScheduleId = viewerProfessionalId ? await getScheduleProfessionalIds(schedulingRecords) : new Map<string, string>();
 
   return records.filter((record) => {
-    if (!record.professional_schedule_id) return false;
+    const actionKind = getIaRequestActionKind(record.action || "");
+    if (actionKind === "aviso" || actionKind === "intencao") return true;
+    if (actionKind !== "agendamento" || !viewerProfessionalId || !record.professional_schedule_id) return false;
+
     return professionalIdByScheduleId.get(record.professional_schedule_id) === viewerProfessionalId;
   });
 }
@@ -336,7 +336,7 @@ export async function GET(request: Request) {
         ? await supabaseJson<ProcedureRow[]>(`clinic_procedures?select=id,name,interest&id=in.(${procedureIds.map(encodeURIComponent).join(",")})`)
         : [];
     const proceduresById = new Map(procedures.map((procedure) => [procedure.id, procedure]));
-    const professionalNameByScheduleId = role === "admin" ? await getProfessionalNamesByScheduleId(visibleRecords) : new Map<string, string>();
+    const professionalNameByScheduleId = role === "admin" || role === "manager" ? await getProfessionalNamesByScheduleId(visibleRecords) : new Map<string, string>();
 
     return NextResponse.json({ requests: visibleRecords.map((record) => mapIaRequest(record, proceduresById, professionalNameByScheduleId)) });
   } catch (error) {

@@ -2,6 +2,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import type { ChatRecord } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
@@ -44,6 +45,8 @@ export function ChatHeader({
   isAssistantChat = false,
 }: ChatHeaderProps) {
   const hasContactPhoto = !!chat.url_foto_perfil;
+  const { user } = useCurrentUser();
+  const isAdmin = user?.role === "admin";
 
   return (
     <div className="flex items-center justify-between border-b border-border bg-card px-4 min-h-15.25">
@@ -103,26 +106,31 @@ export function ChatHeader({
             </div>
           </div>
 
-          {!isAssistantChat && <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" className="h-9 w-9 border-2 px-0 text-xs text-foreground shadow-sm transition-all md:w-auto md:px-4" onClick={onOpenManualRoutines} aria-label="Executar automacao manual">
-              <span className="hidden md:inline">Rotinas</span>
-              <Play className="h-4 w-4" />
-            </Button>
-            {
-              <Button type="button" variant="outline" className="w-9 h-9 md:w-fit md:px-4 md:py-2 border-2 shadow-sm transition-all text-xs text-foreground cursor-pointer gap-1.5" onClick={onOpenIATraining}>
-                <span className="hidden md:inline">Treinar IA</span>
-                <Bot className="h-4 w-4" />
-              </Button>
-            }
-            <Button onClick={onToggleStatus} className="cursor-pointer bg-theme-primary font-medium text-white hover:bg-theme-primary/80 h-9 w-9 px-0 md:h-9 md:w-auto md:px-4">
-              <div className="md:hidden">{chat.finalizada ? <RotateCcw className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}</div>
+          {!isAssistantChat && (
+            <div className="flex items-center gap-2">
+              {isAdmin && (
+                <>
+                  <Button type="button" variant="outline" className="h-9 w-9 border-2 px-0 text-xs text-foreground shadow-sm transition-all md:w-auto md:px-4" onClick={onOpenManualRoutines} aria-label="Executar automacao manual">
+                    <span className="hidden md:inline">Rotinas</span>
+                    <Play className="h-4 w-4" />
+                  </Button>
+                  <Button type="button" variant="outline" className="w-9 h-9 md:w-fit md:px-4 md:py-2 border-2 shadow-sm transition-all text-xs text-foreground cursor-pointer gap-1.5" onClick={onOpenIATraining}>
+                    <span className="hidden md:inline">Treinar IA</span>
+                    <Bot className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
 
-              <span className="hidden md:inline">{chat.finalizada ? "Reabrir" : "Finalizar"}</span>
-            </Button>
-            <Button onClick={onToggleDetails} variant="ghost" size="icon" className="cursor-pointer text-muted-foreground hover:text-foreground">
-              <Info className="h-5 w-5" />
-            </Button>
-          </div>}
+              <Button onClick={onToggleStatus} className="cursor-pointer bg-theme-primary font-medium text-white hover:bg-theme-primary/80 h-9 w-9 px-0 md:h-9 md:w-auto md:px-4">
+                <div className="md:hidden">{chat.finalizada ? <RotateCcw className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}</div>
+
+                <span className="hidden md:inline">{chat.finalizada ? "Reabrir" : "Finalizar"}</span>
+              </Button>
+              <Button onClick={onToggleDetails} variant="ghost" size="icon" className="cursor-pointer text-muted-foreground hover:text-foreground">
+                <Info className="h-5 w-5" />
+              </Button>
+            </div>
+          )}
         </>
       )}
     </div>
