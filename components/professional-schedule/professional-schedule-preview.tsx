@@ -1,29 +1,49 @@
 "use client";
 
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { generateProcedureSlots, ProfessionalAgenda, WEEKDAYS } from "@/lib/schedule/professional-agenda";
+import type { IaRequest } from "@/lib/ia-request";
+import { generateProcedureSlots, ProfessionalAgenda, WEEKDAYS } from "@/lib/professional-schedule";
 import { cn } from "@/lib/utils";
 import type { UseEmblaCarouselType } from "embla-carousel-react";
-import { CalendarClock, ChevronLeft, ChevronRight, Settings } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, Lock, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "../ui/button";
 import { Carousel, CarouselContent, CarouselItem } from "../ui/carousel";
 import { SkeletonShimmer } from "../ui/skeleton-shimmer";
-import { AgendaRulesManagerDialog } from "./agenda-rules-manager";
+import { ScheduleRulesManagerDialog } from "./schedule-rules-manager";
+
+type PreviewSlot = {
+  time: string;
+  procedureName: string;
+  color: string;
+};
 
 type AgendaPreviewPayload = {
   agenda: ProfessionalAgenda | null;
   bookedSlotsByDate?: Record<string, string[]>;
   bookedIntervalsByDate?: Record<string, Array<{ start: string; end: string }>>;
   selectedProfessionalId?: string;
+  canCreateAgenda?: boolean;
+  canEditAgenda?: boolean;
   message?: string;
 };
 
 type ProfessionalAgendaPreviewProps = {
   professionalId?: string;
+  isDoctorCardPreview?: boolean;
 };
 
 type CarouselApi = UseEmblaCarouselType[1];
+
+function isActiveIaRequestStatus(status: string) {
+  const normalized = status
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+  return !["confirmed", "confirmado", "done", "completed", "resolved", "resolvido", "concluido", "concluído", "canceled", "cancelled", "cancelado"].includes(normalized);
+}
 
 function getLocalIsoDate(date: Date) {
   const year = date.getFullYear();
@@ -45,16 +65,33 @@ function getWeekdayFromIsoDate(date: string) {
   return WEEKDAYS[new Date(year, month - 1, day).getDay()];
 }
 
-function getSlotsForDate(agenda: ProfessionalAgenda, date: string) {
+function isHexColor(value?: string) {
+  return /^#[0-9a-f]{6}$/i.test(value ?? "");
+}
+
+function getSlotColor(color?: string) {
+  return isHexColor(color) ? (color as string) : "#0d9488";
+}
+
+function getSlotsForDate(agenda: ProfessionalAgenda, date: string): PreviewSlot[] {
   const weekday = getWeekdayFromIsoDate(date);
   const rule = agenda.rules.find((item) => item.weekday === weekday);
   if (!rule?.isOpen) return [];
 
-  return rule.periods
-    .filter((period) => period.enabled)
-    .flatMap(generateProcedureSlots)
-    .filter((time, index, slots) => slots.indexOf(time) === index)
-    .sort();
+  const slotsByTime = new Map<string, PreviewSlot>();
+
+  for (const period of rule.periods.filter((item) => item.enabled)) {
+    for (const time of generateProcedureSlots(period)) {
+      if (slotsByTime.has(time)) continue;
+      slotsByTime.set(time, {
+        time,
+        procedureName: period.procedureName,
+        color: getSlotColor(period.procedureColor),
+      });
+    }
+  }
+
+  return Array.from(slotsByTime.values()).sort((a, b) => a.time.localeCompare(b.time));
 }
 
 function formatDayLabel(date: string) {
@@ -81,66 +118,166 @@ function isSlotBooked(slot: string, bookedSlots: Set<string>, bookedIntervals: A
   });
 }
 
-export function ProfessionalAgendaPreview({ professionalId }: ProfessionalAgendaPreviewProps) {
+function localDateAndTimeFromIso(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+
+  return {
+    date: `${get("year")}-${get("month")}-${get("day")}`,
+    time: `${get("hour")}:${get("minute")}`,
+  };
+}
+
+function mergeIaRequestBookedSlots({
+  requests,
+  agendaId,
+  bookedSlotsByDate,
+  bookedIntervalsByDate,
+}: {
+  requests: IaRequest[];
+  agendaId: string;
+  bookedSlotsByDate: Record<string, string[]>;
+  bookedIntervalsByDate: Record<string, Array<{ start: string; end: string }>>;
+}) {
+  const nextSlots = { ...bookedSlotsByDate };
+  const nextIntervals = { ...bookedIntervalsByDate };
+
+  for (const request of requests) {
+    if (!request.chosenDate || request.professionalScheduleId !== agendaId || !isActiveIaRequestStatus(request.status)) continue;
+
+    const local = localDateAndTimeFromIso(request.chosenDate);
+    if (!local?.date || !local.time) continue;
+
+    nextSlots[local.date] = Array.from(new Set([...(nextSlots[local.date] ?? []), local.time]));
+    nextIntervals[local.date] = nextIntervals[local.date] ?? [];
+  }
+
+  return { bookedSlotsByDate: nextSlots, bookedIntervalsByDate: nextIntervals };
+}
+
+export function ProfessionalSchedulePreview({ professionalId, isDoctorCardPreview = true }: ProfessionalAgendaPreviewProps) {
   const { user, isLoading: isLoadingUser } = useCurrentUser();
   const [agenda, setAgenda] = useState<ProfessionalAgenda | null>(null);
   const [selectedProfessionalId, setSelectedProfessionalId] = useState("");
   const [bookedSlotsByDate, setBookedSlotsByDate] = useState<Record<string, string[]>>({});
   const [bookedIntervalsByDate, setBookedIntervalsByDate] = useState<Record<string, Array<{ start: string; end: string }>>>({});
+  const [canCreateAgenda, setCanCreateAgenda] = useState(false);
+  const [canEditAgenda, setCanEditAgenda] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [api, setApi] = useState<CarouselApi>();
-  const isDoctorCardPreview = Boolean(professionalId);
 
   const previewDates = useMemo(() => getNextDates(isDoctorCardPreview ? 7 : 14), [isDoctorCardPreview]);
 
   const scrollPrev = useCallback(() => api?.scrollPrev(), [api]);
   const scrollNext = useCallback(() => api?.scrollNext(), [api]);
-
-  useEffect(() => {
+  const loadAgenda = useCallback(() => {
     if (!user?.email || isLoadingUser) return;
 
     let isActive = true;
-    const timer = window.setTimeout(() => {
-      const params = new URLSearchParams({
-        email: user.email,
-        role: user.role,
-      });
-      if (professionalId) params.set("professionalId", professionalId);
+    const params = new URLSearchParams({
+      email: user.email,
+      role: user.role,
+    });
+    const userProfileId = user.profileId || user.id || "";
+    if (userProfileId) params.set("userId", userProfileId);
+    if (professionalId) params.set("professionalId", professionalId);
 
-      setIsLoading(true);
+    setIsLoading(true);
 
-      fetch(`/api/professional-agendas?${params.toString()}`, { cache: "no-store" })
-        .then(async (response) => {
-          if (!response.ok) throw new Error("Nao foi possivel carregar a agenda.");
-          return (await response.json()) as AgendaPreviewPayload;
-        })
-        .then((payload) => {
-          if (!isActive) return;
+    fetch(`/api/professional-schedule?${params.toString()}`, { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Nao foi possivel carregar a agenda.");
+        return (await response.json()) as AgendaPreviewPayload;
+      })
+      .then((payload) => {
+        if (!isActive) return;
 
-          setAgenda(payload.agenda ?? null);
-          setSelectedProfessionalId(payload.selectedProfessionalId ?? payload.agenda?.professionalId ?? professionalId ?? "");
-          setBookedSlotsByDate(payload.bookedSlotsByDate ?? {});
-          setBookedIntervalsByDate(payload.bookedIntervalsByDate ?? {});
-        })
-        .catch(() => {
-          if (!isActive) return;
+        setAgenda(payload.agenda ?? null);
+        setSelectedProfessionalId(payload.selectedProfessionalId ?? payload.agenda?.professionalId ?? professionalId ?? "");
+        setCanCreateAgenda(Boolean(payload.canCreateAgenda));
+        setCanEditAgenda(Boolean(payload.canEditAgenda));
 
-          setAgenda(null);
-          setSelectedProfessionalId("");
-          setBookedSlotsByDate({});
-          setBookedIntervalsByDate({});
-        })
-        .finally(() => {
-          if (isActive) setIsLoading(false);
+        const agendaId = payload.agenda?.id ?? "";
+        const baseBookedSlots = payload.bookedSlotsByDate ?? {};
+        const baseBookedIntervals = payload.bookedIntervalsByDate ?? {};
+        setBookedSlotsByDate(baseBookedSlots);
+        setBookedIntervalsByDate(baseBookedIntervals);
+        if (!agendaId) {
+          return;
+        }
+
+        const iaParams = new URLSearchParams({
+          email: user.email,
+          role: user.role,
         });
-    }, 0);
+        if (user.id) iaParams.set("userId", user.id);
+
+        fetch(`/api/ia-requests?${iaParams.toString()}`, { cache: "no-store" })
+          .then(async (response) => (response.ok ? ((await response.json()) as { requests?: IaRequest[] }) : { requests: [] }))
+          .then((iaPayload) => {
+            if (!isActive) return;
+            const merged = mergeIaRequestBookedSlots({
+              requests: Array.isArray(iaPayload.requests) ? iaPayload.requests : [],
+              agendaId,
+              bookedSlotsByDate: baseBookedSlots,
+              bookedIntervalsByDate: baseBookedIntervals,
+            });
+            setBookedSlotsByDate(merged.bookedSlotsByDate);
+            setBookedIntervalsByDate(merged.bookedIntervalsByDate);
+          })
+          .catch(() => {
+            if (!isActive) return;
+            setBookedSlotsByDate(baseBookedSlots);
+            setBookedIntervalsByDate(baseBookedIntervals);
+          });
+      })
+      .catch(() => {
+        if (!isActive) return;
+
+        setAgenda(null);
+        setSelectedProfessionalId("");
+        setBookedSlotsByDate({});
+        setBookedIntervalsByDate({});
+        setCanCreateAgenda(false);
+        setCanEditAgenda(false);
+      })
+      .finally(() => {
+        if (isActive) setIsLoading(false);
+      });
 
     return () => {
       isActive = false;
+    };
+  }, [isLoadingUser, professionalId, user]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      loadAgenda();
+    }, 0);
+
+    return () => {
       window.clearTimeout(timer);
     };
-  }, [isLoadingUser, professionalId, user?.email, user?.role]);
+  }, [loadAgenda]);
+
+  function handleDialogOpenChange(open: boolean) {
+    setIsDialogOpen(open);
+    if (!open) {
+      window.setTimeout(() => loadAgenda(), 0);
+    }
+  }
 
   if (isLoadingUser || isLoading) {
     const skeletonDays = Array.from({ length: isDoctorCardPreview ? 3 : 6 }, (_, i) => i + 1);
@@ -188,9 +325,25 @@ export function ProfessionalAgendaPreview({ professionalId }: ProfessionalAgenda
   }
 
   if (!agenda?.id) {
+    const canStartAgenda = canCreateAgenda || canEditAgenda || user?.role === "admin";
+    const startAgendaLabel = canCreateAgenda || user?.role === "admin" ? "Criar agenda" : "Configurar agenda";
+
     return (
-      <div className={isDoctorCardPreview ? "" : "flex min-h-40 items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 p-8 text-center"}>
+      <div className={isDoctorCardPreview ? "space-y-2" : "flex min-h-40 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-muted/20 p-8 text-center"}>
         <p className={isDoctorCardPreview ? "rounded-md border border-dashed border-border bg-muted/20 px-3 py-2 text-[11px] font-medium text-muted-foreground" : "text-sm font-medium text-muted-foreground"}>Agenda ainda nao criada.</p>
+        {canStartAgenda ? (
+          <Button
+            type="button"
+            variant={isDoctorCardPreview ? "outline" : "primary"}
+            size={isDoctorCardPreview ? "sm" : "default"}
+            className={isDoctorCardPreview ? "h-8 w-full gap-1.5 text-[11px]" : "gap-2"}
+            onClick={() => setIsDialogOpen(true)}
+          >
+            <Settings className="h-3.5 w-3.5" />
+            {startAgendaLabel}
+          </Button>
+        ) : null}
+        {isDialogOpen && <ScheduleRulesManagerDialog professionalId={selectedProfessionalId || professionalId} open={isDialogOpen} onOpenChange={handleDialogOpenChange} />}
       </div>
     );
   }
@@ -206,17 +359,19 @@ export function ProfessionalAgendaPreview({ professionalId }: ProfessionalAgenda
         </span>
         <div className="flex items-center gap-2">
           {agenda.status !== "active" && <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800">Inativa</span>}
-          <Button
-            type="button"
-            variant={isDoctorCardPreview ? "ghost" : "outline"}
-            size={isDoctorCardPreview ? "icon-sm" : "sm"}
-            className={isDoctorCardPreview ? "h-7 w-7 rounded-tr-xl" : "gap-2 "}
-            onClick={() => setIsDialogOpen(true)}
-            title="Configurar agenda"
-          >
-            <Settings className="h-3.5 w-3.5" />
-            {!isDoctorCardPreview && "Configurar"}
-          </Button>
+          {canEditAgenda && (
+            <Button
+              type="button"
+              variant={isDoctorCardPreview ? "ghost" : "outline"}
+              size={isDoctorCardPreview ? "icon-sm" : "sm"}
+              className={isDoctorCardPreview ? "h-7 w-7 rounded-tr-xl" : "gap-2 "}
+              onClick={() => setIsDialogOpen(true)}
+              title="Configurar agenda"
+            >
+              <Settings className="h-3.5 w-3.5" />
+              {!isDoctorCardPreview && "Configurar"}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -259,22 +414,27 @@ export function ProfessionalAgendaPreview({ professionalId }: ProfessionalAgenda
                         <div className="rounded-lg border border-dashed border-border py-1.5 text-center text-xs font-medium text-muted-foreground">--</div>
                       ) : (
                         slots.map((slot) => {
-                          const isBooked = isSlotBooked(slot, bookedSlots, bookedIntervals);
+                          const isBooked = isSlotBooked(slot.time, bookedSlots, bookedIntervals);
 
                           return (
                             <button
-                              key={slot}
+                              key={slot.time}
                               type="button"
                               disabled={isBooked}
-                              className={
-                                isBooked
-                                  ? "block w-full cursor-not-allowed rounded-lg border border-rose-200 bg-rose-50/50 py-1.5 text-center text-[11px] font-semibold text-rose-700 line-through opacity-70"
-                                  : "block w-full rounded-lg border border-theme-primary/15 bg-theme-primary/10 py-1.5 text-center text-[11px] font-semibold text-theme-primary transition-all hover:bg-theme-primary hover:text-white"
-                              }
-                              title={isBooked ? "Horario ocupado" : "Horario disponivel"}
+                              className={cn(
+                                "relative flex items-center justify-center gap-1 w-full rounded-lg py-1.5 text-center text-[11px] font-semibold transition-all duration-200 border",
+                                isBooked ? "cursor-not-allowed text-muted-foreground/60 select-none line-through opacity-35" : "active:scale-[0.98]",
+                              )}
+                              style={{
+                                borderColor: `${slot.color}40`,
+                                backgroundColor: `${slot.color}1a`,
+                                color: slot.color,
+                              }}
+                              title={isBooked ? "Horário ocupado" : `${slot.procedureName} disponível`}
                             >
-                              {slot}
-                              {!isDoctorCardPreview && isBooked ? " ocupado" : ""}
+                              {!isDoctorCardPreview && isBooked && <Lock className="h-3 w-3 text-muted-foreground/40 shrink-0" />}
+
+                              <span>{slot.time}</span>
                             </button>
                           );
                         })
@@ -288,7 +448,7 @@ export function ProfessionalAgendaPreview({ professionalId }: ProfessionalAgenda
         </Carousel>
       </div>
 
-      {isDialogOpen && <AgendaRulesManagerDialog professionalId={selectedProfessionalId || professionalId} open={isDialogOpen} onOpenChange={setIsDialogOpen} />}
+      {isDialogOpen && <ScheduleRulesManagerDialog professionalId={selectedProfessionalId || professionalId} open={isDialogOpen} onOpenChange={handleDialogOpenChange} />}
     </div>
   );
 }

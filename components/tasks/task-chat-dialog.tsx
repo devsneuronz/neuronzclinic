@@ -6,7 +6,7 @@ import type { ContactInfoValues } from "@/components/contact-details/profile-vie
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useChatOptions } from "@/hooks/use-chat-options";
 import type { ChatStatusOption } from "@/lib/chat-status";
-import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, type ChatTag } from "@/lib/chat-tags";
+import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, resolveChatTags, type ChatTag } from "@/lib/chat-tags";
 import { deleteMessages, fetchChats, fetchMessages, forwardMessages, sendMessage, updateChatDetails, type ChatRecord, type MessageRecord } from "@/lib/supabase-rest";
 import type { Task } from "@/lib/task";
 import { Loader2 } from "lucide-react";
@@ -295,7 +295,7 @@ export function TaskChatDialog({ task, open, onOpenChange, forwardTargets }: Tas
   const handleToggleTag = useCallback(
     async (tag: ChatTag) => {
       if (!chat) return;
-      const currentTags = getChatTags(chat);
+      const currentTags = resolveChatTags(getChatTags(chat), tagOptions);
       const tagKey = getTagKey(tag);
       const hasTag = currentTags.some((t) => getTagKey(t) === tagKey);
       const nextTags = hasTag ? currentTags.filter((t) => getTagKey(t) !== tagKey) : [...currentTags, tag];
@@ -318,13 +318,13 @@ export function TaskChatDialog({ task, open, onOpenChange, forwardTargets }: Tas
         setError(err instanceof Error ? err.message : "Não foi possível salvar as tags do contato.");
       }
     },
-    [chat],
+    [chat, tagOptions],
   );
 
   const handleToggleInterest = useCallback(
     async (interest: ChatTag) => {
       if (!chat) return;
-      const currentInterests = getChatInterestTags(chat);
+      const currentInterests = resolveChatTags(getChatInterestTags(chat), interestOptions.length > 0 ? interestOptions : tagOptions);
       const interestKey = getTagKey(interest);
       const hasInterest = currentInterests.some((i) => getTagKey(i) === interestKey);
       const nextInterests = hasInterest ? currentInterests.filter((i) => getTagKey(i) !== interestKey) : [...currentInterests, interest];
@@ -342,7 +342,7 @@ export function TaskChatDialog({ task, open, onOpenChange, forwardTargets }: Tas
         setError(err instanceof Error ? err.message : "Não foi possível salvar os interesses do contato.");
       }
     },
-    [chat],
+    [chat, interestOptions, tagOptions],
   );
 
   const handleChangeName = useCallback(

@@ -62,12 +62,14 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
   const [errorMessage, setErrorMessage] = useState("");
   const [assistantName, setAssistantName] = useState("IA");
   const chatId = chat?.chat_id || "";
+  const chatRowId = chat?.id || "";
 
   useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams();
 
     if (chatId) params.set("chatId", chatId);
+    if (chatRowId) params.set("chatRowId", chatRowId);
     if (contactPhone) params.set("contactPhone", contactPhone);
 
     queueMicrotask(() => {
@@ -76,7 +78,7 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
       setErrorMessage("");
     });
 
-    fetch(`/api/airtable/interaction-history${params.size > 0 ? `?${params.toString()}` : ""}`, {
+    fetch(`/api/interaction-history${params.size > 0 ? `?${params.toString()}` : ""}`, {
       cache: "no-store",
       signal: controller.signal,
     })
@@ -109,7 +111,7 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
       });
 
     return () => controller.abort();
-  }, [chatId, contactPhone]);
+  }, [chatId, chatRowId, contactPhone]);
 
   async function handleQualityChange(interactionId: string, quality: string) {
     if (quality === EMPTY_QUALITY_VALUE) return;
@@ -122,7 +124,7 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
     setTrainingData((current) => current.map((item) => (item.id === interactionId ? { ...item, quality: nextQuality } : item)));
 
     try {
-      const response = await fetch("/api/airtable/interaction-history", {
+      const response = await fetch("/api/interaction-history", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -212,7 +214,7 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
         throw new Error(sendData.message || "Não foi possível enviar a mensagem corrigida ao chat.");
       }
 
-      const airtableResponse = await fetch("/api/airtable/interaction-history", {
+      const interactionHistoryResponse = await fetch("/api/interaction-history", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -220,10 +222,10 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
         cache: "no-store",
         body: JSON.stringify({ id: item.id, correctedResponse }),
       });
-      const airtableData = (await airtableResponse.json()) as { interaction?: TrainingInteraction; message?: string };
+      const interactionHistoryData = (await interactionHistoryResponse.json()) as { interaction?: TrainingInteraction; message?: string };
 
-      if (!airtableResponse.ok) {
-        throw new Error(airtableData.message || "Mensagem enviada, mas não foi possível salvar a correção no Airtable.");
+      if (!interactionHistoryResponse.ok) {
+        throw new Error(interactionHistoryData.message || "Mensagem enviada, mas nao foi possivel salvar a correcao no historico de interacoes.");
       }
 
       setTrainingData((current) =>
@@ -231,7 +233,7 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
           interaction.id === item.id
             ? {
                 ...interaction,
-                correctedResponse: airtableData.interaction?.correctedResponse || correctedResponse,
+                correctedResponse: interactionHistoryData.interaction?.correctedResponse || correctedResponse,
               }
             : interaction,
         ),

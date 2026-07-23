@@ -347,7 +347,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
   useEffect(() => {
     let isMounted = true;
 
-    fetch("/api/airtable/appointment-options")
+    fetch("/api/appointment-options")
       .then((response) => response.json() as Promise<Partial<AppointmentOptions>>)
       .then((data) => {
         if (!isMounted) return;
@@ -384,7 +384,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
     if (chatId) params.set("chatId", chatId);
     if (phone) params.set("contactPhone", phone);
 
-    fetch(`/api/airtable/appointments?${params.toString()}`)
+    fetch(`/api/appointments?${params.toString()}`)
       .then((response) => response.json() as Promise<{ appointments?: LatestAppointment[]; latestAppointment?: LatestAppointment | null }>)
       .then((data) => {
         if (!isMounted) return;
@@ -541,7 +541,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
     setIsCreatingAppointment(true);
 
     try {
-      const response = await fetch("/api/airtable/appointments", {
+      const response = await fetch("/api/appointments", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

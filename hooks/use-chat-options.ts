@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { getChatStatusLabel, normalizeStatusColor, sortStatusOptions, type ChatStatusOption } from "@/lib/chat-status";
-import { getChatTags, getChatInterestTags, type ChatTag } from "@/lib/chat-tags";
+import { getChatTags, getChatInterestTags, resolveChatTags, type ChatTag } from "@/lib/chat-tags";
 import type { ChatRecord } from "@/lib/supabase-rest";
 
 function getFallbackStatusOptions(chats: ChatRecord[]) {
@@ -98,7 +98,9 @@ export function useChatOptions(chats: ChatRecord[] = []) {
     return apiTagOptions.length > 0 ? apiTagOptions : fallbackTagOptions;
   }, [apiTagOptions, fallbackTagOptions]);
 
-  const interestOptions = fallbackInterestOptions;
+  const interestOptions = useMemo(() => {
+    return resolveChatTags(fallbackInterestOptions, tagOptions).sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }));
+  }, [fallbackInterestOptions, tagOptions]);
 
   return {
     statusOptions,

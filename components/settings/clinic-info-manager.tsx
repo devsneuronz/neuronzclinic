@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { useCurrentUser } from "@/hooks/use-current-user";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getReadableTextColor } from "@/lib/chat-tags";
 import { cn, normalizeText } from "@/lib/utils";
@@ -46,7 +45,6 @@ export type SupabaseProcedure = {
   valor_consulta: string;
   valor_procedimento: string;
   agendas_contexto_ia: string;
-  interest_tag_id?: string | null;
   interesse: string;
   created_at: string;
 };
@@ -64,13 +62,19 @@ type ProcedureDraft = {
   valor_avaliacao: string;
   valor_consulta: string;
   valor_procedimento: string;
-  interest_tag_id: string;
   interesse: string;
+};
+
+type ProcedureScheduleOption = {
+  id: string;
+  professionalName: string;
+  slots: string[];
+  selected: boolean;
 };
 
 const emptyAssistant: SupabaseAssistantInfo = {
   id: null,
-  name: "Lia",
+  name: "Ia",
   gender: "ia",
   emoji: true,
   dados_empresa: "",
@@ -93,7 +97,6 @@ const emptyProcedureDraft: ProcedureDraft = {
   valor_avaliacao: "",
   valor_consulta: "",
   valor_procedimento: "",
-  interest_tag_id: "",
   interesse: "",
 };
 
@@ -111,7 +114,6 @@ function procedureToDraft(p: SupabaseProcedure): ProcedureDraft {
     valor_avaliacao: p.valor_avaliacao || "",
     valor_consulta: p.valor_consulta || "",
     valor_procedimento: p.valor_procedimento || "",
-    interest_tag_id: p.interest_tag_id || "",
     interesse: p.interesse || "",
   };
 }
@@ -130,7 +132,6 @@ function draftToPayload(draft: ProcedureDraft) {
     valor_avaliacao: draft.informar_valor_avaliacao ? draft.valor_avaliacao || null : null,
     valor_consulta: draft.informar_valor_consulta ? draft.valor_consulta || null : null,
     valor_procedimento: draft.informar_valor_procedimento ? draft.valor_procedimento || null : null,
-    interest_tag_id: draft.interest_tag_id || null,
     interesse: draft.interesse || null,
   };
 }
@@ -146,7 +147,7 @@ interface ProcedureDialogProps {
   editTarget?: SupabaseProcedure | null;
   tagOptions: ChatTag[];
   isSaving: boolean;
-  onSubmit: (draft: ProcedureDraft) => Promise<void>;
+  onSubmit: (draft: ProcedureDraft, scheduleIds: string[]) => Promise<void>;
 }
 
 function ProcedureDialog({ open, onOpenChange, editTarget, tagOptions, isSaving, onSubmit }: ProcedureDialogProps) {
@@ -154,6 +155,10 @@ function ProcedureDialog({ open, onOpenChange, editTarget, tagOptions, isSaving,
   const [draft, setDraft] = useState<ProcedureDraft>(emptyProcedureDraft);
   const [interestSearch, setInterestSearch] = useState("");
   const [isInterestOpen, setIsInterestOpen] = useState(false);
+  const [scheduleOptions, setScheduleOptions] = useState<ProcedureScheduleOption[]>([]);
+  const [selectedScheduleIds, setSelectedScheduleIds] = useState<string[]>([]);
+  const [isLoadingSchedules, setIsLoadingSchedules] = useState(false);
+  const [scheduleError, setScheduleError] = useState("");
   const interestRef = useRef<HTMLDivElement>(null);
 
   const MODO_RESPOSTA_INFOS = {
@@ -193,15 +198,53 @@ function ProcedureDialog({ open, onOpenChange, editTarget, tagOptions, isSaving,
   };
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      if (!open) return;
-      setDraft(editTarget ? procedureToDraft(editTarget) : emptyProcedureDraft);
-      setInterestSearch("");
-      setIsInterestOpen(false);
-    }, 0);
-
-    return () => window.clearTimeout(timer);
+    if (open) {
+      queueMicrotask(() => {
+        setDraft(editTarget ? procedureToDraft(editTarget) : emptyProcedureDraft);
+        setInterestSearch("");
+        setIsInterestOpen(false);
+        setScheduleOptions([]);
+        setSelectedScheduleIds([]);
+        setScheduleError("");
+      });
+    }
   }, [open, editTarget]);
+
+  useEffect(() => {
+    if (!open || !editTarget?.id) return;
+
+    let isMounted = true;
+    queueMicrotask(() => {
+      if (!isMounted) return;
+      setIsLoadingSchedules(true);
+      setScheduleError("");
+    });
+
+    fetch(`/api/procedure-schedules?procedureId=${encodeURIComponent(editTarget.id)}`, { cache: "no-store" })
+      .then(async (response) => {
+        const data = (await response.json().catch(() => null)) as { schedules?: ProcedureScheduleOption[]; message?: string } | null;
+        if (!response.ok) throw new Error(data?.message || "Não foi possível carregar agendas.");
+        return data?.schedules ?? [];
+      })
+      .then((schedules) => {
+        if (!isMounted) return;
+        setScheduleOptions(schedules);
+        setSelectedScheduleIds(schedules.filter((schedule) => schedule.selected).map((schedule) => schedule.id));
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setScheduleOptions([]);
+        setSelectedScheduleIds([]);
+        setScheduleError(error instanceof Error ? error.message : "Não foi possível carregar agendas.");
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingSchedules(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [open, editTarget?.id]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -218,13 +261,13 @@ function ProcedureDialog({ open, onOpenChange, editTarget, tagOptions, isSaving,
     return tagOptions.filter((t) => normalizeText(t.label).includes(q));
   }, [interestSearch, tagOptions]);
 
-  const selectedTag = tagOptions.find((t) => t.uuid === draft.interest_tag_id || t.id === draft.interest_tag_id || t.label === draft.interesse);
+  const selectedTag = tagOptions.find((t) => t.label === draft.interesse);
 
   const set = <K extends keyof ProcedureDraft>(key: K, value: ProcedureDraft[K]) => setDraft((d) => ({ ...d, [key]: value }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSubmit(draft);
+    await onSubmit(draft, selectedScheduleIds);
   };
 
   const isValid = draft.nome.trim().length > 0 && draft.info_resposta_ia.trim().length > 0;
@@ -369,7 +412,6 @@ function ProcedureDialog({ open, onOpenChange, editTarget, tagOptions, isSaving,
                     <span
                       onClick={(e) => {
                         e.stopPropagation();
-                        set("interest_tag_id", "");
                         set("interesse", "");
                       }}
                       className="ml-2 text-muted-foreground hover:text-foreground"
@@ -394,12 +436,11 @@ function ProcedureDialog({ open, onOpenChange, editTarget, tagOptions, isSaving,
                             key={tag.id}
                             type="button"
                             onClick={() => {
-                              set("interest_tag_id", tag.uuid || tag.id);
                               set("interesse", tag.label);
                               setIsInterestOpen(false);
                               setInterestSearch("");
                             }}
-                            className={cn("flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent transition-colors text-left", selectedTag?.id === tag.id && "bg-accent")}
+                            className={cn("flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent transition-colors text-left", draft.interesse === tag.label && "bg-accent")}
                           >
                             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: tag.color || "#888" }} />
                             <span className="font-medium">{tag.label}</span>
@@ -465,35 +506,6 @@ function ProcedureDialog({ open, onOpenChange, editTarget, tagOptions, isSaving,
               <div className="rounded-lg border border-border/70 bg-background/40 p-3 space-y-3">
                 <div className="flex items-center justify-between select-none">
                   <div>
-                    <Label className="text-xs font-semibold text-foreground">Informar valor da consulta</Label>
-                    <p className="text-[11px] text-muted-foreground">A IA poderá citar o valor da consulta regular.</p>
-                  </div>
-                  <Switch checked={draft.informar_valor_consulta} onClick={(e) => e.stopPropagation()} onCheckedChange={(v) => set("informar_valor_consulta", v)} disabled={isSaving} />
-                </div>
-
-                {draft.informar_valor_consulta && (
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground pointer-events-none">R$</span>
-                    <NumericFormat
-                      customInput={Input}
-                      value={draft.valor_consulta}
-                      onValueChange={({ formattedValue }) => set("valor_consulta", formattedValue)}
-                      thousandSeparator="."
-                      decimalSeparator=","
-                      decimalScale={2}
-                      fixedDecimalScale
-                      allowNegative={false}
-                      placeholder="250,00"
-                      disabled={isSaving}
-                      className="h-9 pl-9 bg-background/50"
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-lg border border-border/70 bg-background/40 p-3 space-y-3">
-                <div className="flex items-center justify-between select-none">
-                  <div>
                     <Label className="text-xs font-semibold text-foreground">Informar valor do procedimento</Label>
                     <p className="text-[11px] text-muted-foreground">A IA poderá citar o valor do procedimento em si.</p>
                   </div>
@@ -519,6 +531,35 @@ function ProcedureDialog({ open, onOpenChange, editTarget, tagOptions, isSaving,
                   </div>
                 )}
               </div>
+
+              <div className="rounded-lg border border-border/70 bg-background/40 p-3 space-y-3">
+                <div className="flex items-center justify-between select-none">
+                  <div>
+                    <Label className="text-xs font-semibold text-foreground">Informar valor da consulta</Label>
+                    <p className="text-[11px] text-muted-foreground">A IA poderá citar o valor da consulta regular.</p>
+                  </div>
+                  <Switch checked={draft.informar_valor_consulta} onClick={(e) => e.stopPropagation()} onCheckedChange={(v) => set("informar_valor_consulta", v)} disabled={isSaving} />
+                </div>
+
+                {draft.informar_valor_consulta && (
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground pointer-events-none">R$</span>
+                    <NumericFormat
+                      customInput={Input}
+                      value={draft.valor_consulta}
+                      onValueChange={({ formattedValue }) => set("valor_consulta", formattedValue)}
+                      thousandSeparator="."
+                      decimalSeparator=","
+                      decimalScale={2}
+                      fixedDecimalScale
+                      allowNegative={false}
+                      placeholder="250,00"
+                      disabled={isSaving}
+                      className="h-9 pl-9 bg-background/50"
+                    />
+                  </div>
+                )}
+              </div>
             </div>
 
             <Separator className="bg-border/60" />
@@ -526,10 +567,50 @@ function ProcedureDialog({ open, onOpenChange, editTarget, tagOptions, isSaving,
             <div className="space-y-2">
               <h4 className="text-xs font-bold uppercase tracking-wider text-foreground/80">Agendas Vinculadas</h4>
               <p className="text-[11px] text-muted-foreground">Configure as agendas de profissionais disponíveis para este procedimento.</p>
-              <Button type="button" variant="outline" size="sm" className="h-9 gap-2 w-full" disabled>
-                <CalendarSearch className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-muted-foreground">Gerenciar agendas vinculadas</span>
-              </Button>
+              {!isEdit ? (
+                <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3 text-xs text-muted-foreground">Crie o procedimento primeiro para vincular agendas.</div>
+              ) : isLoadingSchedules ? (
+                <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Carregando agendas...
+                </div>
+              ) : scheduleError ? (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">{scheduleError}</div>
+              ) : scheduleOptions.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3 text-xs text-muted-foreground">Nenhuma agenda possui blocos para este procedimento.</div>
+              ) : (
+                <div className="space-y-2">
+                  {scheduleOptions.map((schedule) => {
+                    const checked = selectedScheduleIds.includes(schedule.id);
+                    return (
+                      <button
+                        key={schedule.id}
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => setSelectedScheduleIds((current) => (current.includes(schedule.id) ? current.filter((id) => id !== schedule.id) : [...current, schedule.id]))}
+                        className={cn("flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors", checked ? "border-theme-primary/50 bg-theme-primary/10" : "border-border bg-background/40 hover:bg-muted/30")}
+                      >
+                        <span className={cn("mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border", checked ? "border-theme-primary bg-theme-primary" : "border-border bg-background")}>
+                          {checked ? <span className="h-1.5 w-1.5 rounded-full bg-white" /> : null}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                            <CalendarSearch className="h-3.5 w-3.5 text-muted-foreground" />
+                            {schedule.professionalName}
+                          </span>
+                          <span className="mt-1 flex flex-wrap gap-1">
+                            {schedule.slots.map((slot) => (
+                              <span key={slot} className="rounded border border-border bg-muted/30 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                {slot}
+                              </span>
+                            ))}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
@@ -548,10 +629,11 @@ function ProcedureDialog({ open, onOpenChange, editTarget, tagOptions, isSaving,
   );
 }
 
-export function ClinicInfoManager() {
-  const { user } = useCurrentUser();
-  const userEmail = user?.email ?? "";
-  const userRole = user?.role ?? "user";
+type ClinicInfoManagerProps = {
+  onProceduresChanged?: (procedures: SupabaseProcedure[]) => void;
+};
+
+export function ClinicInfoManager({ onProceduresChanged }: ClinicInfoManagerProps) {
   const [assistant, setAssistant] = useState<SupabaseAssistantInfo>(emptyAssistant);
   const [assistantDraft, setAssistantDraft] = useState<SupabaseAssistantInfo>(emptyAssistant);
   const [procedures, setProcedures] = useState<SupabaseProcedure[]>([]);
@@ -579,37 +661,21 @@ export function ClinicInfoManager() {
     assistantDraft.avisar_agendamento !== assistant.avisar_agendamento ||
     assistantDraft.avisar_encaminhamento !== assistant.avisar_encaminhamento;
 
-  const accessPayload = useMemo(
-    () => ({
-      email: userEmail,
-      role: userRole,
-    }),
-    [userEmail, userRole],
-  );
-
-  const accessQuery = useMemo(() => {
-    const params = new URLSearchParams();
-    if (userEmail) params.set("email", userEmail);
-    if (userRole) params.set("role", userRole);
-    return params.toString();
-  }, [userEmail, userRole]);
-
   async function loadInfo() {
     setIsLoading(true);
     setError(null);
     setSuccess(null);
 
     try {
-      const [assistantRes, proceduresRes, optionsRes] = await Promise.all([fetch("/api/ia-assistant", { cache: "no-store" }), fetch("/api/procedures", { cache: "no-store" }), fetch("/api/chat-options", { cache: "no-store" })]);
+      const [clinicInfoRes, optionsRes] = await Promise.all([fetch("/api/clinic-info", { cache: "no-store" }), fetch("/api/chat-options", { cache: "no-store" })]);
 
-      if (assistantRes.ok) {
-        const data = await assistantRes.json();
-        const list = data.assistants || [];
-        if (list.length > 0) {
-          const a = list[0];
+      if (clinicInfoRes.ok) {
+        const data = await clinicInfoRes.json();
+        const a = data.assistant;
+        if (a) {
           const loaded: SupabaseAssistantInfo = {
             id: a.id || null,
-            name: a.name || "Lia",
+            name: a.name || "Ia",
             gender: a.gender || "ia",
             emoji: a.emoji !== false,
             dados_empresa: a.dados_empresa || "",
@@ -621,10 +687,6 @@ export function ClinicInfoManager() {
           setAssistant(loaded);
           setAssistantDraft(loaded);
         }
-      }
-
-      if (proceduresRes.ok) {
-        const data = await proceduresRes.json();
         setProcedures(data.procedures || []);
       }
 
@@ -644,16 +706,19 @@ export function ClinicInfoManager() {
     return () => window.clearTimeout(id);
   }, []);
 
+  useEffect(() => {
+    onProceduresChanged?.(procedures);
+  }, [onProceduresChanged, procedures]);
+
   async function saveAssistant() {
     setIsSavingAssistant(true);
     setError(null);
     setSuccess(null);
     try {
-      const isNew = !assistant.id;
-      const res = await fetch("/api/ia-assistant", {
-        method: isNew ? "POST" : "PATCH",
+      const res = await fetch("/api/clinic-info", {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...assistantDraft, ...accessPayload }),
+        body: JSON.stringify({ type: "assistant", assistant: assistantDraft }),
       });
       if (!res.ok) throw new Error(await readApiMessage(res, "Não foi possível salvar as informações da assistente."));
       const data = await res.json();
@@ -672,10 +737,10 @@ export function ClinicInfoManager() {
     setIsSavingProcedure(true);
     setError(null);
     try {
-      const res = await fetch("/api/procedures", {
+      const res = await fetch("/api/clinic-info", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...draftToPayload(draft), ...accessPayload }),
+        body: JSON.stringify(draftToPayload(draft)),
       });
       if (!res.ok) throw new Error(await readApiMessage(res, "Não foi possível criar o procedimento."));
       const data = await res.json();
@@ -690,18 +755,24 @@ export function ClinicInfoManager() {
     }
   }
 
-  async function handleUpdateProcedure(draft: ProcedureDraft) {
+  async function handleUpdateProcedure(draft: ProcedureDraft, scheduleIds: string[] = []) {
     if (!editTarget) return;
     setIsSavingProcedure(true);
     setError(null);
     try {
-      const res = await fetch("/api/procedures", {
+      const res = await fetch("/api/clinic-info", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editTarget.id, ...draftToPayload(draft), ...accessPayload }),
+        body: JSON.stringify({ type: "procedure", procedure: { id: editTarget.id, ...draftToPayload(draft) } }),
       });
       if (!res.ok) throw new Error(await readApiMessage(res, "Não foi possível salvar o procedimento."));
       const data = await res.json();
+      const linkResponse = await fetch("/api/procedure-schedules", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ procedureId: editTarget.id, scheduleIds }),
+      });
+      if (!linkResponse.ok) throw new Error(await readApiMessage(linkResponse, "Nao foi possivel vincular agendas."));
       if (data.procedure) {
         setProcedures((curr) => curr.map((p) => (p.id === editTarget.id ? data.procedure : p)));
       }
@@ -720,7 +791,7 @@ export function ClinicInfoManager() {
     setDeletingId(deleteTarget.id);
     setError(null);
     try {
-      const res = await fetch(`/api/procedures?id=${encodeURIComponent(deleteTarget.id)}${accessQuery ? `&${accessQuery}` : ""}`, { method: "DELETE" });
+      const res = await fetch(`/api/clinic-info?id=${encodeURIComponent(deleteTarget.id)}`, { method: "DELETE" });
       if (!res.ok) throw new Error(await readApiMessage(res, "Não foi possível excluir o procedimento."));
       setProcedures((curr) => curr.filter((p) => p.id !== deleteTarget.id));
       setDeleteTarget(null);
@@ -743,7 +814,7 @@ export function ClinicInfoManager() {
             </div>
           ) : (
             <div>
-              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">{assistantDraft.name || "Lia"}</h2>
+              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">{assistantDraft.name || "Ia"}</h2>
               <p className="text-sm text-muted-foreground">Informações e diretrizes usadas pela IA para responder pacientes.</p>
             </div>
           )}
@@ -849,64 +920,81 @@ export function ClinicInfoManager() {
                   disabled={isSavingAssistant}
                 />
               </div>
-              {false && (
-                <>
-                  <Separator className="my-2 bg-border/60" />
+              <Separator className="my-2 bg-border/60" />
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Personalidade e Identidade</h3>
+                  <p className="text-xs text-muted-foreground">Defina a identidade visual, gênero e as informações cadastrais da clínica.</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div className="space-y-4">
-                    <div>
-                      <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Personalidade e Identidade</h3>
-                      <p className="text-xs text-muted-foreground">Defina a identidade visual, gênero e as informações cadastrais da clínica.</p>
+                    <div className="space-y-2">
+                      <Label htmlFor="assistant-name" className="text-xs font-semibold text-foreground">
+                        Nome da IA
+                      </Label>
+                      <Input
+                        id="assistant-name"
+                        type="text"
+                        value={assistantDraft.name || ""}
+                        onChange={(e) => setAssistantDraft((c) => ({ ...c, name: e.target.value }))}
+                        placeholder="Ex: Lia, Dr. Robô, Amanda..."
+                        disabled={isSavingAssistant}
+                      />
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="assistant-name" className="text-xs font-semibold text-foreground">
-                            Nome da IA
-                          </Label>
-                          <Input
-                            id="assistant-name"
-                            type="text"
-                            value={assistantDraft.name || ""}
-                            onChange={(e) => setAssistantDraft((c) => ({ ...c, name: e.target.value }))}
-                            placeholder="Ex: Lia, Dr. Robô, Amanda..."
-                            disabled={isSavingAssistant}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-xs font-semibold text-foreground">Gênero de Tratamento</Label>
-                          <Tabs value={assistantDraft.gender || "ia"} onValueChange={(v) => setAssistantDraft((c) => ({ ...c, gender: v }))} className="w-full">
-                            <TabsList className="w-full gap-1.5 rounded-full h-9! bg-secondary/50 border border-border/40">
-                              <TabsTrigger value="mulher" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
-                                Mulher
-                              </TabsTrigger>
-                              <TabsTrigger value="homem" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
-                                Homem
-                              </TabsTrigger>
-                              <TabsTrigger value="ia" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
-                                Neutro / IA
-                              </TabsTrigger>
-                            </TabsList>
-                          </Tabs>
-                        </div>
-                      </div>
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="assistant-style" className="text-xs font-semibold text-foreground">
-                            Estilo de Conversa
-                          </Label>
-                          <Select value={assistantDraft.estilo_conversa || "formal"} onValueChange={(v) => setAssistantDraft((c) => ({ ...c, estilo_conversa: v }))} disabled={isSavingAssistant}>
-                            <SelectTrigger id="assistant-style" className="w-full">
-                              <SelectValue placeholder="Selecione o tom da conversa" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="formal">Formal • Profissional, educado e objetivo</SelectItem>
-                              <SelectItem value="informal">Informal • Acolhedor, próximo e natural</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-foreground">Gênero de Tratamento</Label>
+                      <Tabs value={assistantDraft.gender || "ia"} onValueChange={(v) => setAssistantDraft((c) => ({ ...c, gender: v }))} className="w-full">
+                        <TabsList className="w-full gap-1.5 rounded-full h-9! bg-secondary/50 border border-border/40">
+                          <TabsTrigger value="mulher" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
+                            Mulher
+                          </TabsTrigger>
+                          <TabsTrigger value="homem" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
+                            Homem
+                          </TabsTrigger>
+                          <TabsTrigger value="ia" disabled={isSavingAssistant} className="rounded-full gap-1.5 text-xs sm:text-sm font-medium transition-all data-[state=active]:bg-card">
+                            Neutro / IA
+                          </TabsTrigger>
+                        </TabsList>
+                      </Tabs>
                     </div>
                   </div>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="assistant-style" className="text-xs font-semibold text-foreground">
+                        Estilo de Conversa
+                      </Label>
+                      <Select value={assistantDraft.estilo_conversa || "formal"} onValueChange={(v) => setAssistantDraft((c) => ({ ...c, estilo_conversa: v }))} disabled={isSavingAssistant}>
+                        <SelectTrigger id="assistant-style" className="w-full">
+                          <SelectValue placeholder="Selecione o tom da conversa" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="formal">Formal • Profissional, educado e objetivo</SelectItem>
+                          <SelectItem value="informal">Informal • Acolhedor, próximo e natural</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div
+                      className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
+                      onClick={() => setAssistantDraft((c) => ({ ...c, emoji: !c.emoji }))}
+                    >
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                          <Smile className="h-4 w-4" />
+                        </div>
+                        <div className="space-y-0.5 min-w-0">
+                          <Label htmlFor="assistant-emojis" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
+                            Permitir o uso de emojis
+                          </Label>
+                          <p className="text-[11px] text-muted-foreground leading-tight">{assistantDraft.emoji ? "A IA usará reações visuais moderadas nas respostas." : "Respostas estritamente textuais e limpas."}</p>
+                        </div>
+                      </div>
+                      <Switch id="assistant-emojis" checked={!!assistantDraft.emoji} onClick={(e) => e.stopPropagation()} onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, emoji: v }))} disabled={isSavingAssistant} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {false && (
+                <>
                   <Separator className="my-2 bg-border/60" />
                   <div className="space-y-4 pt-2">
                     <div>
@@ -914,23 +1002,6 @@ export function ClinicInfoManager() {
                       <p className="text-xs text-muted-foreground">Ajuste como a assistente interage e quando ela deve enviar notificações.</p>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      <div
-                        className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
-                        onClick={() => setAssistantDraft((c) => ({ ...c, emoji: !c.emoji }))}
-                      >
-                        <div className="flex items-start gap-3 min-w-0">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
-                            <Smile className="h-4 w-4" />
-                          </div>
-                          <div className="space-y-0.5 min-w-0">
-                            <Label htmlFor="assistant-emojis" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
-                              Permitir o uso de emojis
-                            </Label>
-                            <p className="text-[11px] text-muted-foreground leading-tight">{assistantDraft.emoji ? "A IA usará reações visuais moderadas nas respostas." : "Respostas estritamente textuais e limpas."}</p>
-                          </div>
-                        </div>
-                        <Switch id="assistant-emojis" checked={!!assistantDraft.emoji} onClick={(e) => e.stopPropagation()} onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, emoji: v }))} disabled={isSavingAssistant} />
-                      </div>
                       <div
                         className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
                         onClick={() => setAssistantDraft((c) => ({ ...c, avisar_agendamento: !c.avisar_agendamento }))}
@@ -1086,7 +1157,7 @@ export function ClinicInfoManager() {
                   {procedures.map((procedure) => {
                     const isActive = procedure.status === "ativo";
                     const isDeleting = deletingId === procedure.id;
-                    const tag = tagOptions.find((t) => t.uuid === procedure.interest_tag_id || t.id === procedure.interest_tag_id || t.label === procedure.interesse);
+                    const tag = tagOptions.find((t) => t.label === procedure.interesse);
                     const modalidadeLabel = procedure.modalidade === "presencial" ? "Presencial" : procedure.modalidade === "online" ? "Online" : procedure.modalidade;
                     const modoLabel = procedure.modo_resposta_ia === "texto_integral" ? "Integral" : procedure.modo_resposta_ia === "usar_como_base" ? "Base" : procedure.modo_resposta_ia;
                     return (

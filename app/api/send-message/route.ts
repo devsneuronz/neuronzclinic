@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
-const WEBHOOK_URL = process.env.SEND_MESSAGE_WEBHOOK_URL || "https://n8n.srv1150529.hstgr.cloud/webhook/send-message"
+const WEBHOOK_URL = process.env.SEND_MESSAGE_WEBHOOK_URL
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
 const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 const STORAGE_BUCKET = process.env.SEND_MESSAGE_STORAGE_BUCKET || "file"
@@ -13,6 +13,11 @@ const mediaTypeByMime = [
 
 function getSupabaseBaseUrl() {
   return SUPABASE_REST_URL?.replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "")
+}
+
+function requireWebhookUrl(value: string | undefined, envName: string) {
+  if (!value) throw new Error(`Configure ${envName} no .env.local.`)
+  return value
 }
 
 function getMediaType(file: File) {
@@ -204,7 +209,7 @@ export async function POST(request: NextRequest) {
           ...replyPayload,
         }
 
-    const webhookResponse = await fetch(WEBHOOK_URL, {
+    const webhookResponse = await fetch(requireWebhookUrl(WEBHOOK_URL, "SEND_MESSAGE_WEBHOOK_URL"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

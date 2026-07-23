@@ -163,7 +163,7 @@ export async function GET(request: NextRequest) {
       professionals: allowedProfessionals.map((professional) => ({ id: professional.id, label: getProfessionalName(professional) })),
       procedures: procedures.map((procedure) => ({
         id: procedure.id,
-        label: procedure.name || "Procedimento",
+        label: procedure.name || procedure.interest || "Procedimento",
         interest: procedure.interest || "",
       })),
       patients: filteredChats.map((chat) => ({

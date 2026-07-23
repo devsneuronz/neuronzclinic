@@ -1,11 +1,11 @@
 "use client";
 
-import { ProfessionalAgendaPreview } from "@/components/agenda/professional-agenda-preview";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { FolderRoot, Mail, Pencil, Stethoscope, Trash2 } from "lucide-react";
+import { ProfessionalSchedulePreview } from "../professional-schedule/professional-schedule-preview";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { SettingsProfessional } from "./professionals";
@@ -103,18 +103,14 @@ export function ProfessionalCard({ professional, onEdit, onDelete }: Professiona
               <TooltipProvider delayDuration={150}>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Badge variant="secondary" className="rounded-md px-1.5 py-0 h-4 text-[10px] font-bold border border-border/30 cursor-help">
-                      +{hiddenProcedures.length}
-                    </Badge>
+                    <Badge variant="secondary">+{hiddenProcedures.length}</Badge>
                   </TooltipTrigger>
-                  <TooltipContent className="p-2 rounded-xl border border-border bg-popover shadow-md">
-                    <div className="flex gap-1 flex-wrap max-w-xs">
-                      {hiddenProcedures.map((procedure) => (
-                        <Badge key={procedure.id} variant="outline" className="rounded-md bg-muted text-[10px]">
-                          {procedure.nome}
-                        </Badge>
-                      ))}
-                    </div>
+                  <TooltipContent className="rounded-full p-1">
+                    {hiddenProcedures.map((procedure) => (
+                      <Badge key={procedure.id} variant="outline" className="rounded-full bg-muted text-[10px]">
+                        {procedure.nome}
+                      </Badge>
+                    ))}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -125,7 +121,7 @@ export function ProfessionalCard({ professional, onEdit, onDelete }: Professiona
         )}
       </div>
 
-      <ProfessionalAgendaPreview professionalId={professional.id} />
+      <ProfessionalSchedulePreview professionalId={professional.id} />
     </Card>
   );
 }
