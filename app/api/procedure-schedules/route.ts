@@ -2,7 +2,7 @@ import { getString, isUuid, supabaseJson } from "@/lib/supabase-server";
 import { NextRequest, NextResponse } from "next/server";
 
 type ScheduleRow = { id: string; id_profissional: string | null; status: string | null };
-type ProfessionalRow = { id: string; name: string | null; email: string | null };
+type ProfessionalRow = { id: string; name: string | null; email: string | null; user_profile?: { name: string | null; email: string | null } | null };
 type RuleRow = { id: string; schedule_id: string; weekday: string; is_open: boolean | null };
 type PeriodRow = { rule_id: string; id_procedure: string; is_enabled: boolean | null; start_time: string; end_time: string };
 type LinkRow = { id_professional_schedule: string; id_clinic_procedure: string };
@@ -19,6 +19,10 @@ const weekdayLabels: Record<string, string> = {
 
 function normalizeTime(value: string) {
   return value.slice(0, 5);
+}
+
+function getProfessionalName(professional: ProfessionalRow | null | undefined) {
+  return professional?.user_profile?.name || professional?.name || professional?.user_profile?.email || professional?.email || "Profissional";
 }
 
 async function getScheduleOptions(procedureId: string) {
@@ -45,7 +49,7 @@ async function getScheduleOptions(procedureId: string) {
   const professionalIds = Array.from(new Set(schedules.map((schedule) => schedule.id_profissional).filter((id): id is string => Boolean(id))));
   const professionals =
     professionalIds.length > 0
-      ? await supabaseJson<ProfessionalRow[]>(`professionals?select=id,name,email&id=in.(${professionalIds.map(encodeURIComponent).join(",")})`)
+      ? await supabaseJson<ProfessionalRow[]>(`professionals?select=id,name,email,user_profile:user_profiles!professionals_user_id_fkey(name,email)&id=in.(${professionalIds.map(encodeURIComponent).join(",")})`)
       : [];
 
   const rulesById = new Map(rules.map((rule) => [rule.id, rule]));
@@ -66,7 +70,7 @@ async function getScheduleOptions(procedureId: string) {
       return {
         id: schedule.id,
         professionalId: schedule.id_profissional || "",
-        professionalName: professional?.name || professional?.email || "Profissional",
+        professionalName: getProfessionalName(professional),
         slots,
         selected: selectedScheduleIds.has(schedule.id),
       };
