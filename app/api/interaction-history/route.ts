@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-const FALLBACK_QUALITY_OPTIONS = ["Ótima", "Boa", "Razoável", "Ruim", "Péssima"]
+const QUALITY_OPTIONS = ["\u00d3tima", "Boa", "Razo\u00e1vel", "Ruim", "P\u00e9ssima"]
 
 type InteractionHistoryRow = {
   id: string
@@ -121,12 +121,6 @@ async function fetchInteractionById(id: string) {
   return rows.find((row) => row.id === id || row.airtable_record_id === id) ?? null
 }
 
-async function fetchQualityOptions() {
-  const rows = await supabaseRequest<Array<{ quality: string | null }>>("interaction_history?select=quality&quality=not.is.null&is_active=is.true&deleted_at=is.null&limit=10000")
-  const options = Array.from(new Set(rows.map((row) => row.quality?.trim()).filter((quality): quality is string => Boolean(quality))))
-  return options.length > 0 ? options : FALLBACK_QUALITY_OPTIONS
-}
-
 function getErrorMessage(error: unknown, fallback: string) {
   const rawMessage = error instanceof Error ? error.message : ""
   try {
@@ -154,12 +148,12 @@ export async function GET(request: Request) {
     const filters = buildContactFilters(chatId, contactPhone, chatRowId)
     if (filters.length > 0) params.set("or", `(${filters.join(",")})`)
 
-    const [rows, qualityOptions] = await Promise.all([supabaseRequest<InteractionHistoryRow[]>(`interaction_history?${params}`), fetchQualityOptions()])
+    const rows = await supabaseRequest<InteractionHistoryRow[]>(`interaction_history?${params}`)
     const interactions = sortInteractionsOldestFirst(rows.map(mapInteractionRow).filter((interaction) => interaction.received || interaction.iaResponse))
 
-    return NextResponse.json({ interactions, qualityOptions })
+    return NextResponse.json({ interactions, qualityOptions: QUALITY_OPTIONS })
   } catch (error) {
-    return NextResponse.json({ interactions: [], message: getErrorMessage(error, "Nao foi possivel carregar o historico de interacoes.") }, { status: 500 })
+    return NextResponse.json({ interactions: [], qualityOptions: QUALITY_OPTIONS, message: getErrorMessage(error, "Nao foi possivel carregar o historico de interacoes.") }, { status: 500 })
   }
 }
 

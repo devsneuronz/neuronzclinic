@@ -9,7 +9,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { getFreshSavedSession } from "@/lib/auth-session";
 import { type ChatStatusOption } from "@/lib/chat-status";
-import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, type ChatTag } from "@/lib/chat-tags";
+import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, resolveChatTags, type ChatTag } from "@/lib/chat-tags";
 import { createInternalAiMessage, isInternalAiChat } from "@/lib/internal-ai-chat";
 import { createSupabaseRealtimeSubscription, type SupabasePostgresChangePayload } from "@/lib/supabase-realtime";
 import {
@@ -421,7 +421,7 @@ export default function ChatsPage() {
   const knownChatsRef = useRef<ChatRecord[]>([]);
   const selectedChat = useMemo(() => knownChats.find((chat) => chat.id === selectedChatId), [knownChats, selectedChatId]);
 
-  const { statusOptions: contactStatusOptions, tagOptions: contactTagOptions, error: chatOptionsError } = useChatOptions(knownChats);
+  const { statusOptions: contactStatusOptions, tagOptions: contactTagOptions, interestOptions: contactInterestOptions, error: chatOptionsError } = useChatOptions(knownChats);
 
   useEffect(() => {
     if (chatOptionsError) setError(chatOptionsError);
@@ -1851,7 +1851,7 @@ export default function ChatsPage() {
 
       const latestChat = knownChatsRef.current.find((chat) => chat.id === selectedChat.id) ?? selectedChat;
       const previousChat = latestChat;
-      const currentTags = getChatTags(latestChat);
+      const currentTags = resolveChatTags(getChatTags(latestChat), contactTagOptions);
       const tagKey = getTagKey(tag);
       const hasTag = currentTags.some((currentTag) => getTagKey(currentTag) === tagKey);
       const nextTags = hasTag ? currentTags.filter((currentTag) => getTagKey(currentTag) !== tagKey) : [...currentTags, tag];
@@ -1869,7 +1869,7 @@ export default function ChatsPage() {
         setError(err instanceof Error ? err.message : "Não foi possível salvar as tags do contato.");
       }
     },
-    [restoreSelectedChat, selectedChat, updateSelectedChatTags],
+    [contactTagOptions, restoreSelectedChat, selectedChat, updateSelectedChatTags],
   );
 
   const handleToggleContactInterest = useCallback(
@@ -1878,7 +1878,7 @@ export default function ChatsPage() {
 
       const latestChat = knownChatsRef.current.find((chat) => chat.id === selectedChat.id) ?? selectedChat;
       const previousChat = latestChat;
-      const currentInterests = getChatInterestTags(latestChat);
+      const currentInterests = resolveChatTags(getChatInterestTags(latestChat), contactInterestOptions.length > 0 ? contactInterestOptions : contactTagOptions);
       const interestKey = getTagKey(interest);
       const hasInterest = currentInterests.some((currentInterest) => getTagKey(currentInterest) === interestKey);
       const nextInterests = hasInterest ? currentInterests.filter((currentInterest) => getTagKey(currentInterest) !== interestKey) : [...currentInterests, interest];
@@ -1896,7 +1896,7 @@ export default function ChatsPage() {
         setError(err instanceof Error ? err.message : "Não foi possível salvar os interesses do contato.");
       }
     },
-    [restoreSelectedChat, selectedChat, updateSelectedChatInterests],
+    [contactInterestOptions, contactTagOptions, restoreSelectedChat, selectedChat, updateSelectedChatInterests],
   );
 
   const handleReorderTags = useCallback(
@@ -1991,6 +1991,7 @@ export default function ChatsPage() {
           onChangeQueueState={handleChangeQueueState}
           statusOptions={contactStatusOptions}
           tagOptions={contactTagOptions}
+          interestOptions={contactInterestOptions}
           onChangeStatus={handleChangeContactStatus}
           onToggleTag={handleToggleContactTag}
           onToggleInterest={handleToggleContactInterest}
@@ -2103,6 +2104,7 @@ export default function ChatsPage() {
                 onChangeQueueState={handleChangeQueueState}
                 statusOptions={contactStatusOptions}
                 tagOptions={contactTagOptions}
+                interestOptions={contactInterestOptions}
                 onChangeStatus={handleChangeContactStatus}
                 onToggleTag={handleToggleContactTag}
                 onToggleInterest={handleToggleContactInterest}

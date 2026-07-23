@@ -366,7 +366,7 @@ export function ContactList({
 
     return sortStatusOptions(Array.from(statuses.values()));
   }, [catalogStatusOptions, chats]);
-  const interestOptions = useMemo(() => getUniqueOptions(chats.flatMap((chat) => getChatInterestTags(chat).map((tag) => tag.label))), [chats]);
+  const interestOptions = useMemo(() => getUniqueOptions(chats.flatMap((chat) => resolveChatTags(getChatInterestTags(chat), tagOptions).map((tag) => tag.label))), [chats, tagOptions]);
   const sectorIds = useMemo(() => Array.from(new Set(chats.flatMap((chat) => getSectorIds(chat.setor)))), [chats]);
   const sectorOptions = useMemo(() => (sectorCatalog.length > 0 ? sectorCatalog : getUniqueOptions(sectorIds.map((id) => getSectorLabel(id, sectorLabels)))), [sectorCatalog, sectorIds, sectorLabels]);
 
@@ -509,7 +509,7 @@ export function ContactList({
       }
 
       if (tagFilter !== ALL_FILTERS && !getChatTags(chat).some((tag) => tag.label === tagFilter)) return false;
-      if (interestFilter !== ALL_FILTERS && !getChatInterestTags(chat).some((interest) => interest.label === interestFilter)) return false;
+      if (interestFilter !== ALL_FILTERS && !resolveChatTags(getChatInterestTags(chat), tagOptions).some((interest) => interest.label === interestFilter)) return false;
 
       return true;
     });

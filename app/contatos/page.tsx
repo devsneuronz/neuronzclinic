@@ -14,7 +14,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import { getChatStatusColor, getChatStatusLabel, type ChatStatusOption } from "@/lib/chat-status";
-import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, getReadableTextColor, type ChatTag } from "@/lib/chat-tags";
+import { CHAT_INTEREST_FIELD_CANDIDATES, getChatInterestTags, getChatTags, getReadableTextColor, resolveChatTags, type ChatTag } from "@/lib/chat-tags";
 import { ChatRecord, fetchChats, updateChatDetails } from "@/lib/supabase-rest";
 import { filterChatsForUser } from "@/lib/user-access";
 import { cn } from "@/lib/utils";
@@ -111,10 +111,10 @@ export default function ContatosPage() {
     return accessibleContacts.filter((contact) => {
       if (statusFilter !== ALL_FILTERS && getChatStatusLabel(contact) !== statusFilter) return false;
       if (cityFilter !== ALL_FILTERS && getContactCity(contact) !== cityFilter) return false;
-      if (interestFilter !== ALL_FILTERS && !getChatInterestTags(contact).some((interest) => interest.label === interestFilter)) return false;
+      if (interestFilter !== ALL_FILTERS && !resolveChatTags(getChatInterestTags(contact), contactInterestOptions.length > 0 ? contactInterestOptions : contactTagOptions).some((interest) => interest.label === interestFilter)) return false;
       return true;
     });
-  }, [accessibleContacts, cityFilter, interestFilter, statusFilter]);
+  }, [accessibleContacts, cityFilter, contactInterestOptions, contactTagOptions, interestFilter, statusFilter]);
 
   const loadContacts = useCallback(
     async ({ refresh = false, offset = 0, searchTerm = "" }: { refresh?: boolean; offset?: number; searchTerm?: string } = {}) => {
@@ -240,7 +240,7 @@ export default function ContatosPage() {
 
   async function handleToggleContactTag(contact: ChatRecord, tag: ChatTag) {
     const latestContact = contactsRef.current.find((current) => current.id === contact.id) ?? contact;
-    const currentTags = getChatTags(latestContact);
+    const currentTags = resolveChatTags(getChatTags(latestContact), contactTagOptions);
     const tagKey = getTagKey(tag);
     const hasTag = currentTags.some((currentTag) => getTagKey(currentTag) === tagKey);
     const nextTags = hasTag ? currentTags.filter((currentTag) => getTagKey(currentTag) !== tagKey) : [...currentTags, tag];
@@ -263,7 +263,7 @@ export default function ContatosPage() {
 
   async function handleToggleContactInterest(contact: ChatRecord, interest: ChatTag) {
     const latestContact = contactsRef.current.find((current) => current.id === contact.id) ?? contact;
-    const currentInterests = getChatInterestTags(latestContact);
+    const currentInterests = resolveChatTags(getChatInterestTags(latestContact), contactInterestOptions.length > 0 ? contactInterestOptions : contactTagOptions);
     const interestKey = getTagKey(interest);
     const hasInterest = currentInterests.some((currentInterest) => getTagKey(currentInterest) === interestKey);
     const nextInterests = hasInterest ? currentInterests.filter((currentInterest) => getTagKey(currentInterest) !== interestKey) : [...currentInterests, interest];
@@ -445,7 +445,7 @@ export default function ContatosPage() {
                       <div className="flex flex-col w-full">
                         {filteredContacts.map((contact) => {
                           const name = getDisplayName(contact);
-                          const tags = getChatTags(contact).slice(0, 3);
+                          const tags = resolveChatTags(getChatTags(contact), contactTagOptions).slice(0, 3);
                           return (
                             <button
                               key={contact.id}

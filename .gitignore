@@ -45,3 +45,5 @@ next-env.d.ts
 /scripts/import-airtable-*.mjs
 /docs/airtable-supabase-migration-inventory.md
 /docs/sql
+
+/.agents

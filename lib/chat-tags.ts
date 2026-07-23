@@ -49,16 +49,18 @@ function normalizeColor(value: unknown) {
 
 function getTagFromObject(value: TagLike): ChatTag | null {
   const source = value.fields ?? value
+  const rawId = asString(source["IDA TAG"]) || asString(source.id) || asString(value.id)
   const label =
     asString(source.Tag) ||
     asString(source.tag) ||
     asString(source.label) ||
     asString(source.name) ||
-    asString(source.Nome)
+    asString(source.Nome) ||
+    rawId
 
-  if (!label) return null
+  if (!label && !rawId) return null
 
-  const id = asString(source["IDA TAG"]) || asString(source.id) || asString(value.id) || label
+  const id = rawId || label
   const color =
     normalizeColor(source.HEXCOR) ||
     normalizeColor(source.hexcor) ||
@@ -165,7 +167,9 @@ export function resolveChatTags(tags: ChatTag[], catalog: ChatTag[]): ChatTag[] 
   const catalogByKey = new Map<string, ChatTag>()
 
   for (const tag of catalog) {
-    for (const value of [tag.id, tag.label]) {
+    for (const value of [tag.id, tag.label, tag.uuid]) {
+      if (!value) continue
+
       const key = value.trim().toLowerCase()
       if (key && !catalogByKey.has(key)) catalogByKey.set(key, tag)
     }
@@ -182,6 +186,7 @@ export function resolveChatTags(tags: ChatTag[], catalog: ChatTag[]): ChatTag[] 
       id: resolved.id,
       label: resolved.label,
       color: resolved.color ?? tag.color,
+      uuid: resolved.uuid ?? tag.uuid,
     }
   })
 }
