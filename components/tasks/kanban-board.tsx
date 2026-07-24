@@ -33,6 +33,7 @@ type TaskView = "todas" | TaskStatus | "avisos-ia";
 type CreatedAtFilter = " " | "today" | "last7" | "last30" | "oldestFirst" | "overdue";
 
 const statusOrder: TaskStatus[] = ["aguardando", "resolvendo", "finalizado"];
+const IA_REQUESTS_ADMIN_ONLY = true;
 const taskViewOptions: Array<{ value: TaskView; label: string }> = [
   { value: "todas", label: "Todas" },
   { value: "aguardando", label: "Aguardando" },
@@ -539,6 +540,7 @@ function getIaRequestChatTask(request: IaRequest, chat?: ChatRecord): Task {
 
 export function KanbanBoard() {
   const { user, isLoading: isCurrentUserLoading } = useCurrentUser();
+  const canViewIaRequests = !IA_REQUESTS_ADMIN_ONLY || user?.role === "admin";
   const [tasks, setTasks] = useState<Task[]>([]);
   const [iaRequests, setIaRequests] = useState<IaRequest[]>([]);
   const [chats, setChats] = useState<ChatRecord[]>([]);
@@ -593,7 +595,7 @@ export function KanbanBoard() {
     void (async () => {
       try {
         setErrorMessage("");
-        const [loadedTasks, loadedIaRequests] = await Promise.all([fetchTaskRecords({ signal: controller.signal, user }), fetchIaRequests({ signal: controller.signal, user })]);
+        const [loadedTasks, loadedIaRequests] = await Promise.all([fetchTaskRecords({ signal: controller.signal, user }), canViewIaRequests ? fetchIaRequests({ signal: controller.signal, user }) : Promise.resolve([])]);
         setTasks(loadedTasks);
         setIaRequests(loadedIaRequests);
       } catch (error) {
@@ -607,7 +609,7 @@ export function KanbanBoard() {
     })();
 
     return () => controller.abort();
-  }, [isCurrentUserLoading, user]);
+  }, [canViewIaRequests, isCurrentUserLoading, user]);
 
   useEffect(() => {
     fetchChats({ limit: 1000 })
@@ -622,7 +624,7 @@ export function KanbanBoard() {
     setErrorMessage("");
 
     try {
-      const [loadedTasks, loadedIaRequests] = await Promise.all([fetchTaskRecords({ refresh, user }), fetchIaRequests({ user })]);
+      const [loadedTasks, loadedIaRequests] = await Promise.all([fetchTaskRecords({ refresh, user }), canViewIaRequests ? fetchIaRequests({ user }) : Promise.resolve([])]);
       setTasks(loadedTasks);
       setIaRequests(loadedIaRequests);
     } catch (error) {
@@ -714,13 +716,19 @@ export function KanbanBoard() {
     setSelectedIaRequest(request);
   };
 
+  const getIaRequestActionUrl = (requestId: string) => {
+    const params = getIaRequestAccessParams(user);
+    params.set("id", requestId);
+    return `/api/ia-requests?${params.toString()}`;
+  };
+
   const performDeleteIaRequest = async (request: IaRequest) => {
     setConfirmActionDialog((current) => ({ ...current, isLoading: true }));
     setDeletingIaRequestId(request.id);
     setIaRequestActionError("");
 
     try {
-      const response = await fetch(`/api/ia-requests?id=${encodeURIComponent(request.id)}`, {
+      const response = await fetch(getIaRequestActionUrl(request.id), {
         method: "DELETE",
       });
       const data = (await response.json()) as { message?: string };
@@ -761,7 +769,7 @@ export function KanbanBoard() {
     setIaRequestActionError("");
 
     try {
-      const response = await fetch(`/api/ia-requests?id=${encodeURIComponent(request.id)}`, {
+      const response = await fetch(getIaRequestActionUrl(request.id), {
         method: "POST",
       });
       const data = (await response.json()) as { request?: IaRequest | null; message?: string };
@@ -787,7 +795,7 @@ export function KanbanBoard() {
     setIaRequestActionError("");
 
     try {
-      const response = await fetch(`/api/ia-requests?id=${encodeURIComponent(request.id)}`, {
+      const response = await fetch(getIaRequestActionUrl(request.id), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "done" }),
@@ -1042,7 +1050,8 @@ export function KanbanBoard() {
     [chatsByLookupKey, tasks],
   );
 
-  const typeOptions = useMemo(() => Array.from(new Set([...uniqueValues(enrichedTasks, "type"), ...iaRequestTypeOptions])), [enrichedTasks]);
+  const visibleTaskViewOptions = useMemo(() => taskViewOptions.filter((view) => canViewIaRequests || view.value !== "avisos-ia"), [canViewIaRequests]);
+  const typeOptions = useMemo(() => Array.from(new Set([...uniqueValues(enrichedTasks, "type"), ...(canViewIaRequests ? iaRequestTypeOptions : [])])), [canViewIaRequests, enrichedTasks]);
   const creatorOptions = useMemo(() => uniqueValues(enrichedTasks, "creator"), [enrichedTasks]);
   const responsibleOptions = useMemo(() => uniqueValues(enrichedTasks, "responsible"), [enrichedTasks]);
   const effectiveResponsibleFilter = isDraTatianaUser(user) ? getDraTatianaResponsibleFilter(responsibleOptions) || responsibleFilter : responsibleFilter;
@@ -1100,6 +1109,8 @@ export function KanbanBoard() {
   }, [createdAtFilter, creatorFilter, effectiveResponsibleFilter, enrichedTasks, searchQuery, typeFilter]);
 
   const filteredIaRequests = useMemo(() => {
+    if (!canViewIaRequests) return [];
+
     const query = normalizeText(searchQuery);
 
     return iaRequests.filter((request) => {
@@ -1109,7 +1120,7 @@ export function KanbanBoard() {
 
       return matchesType && (query ? searchable.includes(query) : true);
     });
-  }, [chatsById, iaRequests, searchQuery, typeFilter]);
+  }, [canViewIaRequests, chatsById, iaRequests, searchQuery, typeFilter]);
 
   const tasksByStatus = useMemo(
     () =>
@@ -1126,7 +1137,8 @@ export function KanbanBoard() {
 
   const isFiltering = Boolean(searchQuery.trim()) || typeFilter !== filterAll || creatorFilter !== filterAll || effectiveResponsibleFilter !== filterAll || createdAtFilter !== filterAll;
   const totalOpen = tasksByStatus.aguardando.length + tasksByStatus.resolvendo.length;
-  const pendingIaRequests = iaRequests.filter((request) => normalizeText(request.status) === "pending").length;
+  const pendingIaRequests = canViewIaRequests ? iaRequests.filter((request) => normalizeText(request.status) === "pending").length : 0;
+  const effectiveActiveView = canViewIaRequests || activeView !== "avisos-ia" ? activeView : "todas";
 
   return (
     <div className="flex h-full w-full flex-1 flex-col bg-background">
@@ -1139,7 +1151,7 @@ export function KanbanBoard() {
 
             <div className="flex flex-row items-center gap-3">
               {isLoading ? (
-                <div className="hidden w-[400px] grid-cols-4 overflow-hidden rounded-lg border bg-background shadow-xs sm:grid">
+                <div className={cn("hidden overflow-hidden rounded-lg border bg-background shadow-xs sm:grid", canViewIaRequests ? "w-[400px] grid-cols-4" : "w-[300px] grid-cols-3")}>
                   <div className="flex flex-col items-center justify-center gap-1.5 h-[60.5px]">
                     <SkeletonShimmer className="h-6 w-8 rounded" />
                     <SkeletonShimmer className="h-3 w-12 rounded-xs" />
@@ -1155,13 +1167,15 @@ export function KanbanBoard() {
                     <SkeletonShimmer className="h-3 w-16 rounded-xs" />
                   </div>
 
-                  <div className="flex flex-col items-center justify-center border-l gap-1.5 h-[60.5px]">
-                    <SkeletonShimmer className="h-6 w-8 rounded" />
-                    <SkeletonShimmer className="h-3 w-14 rounded-xs" />
-                  </div>
+                  {canViewIaRequests ? (
+                    <div className="flex flex-col items-center justify-center border-l gap-1.5 h-[60.5px]">
+                      <SkeletonShimmer className="h-6 w-8 rounded" />
+                      <SkeletonShimmer className="h-3 w-14 rounded-xs" />
+                    </div>
+                  ) : null}
                 </div>
               ) : (
-                <div className="hidden sm:grid grid-cols-4 overflow-hidden rounded-lg border bg-background shadow-xs">
+                <div className={cn("hidden overflow-hidden rounded-lg border bg-background shadow-xs sm:grid", canViewIaRequests ? "grid-cols-4" : "grid-cols-3")}>
                   <div className="px-4 py-2 text-center">
                     <p className="text-lg font-semibold text-foreground">{filteredTasks.length}</p>
                     <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Visíveis</p>
@@ -1174,10 +1188,12 @@ export function KanbanBoard() {
                     <p className="text-lg font-semibold text-foreground">{tasksByStatus.finalizado.length}</p>
                     <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Finalizadas</p>
                   </div>
-                  <div className="border-l px-4 py-2 text-center">
-                    <p className="text-lg font-semibold text-foreground">{pendingIaRequests}</p>
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">IA pendente</p>
-                  </div>
+                  {canViewIaRequests ? (
+                    <div className="border-l px-4 py-2 text-center">
+                      <p className="text-lg font-semibold text-foreground">{pendingIaRequests}</p>
+                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">IA pendente</p>
+                    </div>
+                  ) : null}
                 </div>
               )}
               <Button type="button" className="gap-2 bg-theme-primary text-white hover:bg-theme-primary/90 h-10 min-[412px]:h-9" onClick={handleOpenCreateDialog}>
@@ -1215,12 +1231,12 @@ export function KanbanBoard() {
         </div>
       </header>
 
-      <Tabs value={activeView} onValueChange={(value) => setActiveView(value as TaskView)} className="flex min-h-0 flex-1 gap-0">
+      <Tabs value={effectiveActiveView} onValueChange={(value) => setActiveView(value as TaskView)} className="flex min-h-0 flex-1 gap-0">
         <div className="px-4 py-3 overflow-x-auto border-b flex bg-card w-full items-center justify-center">
           <TabsList className="gap-1.5 rounded-full h-9 sm:h-11  bg-secondary/50 border border-border/40">
-            {taskViewOptions.map((view) => {
+            {visibleTaskViewOptions.map((view) => {
               const colors = getTaskStatusColor(view.value);
-              const isActive = activeView === view.value;
+              const isActive = effectiveActiveView === view.value;
 
               return (
                 <TabsTrigger
@@ -1248,7 +1264,7 @@ export function KanbanBoard() {
           </TabsList>
         </div>
 
-        {taskViewOptions.map((view) => (
+        {visibleTaskViewOptions.map((view) => (
           <TabsContent key={view.value} value={view.value} className="min-h-0 overflow-hidden">
             <main className="flex h-full flex-1 gap-4 overflow-x-auto p-5 custom-scrollbar">
               {isLoading || isRefreshing ? (
@@ -1257,7 +1273,7 @@ export function KanbanBoard() {
                     {statusOrder.map((status) => (
                       <TaskSkeletonColumn key={status} status={status} />
                     ))}
-                    <IaRequestsSkeletonColumn />
+                    {canViewIaRequests ? <IaRequestsSkeletonColumn /> : null}
                   </>
                 ) : view.value === "avisos-ia" ? (
                   <IaRequestsSkeletonGrid />
@@ -1269,15 +1285,17 @@ export function KanbanBoard() {
                   {statusOrder.map((status) => (
                     <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} isFiltering={isFiltering} onSelectTask={handleSelectTask} onOpenPatientMessages={handleOpenPatientMessages} statusConfig={statusConfig} />
                   ))}
-                  <IaRequestsColumn
-                    requests={filteredIaRequests}
-                    chatsById={chatsById}
-                    isFiltering={Boolean(searchQuery.trim())}
-                    onSelectRequest={handleSelectIaRequest}
-                    onOpenRequestChat={handleOpenIaRequestChat}
-                    getChatDisplayName={getChatDisplayName}
-                    isAdmin={user?.role === "admin"}
-                  />
+                  {canViewIaRequests ? (
+                    <IaRequestsColumn
+                      requests={filteredIaRequests}
+                      chatsById={chatsById}
+                      isFiltering={Boolean(searchQuery.trim())}
+                      onSelectRequest={handleSelectIaRequest}
+                      onOpenRequestChat={handleOpenIaRequestChat}
+                      getChatDisplayName={getChatDisplayName}
+                      isAdmin={user?.role === "admin"}
+                    />
+                  ) : null}
                 </>
               ) : view.value === "avisos-ia" ? (
                 <IaRequestsColumn

@@ -49,6 +49,7 @@ const weekdayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "f
 const blockingBookingStatuses = new Set(["blocked", "scheduled", "confirmed"]);
 const DEFAULT_STATUS_ID = "30ab85a3-b35d-4065-b173-a6a029a4b58f";
 const DEFAULT_WAITING_STATUS_LABEL = "Aguardando";
+const IA_REQUESTS_ADMIN_ONLY = true;
 
 function hasOwn(object: object, key: keyof IaRequestBody) {
   return Object.prototype.hasOwnProperty.call(object, key);
@@ -107,6 +108,13 @@ function isCompletionStatus(status: string | null | undefined) {
   return ["done", "completed", "resolved", "resolvido", "concluido"].includes(normalized);
 }
 
+function assertCanUseIaRequests(searchParams: URLSearchParams) {
+  if (!IA_REQUESTS_ADMIN_ONLY) return;
+  if (normalizeUserRole(searchParams.get("role")) !== "admin") {
+    throw new Error("Avisos da IA temporariamente disponiveis apenas para administradores.");
+  }
+}
+
 async function getViewerProfessionalId({ userId, email }: { userId: string; email: string }) {
   const conditions: string[] = [];
   if (isUuid(userId)) conditions.push(`user_id.eq.${encodeURIComponent(userId)}`);
@@ -137,7 +145,9 @@ async function getProfessionalNamesByScheduleId(records: IaRequestRow[]) {
 
 async function filterIaRequestsForViewer(records: IaRequestRow[], searchParams: URLSearchParams) {
   const role = normalizeUserRole(searchParams.get("role"));
-  if (role === "admin" || role === "manager") return records;
+  if (role === "admin") return records;
+  if (IA_REQUESTS_ADMIN_ONLY) return [];
+  if (role === "manager") return records;
 
   const userId = getString(searchParams.get("userId"));
   const email = getString(searchParams.get("email")).toLowerCase();
@@ -346,6 +356,7 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
+    assertCanUseIaRequests(searchParams);
     const id = getString(searchParams.get("id"));
     if (!isUuid(id)) throw new Error("Aviso da IA nao encontrado.");
 
@@ -390,6 +401,7 @@ export async function PATCH(request: Request) {
 export async function POST(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
+    assertCanUseIaRequests(searchParams);
     const id = getString(searchParams.get("id"));
     if (!isUuid(id)) throw new Error("Aviso da IA nao encontrado.");
 
@@ -402,6 +414,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
+    assertCanUseIaRequests(searchParams);
     const id = getString(searchParams.get("id"));
     if (!isUuid(id)) throw new Error("Aviso da IA nao encontrado.");
 
