@@ -42,6 +42,7 @@ const CHAT_SYNC_INTERVAL_MS = 60000;
 const MESSAGE_SYNC_INTERVAL_MS = 30000;
 const CHAT_MESSAGE_TIMESTAMP_DRIFT_MS = 2 * 60 * 1000;
 const LAST_OPEN_CHAT_STORAGE_KEY = "neuronzclinic:last-open-chat-id";
+const INTERNAL_AI_CHAT_ENABLED = false;
 const MEDIA_PREVIEW_LABELS = new Set(["Foto", "Vídeo", "Áudio", "Figurinha", "Documento"]);
 const EMPTY_MESSAGES: MessageRecord[] = [];
 
@@ -402,7 +403,7 @@ export default function ChatsPage() {
   const searchQuery = normalizedSearch ? debouncedSearch.trim() : "";
   const isSearching = !!searchQuery;
   const isSearchingChats = !!normalizedSearch && (normalizedSearch !== searchQuery || searchChatsTerm !== searchQuery);
-  const canUseInternalAiChat = user?.role === "admin";
+  const canUseInternalAiChat = INTERNAL_AI_CHAT_ENABLED && user?.role === "admin";
   const baseVisibleChats = useMemo(() => {
     const sourceChats = isSearching ? searchChats : chats;
     if (!canUseInternalAiChat || !internalAiChat) return sourceChats;

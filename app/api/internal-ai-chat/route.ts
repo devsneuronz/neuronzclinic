@@ -9,6 +9,7 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const INTERNAL_AI_INSTANCE_ID = process.env.INTERNAL_AI_CHAT_INSTANCE_ID;
+const INTERNAL_AI_CHAT_ENABLED = false;
 
 const CHAT_SELECT = [
   "id",
@@ -302,6 +303,10 @@ async function insertInternalAiMessage({ chat, content, fromMe }: { chat: ChatRo
 
 export async function GET(request: Request) {
   try {
+    if (!INTERNAL_AI_CHAT_ENABLED) {
+      return NextResponse.json({ chat: null, messages: [] });
+    }
+
     const profile = await requireAdminProfile(request);
     const chat = await ensureInternalAiChat(profile);
     const messages = await fetchInternalAiMessages(chat.chat_id);
@@ -318,6 +323,10 @@ export async function POST(request: Request) {
   const timeoutId = setTimeout(() => controller.abort(), INTERNAL_AI_TIMEOUT_MS);
 
   try {
+    if (!INTERNAL_AI_CHAT_ENABLED) {
+      return NextResponse.json({ message: "Chat interno da IA temporariamente desativado." }, { status: 404 });
+    }
+
     const profile = await requireAdminProfile(request);
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     const text = getString(body?.text);
