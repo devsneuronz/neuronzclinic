@@ -99,8 +99,9 @@ export function useChatOptions(chats: ChatRecord[] = []) {
   }, [apiTagOptions, fallbackTagOptions]);
 
   const interestOptions = useMemo(() => {
-    return resolveChatTags(fallbackInterestOptions, tagOptions).sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }));
-  }, [fallbackInterestOptions, tagOptions]);
+    if (apiTagOptions.length > 0) return apiTagOptions;
+    return resolveChatTags(fallbackInterestOptions, fallbackTagOptions).sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }));
+  }, [apiTagOptions, fallbackInterestOptions, fallbackTagOptions]);
 
   return {
     statusOptions,

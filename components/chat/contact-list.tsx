@@ -38,6 +38,7 @@ interface ContactListProps {
   latestMessageStatuses?: Record<string, LatestMessageStatus>;
   statusOptions?: ChatStatusOption[];
   tagOptions: ChatTag[];
+  interestOptions?: ChatTag[];
   onSearchChange?: (value: string) => void;
   onSelect?: (id: string) => void;
   onLoadMore?: () => void;
@@ -309,6 +310,7 @@ export function ContactList({
   latestMessageStatuses = {},
   statusOptions: catalogStatusOptions = [],
   tagOptions,
+  interestOptions: catalogInterestOptions,
   onSearchChange,
   onSelect,
   onLoadMore,
@@ -366,7 +368,8 @@ export function ContactList({
 
     return sortStatusOptions(Array.from(statuses.values()));
   }, [catalogStatusOptions, chats]);
-  const interestOptions = useMemo(() => getUniqueOptions(chats.flatMap((chat) => resolveChatTags(getChatInterestTags(chat), tagOptions).map((tag) => tag.label))), [chats, tagOptions]);
+  const interestCatalog = catalogInterestOptions?.length ? catalogInterestOptions : tagOptions;
+  const interestOptions = useMemo(() => getUniqueOptions(interestCatalog.map((tag) => tag.label)), [interestCatalog]);
   const sectorIds = useMemo(() => Array.from(new Set(chats.flatMap((chat) => getSectorIds(chat.setor)))), [chats]);
   const sectorOptions = useMemo(() => (sectorCatalog.length > 0 ? sectorCatalog : getUniqueOptions(sectorIds.map((id) => getSectorLabel(id, sectorLabels)))), [sectorCatalog, sectorIds, sectorLabels]);
 
@@ -509,11 +512,11 @@ export function ContactList({
       }
 
       if (tagFilter !== ALL_FILTERS && !getChatTags(chat).some((tag) => tag.label === tagFilter)) return false;
-      if (interestFilter !== ALL_FILTERS && !resolveChatTags(getChatInterestTags(chat), tagOptions).some((interest) => interest.label === interestFilter)) return false;
+      if (interestFilter !== ALL_FILTERS && !resolveChatTags(getChatInterestTags(chat), interestCatalog).some((interest) => interest.label === interestFilter)) return false;
 
       return true;
     });
-  }, [chats, interestFilter, sectorFilter, sectorLabels, statusFilter, tagFilter]);
+  }, [chats, interestCatalog, interestFilter, sectorFilter, sectorLabels, statusFilter, tagFilter]);
 
   const visibleChats = useMemo(() => {
     const stateFilteredChats = filteredChats.filter((chat) => {

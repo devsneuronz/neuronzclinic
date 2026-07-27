@@ -1965,6 +1965,7 @@ export default function ChatsPage() {
           latestMessageStatuses={latestMessageStatuses}
           statusOptions={contactStatusOptions}
           tagOptions={contactTagOptions}
+          interestOptions={contactInterestOptions}
           onSearchChange={setSearch}
           onSelect={(id) => {
             handleSelectChat(id);
@@ -2054,6 +2055,7 @@ export default function ChatsPage() {
         latestMessageStatuses={latestMessageStatuses}
         statusOptions={contactStatusOptions}
         tagOptions={contactTagOptions}
+        interestOptions={contactInterestOptions}
         onSearchChange={handleSearchChange}
         onSelect={handleSelectChat}
         onLoadMore={loadMoreChats}
