@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import { Calendar, CalendarDays, ChevronDown, ClipboardList, ClipboardListIcon, CornerRightDown, GripVertical, Loader2, Trash2 } from "lucide-react";
 import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
+import { toast } from "@/components/ui/sonner";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
@@ -244,7 +245,6 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
   const [appointmentPatientName, setAppointmentPatientName] = useState("");
   const [appointmentObservations, setAppointmentObservations] = useState("");
   const [isCreatingAppointment, setIsCreatingAppointment] = useState(false);
-  const [appointmentFeedback, setAppointmentFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [taskType, setTaskType] = useState("");
   const [taskStatus, setTaskStatus] = useState("");
   const [taskCreatedAt, setTaskCreatedAt] = useState(getLocalDateTimeValue);
@@ -254,7 +254,6 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
   const [taskSubject, setTaskSubject] = useState("");
   const [taskObservations, setTaskObservations] = useState("");
   const [isCreatingTask, setIsCreatingTask] = useState(false);
-  const [taskFeedback, setTaskFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [selectedContactTask, setSelectedContactTask] = useState<ContactTask | null>(null);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [contactNotes, setContactNotes] = useState<ContactNoteRecord[]>([]);
@@ -262,7 +261,6 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
   const [isLoadingContactNotes, setIsLoadingContactNotes] = useState(false);
   const [isSavingContactNote, setIsSavingContactNote] = useState(false);
   const [isImportingContactNotes, setIsImportingContactNotes] = useState(false);
-  const [contactNoteFeedback, setContactNoteFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [contactInfo, setContactInfo] = useState(() => getContactInfoValues(chat));
   const [isSavingContactInfo, setIsSavingContactInfo] = useState(false);
   const [contactInfoFeedback, setContactInfoFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -285,16 +283,6 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
 
   const appointmentsRef = useRef<HTMLDivElement>(null);
   const [highlightAppointmentId, setHighlightAppointmentId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!contactNoteFeedback) return;
-
-    const timeout = setTimeout(() => {
-      setContactNoteFeedback(null);
-    }, 3000);
-
-    return () => clearTimeout(timeout);
-  }, [contactNoteFeedback]);
 
   const latestAppointmentKey = `${chat?.chat_id || ""}|${contactPhone || chat?.phone_contact || ""}`;
   const appointments = latestAppointmentResult?.key === latestAppointmentKey ? latestAppointmentResult.appointments : [];
@@ -332,13 +320,16 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
 
     try {
       await onChangeContactInfo(nextValues);
-      setContactInfoFeedback({ type: "success", message: "Informacoes salvas." });
+      setContactInfoFeedback(null);
+      toast.success("Informacoes salvas.");
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Não foi possível salvar as informações do contato.";
       setContactInfo(getContactInfoValues(chat));
       setContactInfoFeedback({
         type: "error",
-        message: error instanceof Error ? error.message : "Não foi possível salvar as informações do contato.",
+        message,
       });
+      toast.error(message);
     } finally {
       setIsSavingContactInfo(false);
     }
@@ -476,7 +467,6 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
       if (!chatId) {
         setContactNotes([]);
         setContactNoteDraft("");
-        setContactNoteFeedback(null);
         setIsLoadingContactNotes(false);
         setIsImportingContactNotes(false);
         return;
@@ -484,7 +474,6 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
 
       setIsLoadingContactNotes(true);
       setIsImportingContactNotes(false);
-      setContactNoteFeedback(null);
 
       fetchContactNotes(chatId)
         .then((notes) => {
@@ -501,10 +490,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
 
               if (result.notes.length > 0) {
                 setContactNotes((current) => [...result.notes, ...current.filter((currentNote) => !result.notes.some((note) => note.id === currentNote.id))]);
-                setContactNoteFeedback({
-                  type: "success",
-                  message: `${result.imported} anotaç${result.imported === 1 ? "ão" : "ões"} antiga${result.imported === 1 ? "" : "s"} recuperada${result.imported === 1 ? "" : "s"} do Airtable.`,
-                });
+                toast.success(`${result.imported} anotaç${result.imported === 1 ? "ão" : "ões"} antiga${result.imported === 1 ? "" : "s"} recuperada${result.imported === 1 ? "" : "s"} do Airtable.`);
               }
             })
             .catch(() => {
@@ -518,10 +504,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
         .catch((error) => {
           if (!isMounted) return;
           setContactNotes([]);
-          setContactNoteFeedback({
-            type: "error",
-            message: error instanceof Error ? error.message : "Não foi possível carregar as anotações do contato.",
-          });
+          toast.error(error instanceof Error ? error.message : "Não foi possível carregar as anotações do contato.");
         })
         .finally(() => {
           if (!isMounted) return;
@@ -537,7 +520,6 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
 
   async function handleCreateAppointment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setAppointmentFeedback(null);
     setIsCreatingAppointment(true);
 
     try {
@@ -564,7 +546,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
         throw new Error(data.message || "Não foi possível criar o agendamento.");
       }
 
-      setAppointmentFeedback({ type: "success", message: data.message || "Agendamento criado com sucesso." });
+      toast.success(data.message || "Agendamento criado com sucesso.");
       setAppointmentStatus("");
       setAppointmentType("");
       setAppointmentAttendanceMode("");
@@ -593,10 +575,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
         setIsAppointmentDialogOpen(false);
       }, 700);
     } catch (error) {
-      setAppointmentFeedback({
-        type: "error",
-        message: error instanceof Error ? error.message : "Não foi possível criar o agendamento.",
-      });
+      toast.error(error instanceof Error ? error.message : "Não foi possível criar o agendamento.");
     } finally {
       setIsCreatingAppointment(false);
     }
@@ -607,13 +586,11 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
 
     if (open) {
       setAppointmentPatientName(patientName);
-      setAppointmentFeedback(null);
     }
   }
 
   async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setTaskFeedback(null);
     setIsCreatingTask(true);
 
     try {
@@ -648,7 +625,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
         throw new Error(data.message || "Não foi possível criar o aviso/tarefa.");
       }
 
-      setTaskFeedback({ type: "success", message: data.message || "Aviso/tarefa criado com sucesso." });
+      toast.success(data.message || "Aviso/tarefa criado com sucesso.");
       setTaskType("");
       setTaskDueDate("");
       setTaskResponsibleUserId("");
@@ -678,10 +655,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
         setIsTaskDialogOpen(false);
       }, 700);
     } catch (error) {
-      setTaskFeedback({
-        type: "error",
-        message: error instanceof Error ? error.message : "Não foi possível criar o aviso/tarefa.",
-      });
+      toast.error(error instanceof Error ? error.message : "Não foi possível criar o aviso/tarefa.");
     } finally {
       setIsCreatingTask(false);
     }
@@ -709,11 +683,9 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
           : current,
       );
       setSelectedContactTask((current) => (current?.id === task.id ? null : current));
+      toast.success(data.message || "Tarefa excluída.");
     } catch (error) {
-      setTaskFeedback({
-        type: "error",
-        message: error instanceof Error ? error.message : "Não foi possível excluir a tarefa.",
-      });
+      toast.error(error instanceof Error ? error.message : "Não foi possível excluir a tarefa.");
     } finally {
       setDeletingTaskId(null);
     }
@@ -726,7 +698,6 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
       setTaskPatientName(patientName);
       setTaskCreatedAt(getLocalDateTimeValue());
       setTaskDueDate("");
-      setTaskFeedback(null);
       setTaskStatus((current) => current || taskOptions.statuses.find((status) => status.toLowerCase() === "aguardando") || taskOptions.statuses[0] || "");
     }
   }
@@ -761,7 +732,6 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
     if (!chatId || !content) return;
 
     setIsSavingContactNote(true);
-    setContactNoteFeedback(null);
 
     try {
       const note = await createContactNote({
@@ -772,12 +742,9 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
 
       setContactNotes((current) => [note, ...current.filter((currentNote) => currentNote.id !== note.id)]);
       setContactNoteDraft("");
-      setContactNoteFeedback({ type: "success", message: "Anotação salva." });
+      toast.success("Anotação salva.");
     } catch (error) {
-      setContactNoteFeedback({
-        type: "error",
-        message: error instanceof Error ? error.message : "Não foi possível salvar a anotação do contato.",
-      });
+      toast.error(error instanceof Error ? error.message : "Não foi possível salvar a anotação do contato.");
     } finally {
       setIsSavingContactNote(false);
     }
@@ -787,16 +754,13 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
     const previousNotes = contactNotes;
 
     setContactNotes((current) => current.filter((note) => note.id !== noteId));
-    setContactNoteFeedback(null);
 
     try {
       await deleteContactNote(noteId);
+      toast.success("Anotação apagada.");
     } catch (error) {
       setContactNotes(previousNotes);
-      setContactNoteFeedback({
-        type: "error",
-        message: error instanceof Error ? error.message : "Não foi possível apagar a anotação do contato.",
-      });
+      toast.error(error instanceof Error ? error.message : "Não foi possível apagar a anotação do contato.");
     }
   }
 
@@ -981,8 +945,6 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                   <Textarea className="min-h-20 resize-y rounded-md" value={taskObservations} onChange={(event) => setTaskObservations(event.target.value)} />
                 </div>
 
-                {taskFeedback && <p className={cn("rounded-md px-3 py-2 text-sm", taskFeedback.type === "success" ? "bg-emerald-500/10 text-emerald-700" : "bg-destructive/10 text-destructive")}>{taskFeedback.message}</p>}
-
                 <DialogFooter className="border-t border-border pt-3">
                   <Button
                     type="submit"
@@ -1097,10 +1059,6 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
                   <label className="text-xs font-semibold text-foreground">Observações</label>
                   <Textarea className="min-h-20 resize-none rounded-md" value={appointmentObservations} onChange={(event) => setAppointmentObservations(event.target.value)} />
                 </div>
-
-                {appointmentFeedback && (
-                  <p className={cn("rounded-md px-3 py-2 text-sm", appointmentFeedback.type === "success" ? "bg-emerald-500/10 text-emerald-700" : "bg-destructive/10 text-destructive")}>{appointmentFeedback.message}</p>
-                )}
 
                 <DialogFooter className="border-t border-border pt-3">
                   <Button
@@ -1295,14 +1253,6 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
             </div>
           </div>
 
-          <AnimatePresence>
-            {contactNoteFeedback && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}>
-                <p className={cn("mt-3 rounded-md px-3 py-2 text-sm", contactNoteFeedback.type === "success" ? "bg-emerald-500/10 text-emerald-700" : "bg-destructive/10 text-destructive")}>{contactNoteFeedback.message}</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           <div className="mt-3 space-y-2">
             {!isLoadingContactNotes && !isImportingContactNotes && contactNotes.length === 0 ? (
               <p className="rounded-md border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">Nenhuma anotação registrada.</p>
@@ -1407,7 +1357,6 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
             </div>
           ) : contactTasks.length > 0 ? (
             <div className="space-y-2 w-full overflow-hidden">
-              {taskFeedback?.type === "error" && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{taskFeedback.message}</p>}
               {contactTasks.map((task) => (
                 <div
                   key={task.id}

@@ -16,6 +16,7 @@ import { addDays, addHours, format, isBefore, isToday, startOfToday } from "date
 import { ptBR } from "date-fns/locale";
 import { AlertCircle, Bot, Calendar, CalendarPlus, CheckCircle, Clock, Loader2, RefreshCw, Save, Search, Stethoscope, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "@/components/ui/sonner";
 import { SkeletonShimmer } from "../ui/skeleton-shimmer";
 
 type CalendarAppointment = {
@@ -424,7 +425,6 @@ export function DashboardContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
   const [appointmentOptions, setAppointmentOptions] = useState<AppointmentOptions>(emptyAppointmentOptions);
   const [isAppointmentDialogOpen, setIsAppointmentDialogOpen] = useState(false);
   const [isLoadingAppointmentOptions, setIsLoadingAppointmentOptions] = useState(false);
@@ -496,7 +496,6 @@ export function DashboardContent() {
     startDate.setMinutes(now.getMinutes() > 30 ? 0 : 30, 0, 0);
     if (startDate.getTime() < now.getTime()) startDate.setHours(startDate.getHours() + 1);
 
-    setSuccessMessage("");
     setErrorMessage("");
     setIsAppointmentDialogOpen(true);
     setAppointmentStartDateTime(toDateTimeLocalValue(startDate));
@@ -524,7 +523,7 @@ export function DashboardContent() {
       setAppointmentOptions(options);
       applyOptions(options);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Não foi possível carregar as opções de agendamento.");
+      toast.error(error instanceof Error ? error.message : "Não foi possível carregar as opções de agendamento.");
     } finally {
       setIsLoadingAppointmentOptions(false);
     }
@@ -534,7 +533,6 @@ export function DashboardContent() {
     event.preventDefault();
     setIsSavingAppointment(true);
     setErrorMessage("");
-    setSuccessMessage("");
 
     try {
       const response = await fetch("/api/appointments", {
@@ -555,11 +553,11 @@ export function DashboardContent() {
 
       if (!response.ok) throw new Error(data.message || "Não foi possível criar o agendamento.");
 
-      setSuccessMessage(data.message || "Agendamento criado com sucesso.");
+      toast.success(data.message || "Agendamento criado com sucesso.");
       setIsAppointmentDialogOpen(false);
       await loadData({ refresh: true });
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Não foi possível criar o agendamento.");
+      toast.error(error instanceof Error ? error.message : "Não foi possível criar o agendamento.");
     } finally {
       setIsSavingAppointment(false);
     }
@@ -635,20 +633,12 @@ export function DashboardContent() {
               </Button>
             </div>
 
-            {(errorMessage || successMessage) && (
+            {errorMessage && (
               <div className="shrink-0 space-y-2">
-                {errorMessage ? (
-                  <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                    <AlertCircle className="h-4 w-4 shrink-0" />
-                    <span className="truncate">{errorMessage}</span>
-                  </div>
-                ) : null}
-                {successMessage ? (
-                  <div className="flex items-center gap-2 rounded-md border border-success/25 bg-success/5 px-3 py-2 text-sm text-success">
-                    <CheckCircle className="h-4 w-4 shrink-0" />
-                    <span className="truncate">{successMessage}</span>
-                  </div>
-                ) : null}
+                <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{errorMessage}</span>
+                </div>
               </div>
             )}
 

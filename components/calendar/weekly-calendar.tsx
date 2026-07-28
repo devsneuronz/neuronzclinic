@@ -37,6 +37,7 @@ import {
 
 import type { MouseEvent } from "react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "@/components/ui/sonner";
 import { Calendar } from "../ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { SkeletonShimmer } from "../ui/skeleton-shimmer";
@@ -478,7 +479,6 @@ export function WeeklyCalendar() {
   const [dialogStartDate, setDialogStartDate] = useState<Date | null>(null);
   const [dialogEndDate, setDialogEndDate] = useState<Date | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [selection, setSelection] = useState<{ day: Date; startMinute: number; endMinute: number } | null>(null);
   const [selectedAppointment, setSelectedAppointment] = useState<CalendarAppointment | null>(null);
@@ -735,7 +735,7 @@ export function WeeklyCalendar() {
           : { appointments: [] };
         if (!isActive) return;
         setAppointments(mergeCalendarAppointments(Array.isArray(appointmentsData.appointments) ? appointmentsData.appointments : [], Array.isArray(scheduleData.appointments) ? scheduleData.appointments : []));
-        if (appointmentsData.message || scheduleData.message) setErrorMessage(appointmentsData.message || scheduleData.message || "");
+        if (appointmentsData.message || scheduleData.message) toast.warning(appointmentsData.message || scheduleData.message || "");
       } catch {
         if (isActive) {
           setAppointments([]);
@@ -815,7 +815,6 @@ export function WeeklyCalendar() {
   async function handleCreateAppointment(formData: FormData) {
     setIsSavingAppointment(true);
     setErrorMessage("");
-    setSuccessMessage("");
 
     try {
       const endpoint = "/api/appointments";
@@ -846,11 +845,11 @@ export function WeeklyCalendar() {
         throw new Error(data.message || "Não foi possível criar o agendamento.");
       }
 
-      setSuccessMessage(data.message || "Agendamento criado com sucesso.");
+      toast.success(data.message || "Agendamento criado com sucesso.");
       setIsAppointmentDialogOpen(false);
       setRefreshKey((key) => key + 1);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Não foi possível criar o agendamento.");
+      toast.error(error instanceof Error ? error.message : "Não foi possível criar o agendamento.");
       throw error;
     } finally {
       setIsSavingAppointment(false);
@@ -862,7 +861,6 @@ export function WeeklyCalendar() {
 
     setIsCreatingPatient(true);
     setErrorMessage("");
-    setSuccessMessage("");
 
     try {
       const response = await fetch("/api/contacts", {
@@ -897,9 +895,9 @@ export function WeeklyCalendar() {
       setDialogStartDate(null);
       setDialogEndDate(null);
       setIsAppointmentDialogOpen(true);
-      setSuccessMessage(data.message || "Contato criado com sucesso.");
+      toast.success(data.message || "Contato criado com sucesso.");
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Não foi possível criar o contato.");
+      toast.error(error instanceof Error ? error.message : "Não foi possível criar o contato.");
     } finally {
       setIsCreatingPatient(false);
     }
@@ -908,7 +906,6 @@ export function WeeklyCalendar() {
   const handleUpdateAppointment = async (id: string, data: FormData) => {
     setIsSavingAppointment(true);
     setErrorMessage("");
-    setSuccessMessage("");
 
     try {
       const appointment = editingAppointment ?? appointments.find((item) => item.id === id);
@@ -942,12 +939,12 @@ export function WeeklyCalendar() {
         throw new Error(responseData.message || "Não foi possível editar o agendamento.");
       }
 
-      setSuccessMessage(responseData.message || "Agendamento atualizado.");
+      toast.success(responseData.message || "Agendamento atualizado.");
       setIsAppointmentDialogOpen(false);
       setEditingAppointment(null);
       setRefreshKey((key) => key + 1);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Não foi possível editar o agendamento.");
+      toast.error(error instanceof Error ? error.message : "Não foi possível editar o agendamento.");
       throw error;
     } finally {
       setIsSavingAppointment(false);
@@ -959,7 +956,6 @@ export function WeeklyCalendar() {
 
     setIsSavingAppointment(true);
     setErrorMessage("");
-    setSuccessMessage("");
 
     try {
       const appointment = appointments.find((item) => item.id === id) ?? selectedAppointment ?? pendingDeleteAppointment;
@@ -986,10 +982,10 @@ export function WeeklyCalendar() {
       setSelectedAppointment(null);
       setEditingAppointment(null);
       setPendingDeleteAppointment(null);
-      setSuccessMessage(data.message || "Agendamento excluído.");
+      toast.success(data.message || "Agendamento excluído.");
       setRefreshKey((key) => key + 1);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Não foi possível excluir o agendamento.");
+      toast.error(error instanceof Error ? error.message : "Não foi possível excluir o agendamento.");
     } finally {
       setIsSavingAppointment(false);
     }
@@ -1000,7 +996,6 @@ export function WeeklyCalendar() {
 
     setIsSavingAppointment(true);
     setErrorMessage("");
-    setSuccessMessage("");
 
     try {
       const response = await fetch(`/api/ia-requests?id=${encodeURIComponent(appointment.iaRequestId)}`, {
@@ -1013,10 +1008,10 @@ export function WeeklyCalendar() {
       }
 
       setSelectedAppointment(null);
-      setSuccessMessage(data.message || "Agendamento confirmado.");
+      toast.success(data.message || "Agendamento confirmado.");
       setRefreshKey((key) => key + 1);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Nao foi possivel confirmar o agendamento.");
+      toast.error(error instanceof Error ? error.message : "Nao foi possivel confirmar o agendamento.");
     } finally {
       setIsSavingAppointment(false);
     }
@@ -1204,7 +1199,6 @@ export function WeeklyCalendar() {
         <div className="flex-1 overflow-auto min-w-0">
           <div className="flex flex-col">
             {errorMessage && <div className="border-b border-border bg-amber-500/10 px-6 py-2 text-sm text-amber-700 dark:text-amber-300">{errorMessage}</div>}
-            {successMessage && <div className="border-b border-border bg-emerald-500/10 px-6 py-2 text-sm text-emerald-700 dark:text-emerald-300">{successMessage}</div>}
 
             {activeView === "Mês" ? (
               <div className="min-w-341.5 grid min-h-full grid-cols-7 border-b border-border">

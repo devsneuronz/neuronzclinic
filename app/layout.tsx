@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -33,6 +34,7 @@ export default function RootLayout({
       <body suppressHydrationWarning className="font-sans antialiased flex h-dvh overflow-hidden">
         <ThemeProvider attribute="class" disableTransitionOnChange>
           <AppShell>{children}</AppShell>
+          <Toaster richColors position="top-center" expand={false} />
         </ThemeProvider>
         <Analytics />
       </body>

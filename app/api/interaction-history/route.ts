@@ -189,3 +189,25 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ message: getErrorMessage(error, "Nao foi possivel salvar a qualidade de resposta.") }, { status: 500 })
   }
 }
+
+export async function DELETE(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const id = getString(searchParams.get("id"))
+
+  if (!id) return NextResponse.json({ message: "Interacao invalida." }, { status: 400 })
+
+  try {
+    const existing = await fetchInteractionById(id)
+    if (!existing) return NextResponse.json({ message: "Interacao nao encontrada." }, { status: 404 })
+
+    await supabaseRequest<unknown>(`interaction_history?id=eq.${encodeURIComponent(existing.id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ is_active: false, deleted_at: new Date().toISOString(), updated_at: new Date().toISOString(), source: "supabase" }),
+    })
+
+    return NextResponse.json({ message: "Interacao excluida." })
+  } catch (error) {
+    return NextResponse.json({ message: getErrorMessage(error, "Nao foi possivel excluir a interacao.") }, { status: 500 })
+  }
+}
