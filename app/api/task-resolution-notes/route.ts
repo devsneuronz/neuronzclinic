@@ -7,6 +7,11 @@ const TASK_NOTE_MEDIA_PREFIX = "task-note-media:"
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024
 
 type RawTaskResolutionNote = Record<string, unknown>
+type TaskReferenceRow = {
+  id: string
+  airtable_record_id: string | null
+}
+
 type JsonMediaInput = {
   type?: unknown
   caption?: unknown
@@ -22,6 +27,10 @@ function getString(value: unknown) {
 function getNullableString(value: unknown) {
   const text = getString(value)
   return text || null
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 }
 
 function getSupabaseBaseUrl() {
@@ -163,6 +172,19 @@ async function supabaseRequest(path: string, init?: RequestInit) {
   })
 }
 
+async function resolveTaskId(taskId: string) {
+  const encodedTaskId = encodeURIComponent(taskId)
+  const filter = isUuid(taskId) ? `or=(id.eq.${encodedTaskId},airtable_record_id.eq.${encodedTaskId})` : `airtable_record_id=eq.${encodedTaskId}`
+  const response = await supabaseRequest(`tasks?select=id,airtable_record_id&${filter}&limit=1`)
+
+  if (!response.ok) {
+    throw new Error(await response.text())
+  }
+
+  const tasks = (await response.json()) as TaskReferenceRow[]
+  return tasks[0]?.id || ""
+}
+
 export async function GET(request: NextRequest) {
   try {
     const taskId = getString(request.nextUrl.searchParams.get("task_id"))
@@ -171,8 +193,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: "task_id e obrigatorio." }, { status: 400 })
     }
 
+    const resolvedTaskId = await resolveTaskId(taskId)
+    if (!resolvedTaskId) {
+      return NextResponse.json({ message: "Tarefa nao encontrada para carregar o historico." }, { status: 404 })
+    }
+
     const select = ["id", "task_id", "content", "status_snapshot", "created_at", "updated_at"].join(",")
-    const response = await supabaseRequest(`task_resolution_notes?select=${select}&task_id=eq.${encodeURIComponent(taskId)}&order=created_at.desc`)
+    const response = await supabaseRequest(`task_resolution_notes?select=${select}&task_id=eq.${encodeURIComponent(resolvedTaskId)}&order=created_at.desc`)
 
     if (!response.ok) {
       return NextResponse.json({ message: await response.text() }, { status: response.status })
@@ -207,9 +234,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "task_id e content sao obrigatorios." }, { status: 400 })
     }
 
-    const uploaded = attachment ? await uploadTaskNoteFile(attachment, taskId) : null
+    const resolvedTaskId = await resolveTaskId(taskId)
+    if (!resolvedTaskId) {
+      return NextResponse.json({ message: "Tarefa nao encontrada para salvar a evolucao." }, { status: 404 })
+    }
+
+    const uploaded = attachment ? await uploadTaskNoteFile(attachment, resolvedTaskId) : null
     const note = {
-      task_id: taskId,
+      task_id: resolvedTaskId,
       content: uploaded ? serializeMediaNote({ caption, file: uploaded }) : jsonMedia ? serializeJsonMediaNote(caption || getString(jsonMedia.caption), jsonMedia) : caption,
       status_snapshot: getNullableString(formData ? formData.get("status_snapshot") : body?.status_snapshot),
     }
