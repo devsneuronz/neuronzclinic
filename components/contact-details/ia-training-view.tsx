@@ -179,7 +179,7 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
   useEffect(() => {
     const controller = new AbortController();
 
-    fetch("/api/airtable/message-templates", { cache: "no-store", signal: controller.signal })
+    fetch("/api/message-templates", { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         const data = (await response.json()) as { templates?: RoutineMessageTemplate[]; message?: string };
 

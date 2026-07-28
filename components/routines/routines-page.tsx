@@ -309,13 +309,13 @@ export function RoutinesPage() {
     let isMounted = true;
 
     Promise.all([
-      fetch("/api/airtable/routines", { cache: "no-store" }).then(async (response) => {
+      fetch("/api/routines", { cache: "no-store" }).then(async (response) => {
         if (!response.ok) throw new Error(await readApiMessage(response, "Não foi possível carregar rotinas."));
         return response.json() as Promise<{ routines?: Routine[] }>;
       }),
       fetch("/api/chat-options", { cache: "no-store" }).then((response) => response.json() as Promise<{ tags?: ChatTag[]; statuses?: ChatStatusOption[] }>),
-      fetch("/api/airtable/users", { cache: "no-store" }).then((response) => response.json() as Promise<{ users?: UserOption[] }>),
-      fetch("/api/airtable/message-templates", { cache: "no-store" })
+      fetch("/api/users", { cache: "no-store" }).then((response) => response.json() as Promise<{ users?: UserOption[] }>),
+      fetch("/api/message-templates", { cache: "no-store" })
         .then((response) => (response.ok ? (response.json() as Promise<{ templates?: RoutineMessageTemplate[] }>) : { templates: [] }))
         .catch(() => ({ templates: [] })),
     ])
@@ -346,7 +346,7 @@ export function RoutinesPage() {
     setTemplateError("");
 
     try {
-      const response = await fetch("/api/airtable/message-templates", { cache: "no-store" });
+      const response = await fetch("/api/message-templates", { cache: "no-store" });
       if (!response.ok) throw new Error(await readApiMessage(response, "Não foi possível carregar templates de mensagem."));
       const data = (await response.json()) as { templates?: RoutineMessageTemplate[] };
       setMessageTemplates(limitMessageTemplates(data.templates));
@@ -448,7 +448,7 @@ export function RoutinesPage() {
       }
 
       const routineId = form.id?.trim();
-      const url = routineId ? `/api/airtable/routines?id=${encodeURIComponent(routineId)}` : "/api/airtable/routines";
+      const url = routineId ? `/api/routines?id=${encodeURIComponent(routineId)}` : "/api/routines";
       const response = await fetch(url, {
         method: routineId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -486,7 +486,7 @@ export function RoutinesPage() {
 
     try {
       setError("");
-      const response = await fetch(`/api/airtable/routines?id=${encodeURIComponent(routinePendingDelete.id)}`, { method: "DELETE" });
+      const response = await fetch(`/api/routines?id=${encodeURIComponent(routinePendingDelete.id)}`, { method: "DELETE" });
       if (!response.ok) {
         setError(await readApiMessage(response, "Não foi possível remover a rotina."));
         return;
@@ -506,7 +506,7 @@ export function RoutinesPage() {
     setError("");
 
     try {
-      const response = await fetch(`/api/airtable/routines?id=${encodeURIComponent(routine.id)}`, {
+      const response = await fetch(`/api/routines?id=${encodeURIComponent(routine.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...routine, active: nextActive }),
@@ -546,7 +546,7 @@ export function RoutinesPage() {
             }
           : templateForm.media,
       };
-      const response = await fetch("/api/airtable/message-templates", {
+      const response = await fetch("/api/message-templates", {
         method: isEditingTemplate ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(isEditingTemplate ? { ...payload, id: editingTemplateId } : payload),
@@ -584,7 +584,7 @@ export function RoutinesPage() {
     setTemplateError("");
 
     try {
-      const response = await fetch(`/api/airtable/message-templates?id=${encodeURIComponent(templatePendingDelete.id)}`, { method: "DELETE" });
+      const response = await fetch(`/api/message-templates?id=${encodeURIComponent(templatePendingDelete.id)}`, { method: "DELETE" });
       if (!response.ok) {
         setTemplateError(await readApiMessage(response, "Nao foi possivel remover o template de mensagem."));
         return;

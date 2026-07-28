@@ -60,7 +60,7 @@ export function useManualRoutines(chat: ChatRecord | undefined) {
     setLoadingError(null);
 
     try {
-      const response = await fetch("/api/airtable/routines", { cache: "no-store" });
+      const response = await fetch("/api/routines", { cache: "no-store" });
       const data = (await response.json().catch(() => ({}))) as { routines?: Routine[]; message?: string };
 
       if (!response.ok) {

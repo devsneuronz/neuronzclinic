@@ -48,7 +48,7 @@ export function useCurrentUser() {
         }
 
         if (!user) {
-          const response = await fetch(`/api/airtable/users?email=${encodeURIComponent(email)}`, {
+          const response = await fetch(`/api/users?email=${encodeURIComponent(email)}`, {
             cache: "no-store",
           })
 

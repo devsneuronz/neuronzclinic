@@ -68,7 +68,7 @@ export function TagsManager() {
     setError(null);
 
     try {
-      const [tagResponse, sectorResponse] = await Promise.all([fetch("/api/airtable/tags", { cache: "no-store" }), fetch("/api/airtable/sectors", { cache: "no-store" })]);
+      const [tagResponse, sectorResponse] = await Promise.all([fetch("/api/tags", { cache: "no-store" }), fetch("/api/sectors", { cache: "no-store" })]);
       if (!tagResponse.ok) throw new Error(await readApiError(tagResponse, "Nao foi possivel carregar as tags."));
       if (!sectorResponse.ok) throw new Error(await readApiError(sectorResponse, "Nao foi possivel carregar os setores."));
 
@@ -86,7 +86,7 @@ export function TagsManager() {
   useEffect(() => {
     let isMounted = true;
 
-    Promise.all([fetch("/api/airtable/tags", { cache: "no-store" }), fetch("/api/airtable/sectors", { cache: "no-store" })])
+    Promise.all([fetch("/api/tags", { cache: "no-store" }), fetch("/api/sectors", { cache: "no-store" })])
       .then(async ([tagResponse, sectorResponse]) => {
         if (!tagResponse.ok) throw new Error(await readApiError(tagResponse, "Nao foi possivel carregar as tags."));
         if (!sectorResponse.ok) throw new Error(await readApiError(sectorResponse, "Nao foi possivel carregar os setores."));
@@ -123,7 +123,7 @@ export function TagsManager() {
     setError(null);
 
     try {
-      const response = await fetch("/api/airtable/tags", {
+      const response = await fetch("/api/tags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ label, color: newColor, ...accessPayload }),
@@ -162,7 +162,7 @@ export function TagsManager() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/airtable/tags?id=${encodeURIComponent(tag.id)}`, {
+      const response = await fetch(`/api/tags?id=${encodeURIComponent(tag.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ label, color: tag.draftColor, ...accessPayload }),
@@ -187,7 +187,7 @@ export function TagsManager() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/airtable/tags?id=${encodeURIComponent(tag.id)}${accessQuery ? `&${accessQuery}` : ""}`, {
+      const response = await fetch(`/api/tags?id=${encodeURIComponent(tag.id)}${accessQuery ? `&${accessQuery}` : ""}`, {
         method: "DELETE",
       });
 

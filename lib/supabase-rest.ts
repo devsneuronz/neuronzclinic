@@ -967,7 +967,7 @@ export async function deleteContactNote(noteId: string) {
 }
 
 export async function importAirtableContactNotes({ chatId, contactPhone = null }: ImportAirtableContactNotesInput) {
-  const response = await fetch("/api/airtable/contact-notes/import", {
+  const response = await fetch("/api/contact-notes/import", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

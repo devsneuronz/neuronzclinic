@@ -450,7 +450,7 @@ export function ContactList({
   useEffect(() => {
     let isMounted = true;
 
-    fetch("/api/airtable/sectors")
+    fetch("/api/sectors")
       .then((response) => response.json() as Promise<{ labels?: Record<string, string>; sectors?: string[] }>)
       .then((data) => {
         if (!isMounted) return;
@@ -474,7 +474,7 @@ export function ContactList({
 
     let isMounted = true;
 
-    fetch(`/api/airtable/sectors?ids=${encodeURIComponent(missingSectorIds.join(","))}`)
+    fetch(`/api/sectors?ids=${encodeURIComponent(missingSectorIds.join(","))}`)
       .then((response) => response.json() as Promise<{ labels?: Record<string, string>; sectors?: string[] }>)
       .then((data) => {
         if (!isMounted) return;

@@ -214,7 +214,7 @@ async function fetchTaskRecords({ signal, refresh = false, user }: { signal?: Ab
   const params = getTaskAccessParams(user);
   if (refresh) params.set("refresh", "1");
   const query = params.toString();
-  const response = await fetch(`/api/airtable/tasks${query ? `?${query}` : ""}`, { cache: "no-store", signal });
+  const response = await fetch(`/api/tasks${query ? `?${query}` : ""}`, { cache: "no-store", signal });
   const data = (await response.json()) as { tasks?: Task[]; message?: string };
 
   if (!response.ok) {
@@ -246,7 +246,7 @@ async function fetchIaRequests({ signal, user }: { signal?: AbortSignal; user?: 
 }
 
 async function fetchTaskOptions() {
-  const response = await fetch("/api/airtable/task-options", { cache: "no-store" });
+  const response = await fetch("/api/task-options", { cache: "no-store" });
   const data = (await response.json()) as Partial<TaskOptions>;
 
   if (!response.ok) {
@@ -645,7 +645,7 @@ export function KanbanBoard() {
     setTaskActionError("");
 
     try {
-      const response = await fetch(`/api/airtable/tasks?id=${encodeURIComponent(task.id)}`, {
+      const response = await fetch(`/api/tasks?id=${encodeURIComponent(task.id)}`, {
         method: "DELETE",
       });
       const data = (await response.json()) as { message?: string };
@@ -851,7 +851,7 @@ export function KanbanBoard() {
     setTaskActionError("");
 
     try {
-      const response = await fetch(`/api/airtable/tasks?id=${encodeURIComponent(task.id)}`, {
+      const response = await fetch(`/api/tasks?id=${encodeURIComponent(task.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
@@ -961,7 +961,7 @@ export function KanbanBoard() {
         throw new Error("Não foi possível identificar o usuário logado para criar a tarefa.");
       }
 
-      const response = await fetch("/api/airtable/tasks", {
+      const response = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

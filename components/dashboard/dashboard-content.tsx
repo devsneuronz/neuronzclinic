@@ -116,7 +116,7 @@ async function fetchDashboardData(user?: { id?: string; role?: string } | null) 
   const appointmentsUrl = new URL("/api/appointments", window.location.origin);
   appointmentsUrl.searchParams.set("start", todayStart.toISOString());
   appointmentsUrl.searchParams.set("end", tomorrowStart.toISOString());
-  const tasksUrl = new URL("/api/airtable/tasks", window.location.origin);
+  const tasksUrl = new URL("/api/tasks", window.location.origin);
   if (user?.id) tasksUrl.searchParams.set("userId", user.id);
   if (user?.role) tasksUrl.searchParams.set("role", user.role);
 

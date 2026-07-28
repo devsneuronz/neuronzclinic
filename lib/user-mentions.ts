@@ -53,7 +53,7 @@ export function isUserMentioned(content: string, users: MentionableUser[], email
 }
 
 export async function fetchMentionableUsers() {
-  const response = await fetch("/api/airtable/users", {
+  const response = await fetch("/api/users", {
     cache: "no-store",
   })
 

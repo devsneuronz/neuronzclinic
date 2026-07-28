@@ -7,6 +7,13 @@ const TASK_NOTE_MEDIA_PREFIX = "task-note-media:"
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024
 
 type RawTaskResolutionNote = Record<string, unknown>
+type JsonMediaInput = {
+  type?: unknown
+  caption?: unknown
+  mediaUrl?: unknown
+  fileName?: unknown
+  mimeType?: unknown
+}
 
 function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
@@ -45,6 +52,27 @@ function getAttachmentKind(file: File) {
   if (mimeType.startsWith("image/")) return "image"
   if (mimeType.startsWith("audio/")) return "audio"
   return ""
+}
+
+function normalizeJsonMedia(media: unknown): JsonMediaInput | null {
+  if (!media || typeof media !== "object" || Array.isArray(media)) return null
+
+  const input = media as JsonMediaInput
+  const type = getString(input.type).toLowerCase()
+  const mediaUrl = getString(input.mediaUrl)
+  const fileName = getString(input.fileName)
+  const mimeType = getString(input.mimeType)
+
+  if (!mediaUrl) return null
+  if (type !== "image" && type !== "audio") throw new Error("A midia da evolucao precisa ser imagem ou audio.")
+
+  return {
+    type,
+    mediaUrl,
+    fileName: fileName || "arquivo",
+    mimeType: mimeType || (type === "image" ? "image/jpeg" : "audio/mpeg"),
+    caption: getString(input.caption),
+  }
 }
 
 async function uploadTaskNoteFile(file: File, taskId: string) {
@@ -107,6 +135,17 @@ function serializeMediaNote({
   })}`
 }
 
+function serializeJsonMediaNote(caption: string, media: JsonMediaInput) {
+  return `${TASK_NOTE_MEDIA_PREFIX}${JSON.stringify({
+    version: 1,
+    type: media.type,
+    caption,
+    mediaUrl: media.mediaUrl,
+    fileName: media.fileName,
+    mimeType: media.mimeType,
+  })}`
+}
+
 async function supabaseRequest(path: string, init?: RequestInit) {
   if (!SUPABASE_REST_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error("Missing Supabase REST configuration for task resolution notes. Add SUPABASE_SERVICE_ROLE_KEY to .env.local and restart the dev server.")
@@ -160,17 +199,18 @@ export async function POST(request: NextRequest) {
 
     const taskId = formData ? getString(formData.get("task_id")) : getString(body?.task_id)
     const caption = formData ? getString(formData.get("content")) : getString(body?.content)
+    const jsonMedia = formData ? null : normalizeJsonMedia(body?.media)
     const fileValue = formData?.get("file")
     const attachment = fileValue instanceof File && fileValue.size > 0 ? fileValue : null
 
-    if (!taskId || (!caption && !attachment)) {
+    if (!taskId || (!caption && !attachment && !jsonMedia)) {
       return NextResponse.json({ message: "task_id e content sao obrigatorios." }, { status: 400 })
     }
 
     const uploaded = attachment ? await uploadTaskNoteFile(attachment, taskId) : null
     const note = {
       task_id: taskId,
-      content: uploaded ? serializeMediaNote({ caption, file: uploaded }) : caption,
+      content: uploaded ? serializeMediaNote({ caption, file: uploaded }) : jsonMedia ? serializeJsonMediaNote(caption || getString(jsonMedia.caption), jsonMedia) : caption,
       status_snapshot: getNullableString(formData ? formData.get("status_snapshot") : body?.status_snapshot),
     }
 

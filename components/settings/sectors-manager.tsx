@@ -48,7 +48,7 @@ export function SectorsManager({ onSectorsChanged }: { onSectorsChanged?: (secto
     setIsLoading(true);
     setError(null);
     try {
-      const [sectorResponse, tagResponse] = await Promise.all([fetch("/api/airtable/sectors", { cache: "no-store" }), fetch("/api/airtable/tags", { cache: "no-store" })]);
+      const [sectorResponse, tagResponse] = await Promise.all([fetch("/api/sectors", { cache: "no-store" }), fetch("/api/tags", { cache: "no-store" })]);
       if (!sectorResponse.ok) throw new Error(await apiError(sectorResponse, "Não foi possível carregar os setores."));
       if (!tagResponse.ok) throw new Error(await apiError(tagResponse, "Não foi possível carregar as tags."));
       const sectorData = (await sectorResponse.json()) as { sectorRecords?: Sector[] };
@@ -66,7 +66,7 @@ export function SectorsManager({ onSectorsChanged }: { onSectorsChanged?: (secto
   useEffect(() => {
     let isMounted = true;
 
-    Promise.all([fetch("/api/airtable/sectors", { cache: "no-store" }), fetch("/api/airtable/tags", { cache: "no-store" })])
+    Promise.all([fetch("/api/sectors", { cache: "no-store" }), fetch("/api/tags", { cache: "no-store" })])
       .then(async ([sectorResponse, tagResponse]) => {
         if (!sectorResponse.ok) throw new Error(await apiError(sectorResponse, "Não foi possível carregar os setores."));
         if (!tagResponse.ok) throw new Error(await apiError(tagResponse, "Não foi possível carregar as tags."));
@@ -123,7 +123,7 @@ export function SectorsManager({ onSectorsChanged }: { onSectorsChanged?: (secto
     setIsSaving(true);
     setError(null);
     try {
-      const response = await fetch(editing ? `/api/airtable/sectors?id=${encodeURIComponent(editing.id)}` : "/api/airtable/sectors", {
+      const response = await fetch(editing ? `/api/sectors?id=${encodeURIComponent(editing.id)}` : "/api/sectors", {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...draft, ...accessPayload }),
@@ -150,7 +150,7 @@ export function SectorsManager({ onSectorsChanged }: { onSectorsChanged?: (secto
     setIsSaving(true);
     setError(null);
     try {
-      const response = await fetch(`/api/airtable/sectors?id=${encodeURIComponent(deleting.id)}${accessQuery ? `&${accessQuery}` : ""}`, { method: "DELETE" });
+      const response = await fetch(`/api/sectors?id=${encodeURIComponent(deleting.id)}${accessQuery ? `&${accessQuery}` : ""}`, { method: "DELETE" });
       if (!response.ok) throw new Error(await apiError(response, "Não foi possível excluir o setor."));
       const next = sectors.filter((sector) => sector.id !== deleting.id);
       setSectors(next);

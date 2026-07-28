@@ -44,7 +44,7 @@ export function UserCard({ user, sectors, onUpdated }: UserCardProps) {
     setIsSaving(true);
     setError(null);
     try {
-      const response = await fetch("/api/airtable/users", {
+      const response = await fetch("/api/users", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: user.id, sectorIds: selectedIds, email: currentUser?.email ?? "", role: currentUser?.role ?? "user" }),

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import { CHAT_INTEREST_FIELD_CANDIDATES } from "@/lib/chat-tags"
 
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
@@ -31,7 +30,7 @@ const CHAT_SELECT_FIELDS = [
   "json_tags",
   "json_tags_parsed",
   "tag_chat_array",
-  ...CHAT_INTEREST_FIELD_CANDIDATES,
+  "json_interesses",
   "dono",
   "setor",
   "grupo",
@@ -39,6 +38,8 @@ const CHAT_SELECT_FIELDS = [
   "lid_id",
   "updated_at",
 ]
+const CHAT_SELECT = [...CHAT_SELECT_FIELDS, "chat_state_override"].join(",")
+const CHAT_SELECT_FALLBACK = CHAT_SELECT_FIELDS.join(",")
 const MESSAGE_SELECT = [
   "id",
   "message_id",
@@ -278,26 +279,14 @@ async function fetchLatestMessagesForChats(chatIds: string[]): Promise<Record<st
 }
 
 async function fetchChats(path: string) {
-  const optionalFields = ["chat_state_override", ...CHAT_INTEREST_FIELD_CANDIDATES]
-  let availableFields = new Set([...CHAT_SELECT_FIELDS, "chat_state_override"])
-  let lastError: unknown
+  try {
+    return await supabaseGet<Record<string, unknown>[]>(path.replace("__CHAT_SELECT__", CHAT_SELECT))
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ""
+    if (!message.includes("chat_state_override")) throw error
 
-  for (let attempt = 0; attempt <= optionalFields.length; attempt += 1) {
-    const select = Array.from(availableFields).join(",")
-
-    try {
-      return await supabaseGet<Record<string, unknown>[]>(path.replace("__CHAT_SELECT__", select))
-    } catch (error) {
-      lastError = error
-      const message = error instanceof Error ? error.message : ""
-      const missingField = optionalFields.find((field) => availableFields.has(field) && message.includes(field))
-
-      if (!missingField) throw error
-      availableFields = new Set(Array.from(availableFields).filter((field) => field !== missingField))
-    }
+    return supabaseGet<Record<string, unknown>[]>(path.replace("__CHAT_SELECT__", CHAT_SELECT_FALLBACK))
   }
-
-  throw lastError instanceof Error ? lastError : new Error("Nao foi possivel carregar chats.")
 }
 
 export async function GET(request: NextRequest) {

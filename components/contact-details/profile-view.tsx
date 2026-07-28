@@ -417,7 +417,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
     if (user?.id) params.set("userId", user.id);
     if (user?.role) params.set("role", user.role);
 
-    fetch(`/api/airtable/tasks?${params.toString()}`)
+    fetch(`/api/tasks?${params.toString()}`)
       .then((response) => response.json() as Promise<{ tasks?: ContactTask[] }>)
       .then((data) => {
         if (!isMounted) return;
@@ -439,7 +439,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
   useEffect(() => {
     let isMounted = true;
 
-    fetch("/api/airtable/task-options")
+    fetch("/api/task-options")
       .then((response) => response.json() as Promise<Partial<TaskOptions>>)
       .then((data) => {
         if (!isMounted) return;
@@ -621,7 +621,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
         throw new Error("Não foi possível identificar o usuário logado para criar a tarefa.");
       }
 
-      const response = await fetch("/api/airtable/tasks", {
+      const response = await fetch("/api/tasks", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -691,7 +691,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
     setDeletingTaskId(task.id);
 
     try {
-      const response = await fetch(`/api/airtable/tasks?id=${encodeURIComponent(task.id)}`, {
+      const response = await fetch(`/api/tasks?id=${encodeURIComponent(task.id)}`, {
         method: "DELETE",
       });
       const data = (await response.json()) as { message?: string };
