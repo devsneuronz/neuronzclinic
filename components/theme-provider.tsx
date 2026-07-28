@@ -3,7 +3,7 @@
 import { ThemeProvider as NextThemeProvider } from "next-themes";
 import React, { createContext, useEffect, useState } from "react";
 
-export type ColorTheme = "default" | "theme-sand" | "theme-blue" | "theme-gray" | "theme-teal";
+export type ColorTheme = "default" | "theme-grey" | "theme-sand" | "theme-blue" | "theme-teal" | "theme-indigo" | "theme-green" | "theme-rose" | "theme-purple" | "theme-slate";
 
 type ThemeProviderState = {
   colorTheme: ColorTheme;
@@ -13,7 +13,7 @@ type ThemeProviderState = {
 export const ColorThemeContext = createContext<ThemeProviderState | undefined>(undefined);
 
 const COLOR_THEME_STORAGE_KEY = "tournieux-color-theme";
-const COLOR_THEMES: ColorTheme[] = ["default", "theme-sand", "theme-blue", "theme-gray", "theme-teal"];
+const COLOR_THEMES: ColorTheme[] = ["default", "theme-grey", "theme-sand", "theme-blue", "theme-teal", "theme-indigo", "theme-green", "theme-rose", "theme-purple", "theme-slate"];
 
 function isColorTheme(value: string | null): value is ColorTheme {
   return COLOR_THEMES.includes(value as ColorTheme);

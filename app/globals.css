@@ -225,9 +225,6 @@
    TEMAS
    ========================================================================== */
 @layer base {
-  /* =======================================================
-     1. TEMA: Padrão
-     ======================================================= */
   html.default:not(.dark):not(.theme-sand):not(.theme-blue):not(.theme-gray):not(.theme-teal),
   .default:not(.dark.default):not(.theme-sand):not(.theme-blue):not(.theme-gray):not(.theme-teal) {
     --background: oklch(0.9305 0.0046 258.32);
@@ -259,9 +256,26 @@
     --sidebar-custom-border: oklch(0.26 0.012 105.076) !important;
   }
 
-  /* =======================================================
-     2. TEMA: AREIA
-     ======================================================= */
+  html.theme-grey:not(.dark),
+  .theme-grey {
+    --sidebar-custom-bg: oklch(0.95 0 0);
+    --sidebar-custom-fg: oklch(0.2 0 0);
+    --sidebar-custom-primary: oklch(0.15 0 0);
+    --sidebar-custom-primary-fg: oklch(0.99 0 0);
+    --sidebar-custom-accent: oklch(0.88 0 0);
+    --sidebar-custom-border: oklch(0.85 0 0);
+  }
+
+  html.dark.theme-grey,
+  .dark.theme-grey {
+    --sidebar-custom-bg: oklch(0.12 0 0) !important;
+    --sidebar-custom-fg: oklch(0.95 0 0) !important;
+    --sidebar-custom-primary: oklch(0.28 0 0) !important;
+    --sidebar-custom-primary-fg: oklch(0.95 0 0) !important;
+    --sidebar-custom-accent: oklch(0.18 0 0) !important;
+    --sidebar-custom-border: oklch(0.2 0 0) !important;
+  }
+
   html.theme-sand:not(.dark),
   .theme-sand {
     --sidebar-custom-bg: oklch(0.92 0.045 82);
@@ -282,9 +296,6 @@
     --sidebar-custom-border: oklch(0.24 0.02 60) !important;
   }
 
-  /* =======================================================
-     3. TEMA: AZUL
-     ======================================================= */
   html.theme-blue:not(.dark),
   .theme-blue {
     --sidebar-custom-bg: oklch(0.94 0.02 240);
@@ -305,32 +316,6 @@
     --sidebar-custom-border: oklch(0.22 0.03 250) !important;
   }
 
-  /* =======================================================
-     4. TEMA: CINZA
-     ======================================================= */
-  html.theme-gray:not(.dark),
-  .theme-gray {
-    --sidebar-custom-bg: oklch(0.95 0 0);
-    --sidebar-custom-fg: oklch(0.2 0 0);
-    --sidebar-custom-primary: oklch(0.15 0 0);
-    --sidebar-custom-primary-fg: oklch(0.99 0 0);
-    --sidebar-custom-accent: oklch(0.88 0 0);
-    --sidebar-custom-border: oklch(0.85 0 0);
-  }
-
-  html.dark.theme-gray,
-  .dark.theme-gray {
-    --sidebar-custom-bg: oklch(0.12 0 0) !important;
-    --sidebar-custom-fg: oklch(0.95 0 0) !important;
-    --sidebar-custom-primary: oklch(0.28 0 0) !important;
-    --sidebar-custom-primary-fg: oklch(0.95 0 0) !important;
-    --sidebar-custom-accent: oklch(0.18 0 0) !important;
-    --sidebar-custom-border: oklch(0.2 0 0) !important;
-  }
-
-  /* =======================================================
-     5. TEMA: AZUL-OCEANO (TEAL)
-     ======================================================= */
   html.theme-teal:not(.dark),
   .theme-teal {
     --sidebar-custom-bg: oklch(0.94 0.02 170);
@@ -349,6 +334,106 @@
     --sidebar-custom-primary-fg: oklch(0.99 0 0) !important;
     --sidebar-custom-accent: oklch(0.2 0.03 175) !important;
     --sidebar-custom-border: oklch(0.23 0.03 175) !important;
+  }
+
+  html.theme-indigo:not(.dark),
+  .theme-indigo {
+    --sidebar-custom-bg: oklch(0.95 0.025 275);
+    --sidebar-custom-fg: oklch(0.24 0.06 275);
+    --sidebar-custom-primary: oklch(0.48 0.19 275);
+    --sidebar-custom-primary-fg: oklch(0.99 0 0);
+    --sidebar-custom-accent: oklch(0.88 0.04 275);
+    --sidebar-custom-border: oklch(0.84 0.035 275);
+  }
+
+  html.dark.theme-indigo,
+  .dark.theme-indigo {
+    --sidebar-custom-bg: oklch(0.15 0.025 275) !important;
+    --sidebar-custom-fg: oklch(0.92 0.035 275) !important;
+    --sidebar-custom-primary: oklch(0.55 0.18 275) !important;
+    --sidebar-custom-primary-fg: oklch(0.99 0 0) !important;
+    --sidebar-custom-accent: oklch(0.21 0.035 275) !important;
+    --sidebar-custom-border: oklch(0.24 0.035 275) !important;
+  }
+
+  html.theme-green:not(.dark),
+  .theme-green {
+    --sidebar-custom-bg: oklch(0.95 0.03 145);
+    --sidebar-custom-fg: oklch(0.22 0.055 145);
+    --sidebar-custom-primary: oklch(0.45 0.13 145);
+    --sidebar-custom-primary-fg: oklch(0.99 0 0);
+    --sidebar-custom-accent: oklch(0.88 0.04 145);
+    --sidebar-custom-border: oklch(0.84 0.035 145);
+  }
+
+  html.dark.theme-green,
+  .dark.theme-green {
+    --sidebar-custom-bg: oklch(0.15 0.02 145) !important;
+    --sidebar-custom-fg: oklch(0.92 0.035 145) !important;
+    --sidebar-custom-primary: oklch(0.48 0.14 145) !important;
+    --sidebar-custom-primary-fg: oklch(0.99 0 0) !important;
+    --sidebar-custom-accent: oklch(0.21 0.03 145) !important;
+    --sidebar-custom-border: oklch(0.24 0.03 145) !important;
+  }
+
+  html.theme-rose:not(.dark),
+  .theme-rose {
+    --sidebar-custom-bg: oklch(0.96 0.025 350);
+    --sidebar-custom-fg: oklch(0.24 0.06 350);
+    --sidebar-custom-primary: oklch(0.47 0.18 350);
+    --sidebar-custom-primary-fg: oklch(0.99 0 0);
+    --sidebar-custom-accent: oklch(0.9 0.04 350);
+    --sidebar-custom-border: oklch(0.85 0.035 350);
+  }
+
+  html.dark.theme-rose,
+  .dark.theme-rose {
+    --sidebar-custom-bg: oklch(0.15 0.02 350) !important;
+    --sidebar-custom-fg: oklch(0.92 0.035 350) !important;
+    --sidebar-custom-primary: oklch(0.5 0.17 350) !important;
+    --sidebar-custom-primary-fg: oklch(0.99 0 0) !important;
+    --sidebar-custom-accent: oklch(0.21 0.03 350) !important;
+    --sidebar-custom-border: oklch(0.24 0.03 350) !important;
+  }
+
+  html.theme-purple:not(.dark),
+  .theme-purple {
+    --sidebar-custom-bg: oklch(0.96 0.025 300);
+    --sidebar-custom-fg: oklch(0.24 0.06 300);
+    --sidebar-custom-primary: oklch(0.48 0.18 300);
+    --sidebar-custom-primary-fg: oklch(0.99 0 0);
+    --sidebar-custom-accent: oklch(0.9 0.04 300);
+    --sidebar-custom-border: oklch(0.85 0.035 300);
+  }
+
+  html.dark.theme-purple,
+  .dark.theme-purple {
+    --sidebar-custom-bg: oklch(0.15 0.02 300) !important;
+    --sidebar-custom-fg: oklch(0.92 0.035 300) !important;
+    --sidebar-custom-primary: oklch(0.52 0.17 300) !important;
+    --sidebar-custom-primary-fg: oklch(0.99 0 0) !important;
+    --sidebar-custom-accent: oklch(0.21 0.03 300) !important;
+    --sidebar-custom-border: oklch(0.24 0.03 300) !important;
+  }
+
+  html.theme-slate:not(.dark),
+  .theme-slate {
+    --sidebar-custom-bg: oklch(0.95 0.015 250);
+    --sidebar-custom-fg: oklch(0.23 0.025 250);
+    --sidebar-custom-primary: oklch(0.42 0.045 250);
+    --sidebar-custom-primary-fg: oklch(0.99 0 0);
+    --sidebar-custom-accent: oklch(0.88 0.02 250);
+    --sidebar-custom-border: oklch(0.83 0.02 250);
+  }
+
+  html.dark.theme-slate,
+  .dark.theme-slate {
+    --sidebar-custom-bg: oklch(0.15 0.015 250) !important;
+    --sidebar-custom-fg: oklch(0.92 0.02 250) !important;
+    --sidebar-custom-primary: oklch(0.47 0.055 250) !important;
+    --sidebar-custom-primary-fg: oklch(0.99 0 0) !important;
+    --sidebar-custom-accent: oklch(0.21 0.02 250) !important;
+    --sidebar-custom-border: oklch(0.24 0.02 250) !important;
   }
 }
 

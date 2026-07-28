@@ -1,4 +1,3 @@
-import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -35,6 +34,26 @@ const backgroundOptionsOpts = [
     name: "Gradiente 2",
     value: "url('/bgs/gradient2.avif')",
   },
+  {
+    id: "default-img",
+    name: "Clínica",
+    value: "url('/bgs/bgdefault.png')",
+  },
+  {
+    id: "aurora",
+    name: "Aurora",
+    value: "radial-gradient(circle at 25% 20%, rgba(20, 184, 166, .45), transparent 30%), linear-gradient(135deg, #111827 0%, #2563eb 48%, #f8fafc 100%)",
+  },
+  {
+    id: "soft-light",
+    name: "Claro suave",
+    value: "linear-gradient(135deg, #f8fafc 0%, #dbeafe 48%, #fce7f3 100%)",
+  },
+  {
+    id: "graphite",
+    name: "Grafite",
+    value: "linear-gradient(135deg, #111827 0%, #334155 58%, #64748b 100%)",
+  },
 ];
 
 const updateLoginBackground = (backgroundId: string, backgroundValue: string) => {
@@ -47,14 +66,15 @@ const updateLoginBackground = (backgroundId: string, backgroundValue: string) =>
 };
 
 export function BackgroundOptions() {
-  const [currentBg, setCurrentBg] = useState("abs1");
+  const [currentBg, setCurrentBg] = useState(() => {
+    if (typeof window === "undefined") return "abs1";
+    return localStorage.getItem("selected-login-bg-id") ?? "abs1";
+  });
 
   useEffect(() => {
-    const savedBgId = localStorage.getItem("selected-login-bg-id");
     const savedBgVal = localStorage.getItem("selected-login-bg-val");
 
-    if (savedBgId && savedBgVal) {
-      setCurrentBg(savedBgId);
+    if (savedBgVal) {
       document.documentElement.style.setProperty("--login-custom-bg", savedBgVal);
     }
   }, []);
@@ -65,12 +85,15 @@ export function BackgroundOptions() {
   };
 
   return (
-    <Card className="border border-border bg-card shadow-sm w-full h-full overflow-hidden p-0">
-      <CardContent className="p-4 sm:p-6 space-y-4">
-        <div className="space-y-3">
-          <Label className="text-sm font-medium text-foreground">Fundo do Login</Label>
+    <section className="h-full rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
+      <div className="space-y-4">
+        <div>
+          <Label className="text-sm font-semibold text-foreground">Fundo do login</Label>
+          <p className="mt-1 text-xs text-muted-foreground">Defina a imagem ou composição usada na tela de entrada.</p>
+        </div>
 
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(105px,1fr))] gap-3">
+        <div className="space-y-3">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-3">
             {backgroundOptionsOpts.map((bg) => {
               const isSelected = currentBg === bg.id;
 
@@ -79,12 +102,12 @@ export function BackgroundOptions() {
                   key={bg.id}
                   type="button"
                   onClick={() => handleSelectBackground(bg.id, bg.value)}
-                  className="relative overflow-hidden rounded-xl aspect-3/4 border-2 transition-all group select-none text-left cursor-pointer bg-popover hover:border-border/80"
+                  className="relative aspect-[4/3] cursor-pointer select-none overflow-hidden rounded-lg border transition-all group bg-popover text-left hover:border-theme-primary/50"
                   style={{
-                    borderColor: isSelected ? "var(--theme-primary)" : "transparent",
+                    borderColor: isSelected ? "var(--color-theme-primary)" : "var(--border)",
                   }}
                 >
-                  <div className="absolute inset-0 top-1/2 left-1/2 -translate-1/2 w-[140%] h-[140%] aspect-4/3 rotate-90 bg-cover bg-center opacity-80" style={{ backgroundImage: bg.value }}>
+                  <div className="absolute inset-0 bg-cover bg-center opacity-90" style={{ backgroundImage: bg.value }}>
                     <div className="absolute inset-0 mix-blend-color opacity-90 bg-theme-primary" />
                     <div
                       className="absolute h-full backdrop-blur-md right-0 w-4/5"
@@ -95,8 +118,8 @@ export function BackgroundOptions() {
                     />
                   </div>
 
-                  <div className="relative flex h-full flex-col justify-between p-2.5 z-10">
-                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-60">Logo</span>
+                  <div className="relative z-10 flex h-full flex-col justify-between p-2.5">
+                    <span className="h-2 w-10 rounded-sm bg-white/45 shadow-xs" />
 
                     <div className="space-y-1">
                       <div className="h-1.5 w-10 rounded-xs bg-white/20 border border-white/5 backdrop-blur-xs" />
@@ -118,19 +141,19 @@ export function BackgroundOptions() {
 
                   {isSelected && (
                     <div className="absolute inset-0 bg-background/10 flex items-center justify-center z-20 animate-in fade-in zoom-in-95 duration-100">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md border border-card">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-theme-primary text-theme-primary-fg shadow-md border border-card">
                         <Check className="h-3 w-3 stroke-[3]" />
                       </div>
                     </div>
                   )}
 
-                  <div className="absolute bottom-2 right-2 bg-black/60 backdrop-blur-xs text-[10px] text-white font-medium px-2 py-0.5 rounded-md z-20 max-w-[80%] truncate">{bg.name}</div>
+                  <div className="absolute bottom-2 right-2 z-20 max-w-[80%] truncate rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-xs">{bg.name}</div>
                 </button>
               );
             })}
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }
