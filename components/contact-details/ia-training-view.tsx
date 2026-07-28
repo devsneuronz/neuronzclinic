@@ -1,9 +1,9 @@
 "use client";
 
-import type { RoutineMessageTemplate } from "@/lib/routines";
+import type { Routine, RoutineMessageTemplate } from "@/lib/routines";
 import type { ChatRecord } from "@/lib/supabase-rest";
 import { Check, Copy, Send } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { Button } from "../ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
@@ -18,6 +18,8 @@ type TrainingInteraction = {
   correctedResponse: string;
   quality: string;
 };
+
+type CorrectionTextTemplate = Pick<RoutineMessageTemplate, "id" | "label" | "content">;
 
 const EMPTY_QUALITY_VALUE = "__avaliar__";
 const NONE_QUALITY_VALUE = "__nenhuma__";
@@ -64,6 +66,8 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
   const [correctionDrafts, setCorrectionDrafts] = useState<Record<string, string>>({});
   const [sendingCorrectionIds, setSendingCorrectionIds] = useState<string[]>([]);
   const [confirmedCorrectionIds, setConfirmedCorrectionIds] = useState<string[]>([]);
+  const [templateSource] = useState<"manual-routines" | "message-templates">("manual-routines");
+  const [manualRoutines, setManualRoutines] = useState<Routine[]>([]);
   const [messageTemplates, setMessageTemplates] = useState<RoutineMessageTemplate[]>([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -72,6 +76,22 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
   const chatId = chat?.chat_id || "";
   const chatRowId = chat?.id || "";
   const usableMessageTemplates = messageTemplates.filter((template) => template.content.trim());
+  const manualRoutineTextTemplates = useMemo<CorrectionTextTemplate[]>(
+    () =>
+      manualRoutines
+        .filter((routine) => routine.active && routine.trigger === "manual")
+        .map((routine) => ({
+          id: routine.id,
+          label: routine.name || "Rotina manual",
+          content: routine.actions
+            .map((action) => getString(action.message) || getString(action.templateContent) || getString(action.notes))
+            .filter(Boolean)
+            .join("\n\n"),
+        }))
+        .filter((template) => template.content.trim()),
+    [manualRoutines],
+  );
+  const usableCorrectionTemplates = templateSource === "manual-routines" ? manualRoutineTextTemplates : usableMessageTemplates;
   const contactName = getString(chat?.nome_contato) || getString(chat?.pushname);
   const firstContactName = contactName.split(/\s+/).filter(Boolean)[0] || contactName;
   const contactPhoneValue = getString(contactPhone) || getString(chat?.phone_contact) || getString(chat?.chat_id);
@@ -179,6 +199,40 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
   useEffect(() => {
     const controller = new AbortController();
 
+    if (templateSource !== "manual-routines") return () => controller.abort();
+
+    fetch("/api/routines", { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        const data = (await response.json()) as { routines?: Routine[]; message?: string };
+
+        if (!response.ok) {
+          throw new Error(data.message || "Nao foi possivel carregar rotinas manuais.");
+        }
+
+        setManualRoutines(data.routines ?? []);
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setManualRoutines([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoadingTemplates(false);
+      });
+
+    queueMicrotask(() => {
+      if (controller.signal.aborted) return;
+      setIsLoadingTemplates(true);
+    });
+
+    return () => controller.abort();
+  }, [templateSource]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    if (templateSource !== "message-templates") return () => controller.abort();
+
+    // Fonte anterior preservada: templates globais de mensagem.
     fetch("/api/message-templates", { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         const data = (await response.json()) as { templates?: RoutineMessageTemplate[]; message?: string };
@@ -203,7 +257,7 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
     });
 
     return () => controller.abort();
-  }, []);
+  }, [templateSource]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -245,7 +299,7 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
     return content.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, resolveDirective).replace(/%([\w.-]+)%/g, resolveDirective);
   }
 
-  function applyTemplateToCorrection(interactionId: string, template: RoutineMessageTemplate) {
+  function applyTemplateToCorrection(interactionId: string, template: CorrectionTextTemplate) {
     if (!template.content.trim()) return;
     const renderedTemplate = renderTemplateContent(template.content);
     setCorrectionDrafts((current) => {
@@ -254,7 +308,7 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
     });
   }
 
-  async function handleCopyTemplate(template: RoutineMessageTemplate) {
+  async function handleCopyTemplate(template: CorrectionTextTemplate) {
     if (!template.content.trim()) return;
 
     try {
@@ -431,16 +485,16 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
                         <AccordionItem value="templates" className="border-b-0">
                           <AccordionTrigger className="min-w-0 px-3 py-2 text-left hover:no-underline">
                             <div className="flex min-w-0 items-center justify-between gap-2 pr-2">
-                              <span className="min-w-0 truncate text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Templates de mensagem</span>
-                              <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{isLoadingTemplates ? "Carregando..." : `${usableMessageTemplates.length}`}</span>
+                              <span className="min-w-0 truncate text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Rotinas manuais</span>
+                              <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{isLoadingTemplates ? "Carregando..." : `${usableCorrectionTemplates.length}`}</span>
                             </div>
                           </AccordionTrigger>
                           <AccordionContent className="px-2 pb-2 h-auto data-[state=open]:h-auto">
-                            {!isLoadingTemplates && usableMessageTemplates.length === 0 ? <p className="px-1 pb-1 text-xs text-muted-foreground">Nenhum template com texto encontrado.</p> : null}
+                            {!isLoadingTemplates && usableCorrectionTemplates.length === 0 ? <p className="px-1 pb-1 text-xs text-muted-foreground">Nenhuma rotina manual com texto encontrada.</p> : null}
 
-                            {usableMessageTemplates.length > 0 ? (
+                            {usableCorrectionTemplates.length > 0 ? (
                               <div className="grid max-h-44 min-w-0 gap-2 overflow-y-auto overflow-x-hidden pr-1 custom-scrollbar">
-                                {usableMessageTemplates.map((template) => {
+                                {usableCorrectionTemplates.map((template) => {
                                   const renderedTemplate = renderTemplateContent(template.content);
 
                                   return (

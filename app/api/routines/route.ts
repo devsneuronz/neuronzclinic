@@ -8,7 +8,7 @@ type RoutinePayload = Partial<Omit<Routine, "id">>;
 type RoutineBody = RoutinePayload & { id?: unknown };
 
 type TagRow = { id: string; airtable_record_id: string | null; label: string; color: string | null };
-type TemplateRow = { id: string; label: string };
+type TemplateRow = { id: string; label: string; content: string | null };
 type UserProfileRow = { id: string; airtable_record_id: string | null; name: string; email: string };
 type RoutineActionRow = {
   id: string;
@@ -132,6 +132,7 @@ function mapAction(row: RoutineActionRow): RoutineAction {
     webhookUrl: row.webhook_url || "",
     templateId: template?.id || "",
     templateLabel: template?.label || "",
+    templateContent: template?.content || "",
     tagId: tag ? externalId(tag) : "",
     tagLabel: tag?.label || "",
     order: row.position ?? 0,
@@ -164,7 +165,7 @@ function mapRoutine(row: RoutineRow): Routine {
 const ROUTINE_SELECT = [
   "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,is_active,created_at,updated_at",
   "target_tag:target_tag_id(id,airtable_record_id,label,color)",
-  "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,label),tags:tag_id(id,airtable_record_id,label,color))",
+  "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,label,content),tags:tag_id(id,airtable_record_id,label,color))",
 ].join(",");
 
 async function fetchRoutineById(id: string) {

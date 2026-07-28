@@ -18,6 +18,7 @@ export interface RoutineAction {
   webhookUrl?: string;
   templateId?: string;
   templateLabel?: string;
+  templateContent?: string;
   tagId?: string;
   tagLabel?: string;
   order?: number;

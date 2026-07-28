@@ -302,7 +302,7 @@ export function TaskDetailsDialog({
                 <ListTodo className="h-4 w-4 text-theme-primary" />
                 Editar tarefa
               </DialogTitle>
-              <DialogDescription>Atualize os campos do encaminhamento registrado no Airtable.</DialogDescription>
+              <DialogDescription>Atualize os campos da tarefa.</DialogDescription>
             </DialogHeader>
 
             <div className="flex-1 overflow-y-auto p-6 pt-2 space-y-4 min-h-0 custom-scrollbar">
@@ -500,7 +500,7 @@ export function TaskDetailsDialog({
                   </div>
                 ) : null}
 
-                <div className="max-h-48 space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+                <div className="max-h-72 space-y-2 overflow-y-auto pr-1 custom-scrollbar">
                   {!isLoadingNotes && notes.length === 0 ? (
                     <p className="rounded-lg border border-dashed p-3 text-center text-xs text-muted-foreground">Nenhuma evolução registrada.</p>
                   ) : (
@@ -569,7 +569,7 @@ export function TaskDetailsDialog({
                 {overdue && (
                   <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-1.5 text-xs text-destructive animate-fade-in">
                     <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                    Esta tarefa está atrasada no Airtable.
+                    Esta tarefa está atrasada.
                   </div>
                 )}
                 {errorMessage && (
