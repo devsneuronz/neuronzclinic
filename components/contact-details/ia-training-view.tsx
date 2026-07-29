@@ -591,7 +591,7 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
                                   <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{isLoadingTemplates ? "Carregando..." : `${usableCorrectionTemplates.length}`}</span>
                                 </div>
                               </AccordionTrigger>
-                              <AccordionContent className="px-2 pb-2">
+                              <AccordionContent className="px-2 pb-2 h-fit">
                                 {!isLoadingTemplates && usableCorrectionTemplates.length === 0 ? <p className="px-1 pb-1 text-xs text-muted-foreground">Nenhuma rotina manual com texto encontrada.</p> : null}
 
                                 {usableCorrectionTemplates.length > 0 ? (
