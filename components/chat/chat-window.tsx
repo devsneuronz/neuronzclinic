@@ -42,6 +42,7 @@ import { ManualRoutinesDialog } from "./manual-routines-dialog";
 
 const FORWARD_TARGET_PAGE_SIZE = 50;
 const MESSAGE_COMPOSER_MIN_SIZE = 65;
+const MOBILE_REPLY_COMPOSER_MIN_SIZE = 118;
 const MESSAGE_COMPOSER_MAX_SIZE = 180;
 const NOTE_COMPOSER_MIN_SIZE = 270;
 const NOTE_COMPOSER_MAX_SIZE = 340;
@@ -233,7 +234,7 @@ export function ChatWindow({
   const userName = user?.name ?? "Usuário";
   const manualRoutines = useManualRoutines(chat);
 
-  const composerMinSize = isInternalNoteOpen ? NOTE_COMPOSER_MIN_SIZE : MESSAGE_COMPOSER_MIN_SIZE;
+  const composerMinSize = isInternalNoteOpen ? NOTE_COMPOSER_MIN_SIZE : isMobile && replyTo ? MOBILE_REPLY_COMPOSER_MIN_SIZE : MESSAGE_COMPOSER_MIN_SIZE;
   const composerMaxSize = isInternalNoteOpen ? NOTE_COMPOSER_MAX_SIZE : MESSAGE_COMPOSER_MAX_SIZE;
 
   const messagesRef = useRef(messages);
@@ -1322,6 +1323,7 @@ export function ChatWindow({
               onUpdate={handleUpdateScheduledMessage}
               isInternalNoteOpen={isInternalNoteOpen}
               canUseMessageActions={!isAssistantChat}
+              isMobile={isMobile}
               isTyping={isAssistantTyping}
             />
           </Panel>

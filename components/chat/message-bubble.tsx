@@ -7,7 +7,7 @@ import { StickyNoteCheck } from "@/public/custom-icons/sticky-note-plus";
 import { formatBoldText } from "@/utils/utils";
 import { Check, CheckSquare, Download, FileImage, FileText, Forward, Mic, Reply, Trash2, Video } from "lucide-react";
 import Image from "next/image";
-import { memo } from "react";
+import { memo, useEffect, useRef, useState, type PointerEvent } from "react";
 import { MessageAudioPlayer } from "./message-audio-player";
 import { MessageStatusIcon } from "./message-status-icon";
 import { getDisplayName, getFileName, getMediaKind, getMediaUrl, getMessagePreviewText, getMessageText, getQuotedMessage, getTimeLabel, isDeletedMessage } from "./message-utils";
@@ -27,10 +27,14 @@ export type MessageBubbleProps = {
   onExpandImage: (url: string, alt: string) => void;
   onScrollToMessage?: (id: string) => void;
   canUseActions?: boolean;
+  isMobile?: boolean;
 };
 
+const MOBILE_REPLY_SWIPE_THRESHOLD = 56;
+const MOBILE_LONG_PRESS_DELAY = 520;
+
 export const MessageBubble = memo(
-  function MessageBubble({ message, chat, messagesByRemoteId, selected, isSelectionMode, onToggleSelection, onReply, onForward, onDelete, onCreateNote, onExpandImage, isHighlighted, onScrollToMessage, canUseActions = true }: MessageBubbleProps) {
+  function MessageBubble({ message, chat, messagesByRemoteId, selected, isSelectionMode, onToggleSelection, onReply, onForward, onDelete, onCreateNote, onExpandImage, isHighlighted, onScrollToMessage, canUseActions = true, isMobile }: MessageBubbleProps) {
     const fromMe = !!message.from_me;
     const isGroupChat = chat.chat_id?.endsWith("@g.us") || chat.grupo === true;
     const incomingSenderName = isGroupChat ? message.participant : getDisplayName(chat);
@@ -47,6 +51,81 @@ export const MessageBubble = memo(
         }
       : quotedInfo;
     const quotedKind = quotedOriginal ? getMediaKind(quotedOriginal) : null;
+    const canUseMobileGestures = Boolean(isMobile && canUseActions && !deleted && !isSelectionMode);
+    const [isMobileActionsOpen, setIsMobileActionsOpen] = useState(false);
+    const [swipeOffset, setSwipeOffset] = useState(0);
+    const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+    const longPressTimerRef = useRef<number | null>(null);
+    const didLongPressRef = useRef(false);
+
+    function clearLongPressTimer() {
+      if (longPressTimerRef.current === null) return;
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+
+    useEffect(() => {
+      return clearLongPressTimer;
+    }, []);
+
+    function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
+      if (!canUseMobileGestures || event.pointerType === "mouse" || !event.isPrimary) return;
+
+      touchStartRef.current = { x: event.clientX, y: event.clientY };
+      didLongPressRef.current = false;
+      setSwipeOffset(0);
+      event.currentTarget.setPointerCapture(event.pointerId);
+
+      longPressTimerRef.current = window.setTimeout(() => {
+        didLongPressRef.current = true;
+        setSwipeOffset(0);
+        setIsMobileActionsOpen(true);
+      }, MOBILE_LONG_PRESS_DELAY);
+    }
+
+    function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
+      if (!canUseMobileGestures || !touchStartRef.current) return;
+
+      const deltaX = event.clientX - touchStartRef.current.x;
+      const deltaY = event.clientY - touchStartRef.current.y;
+
+      if (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8) clearLongPressTimer();
+      if (Math.abs(deltaY) > Math.abs(deltaX) || deltaX <= 0) {
+        setSwipeOffset(0);
+        return;
+      }
+
+      setIsMobileActionsOpen(false);
+      setSwipeOffset(Math.min(deltaX, 72));
+    }
+
+    function handlePointerEnd(event: PointerEvent<HTMLDivElement>) {
+      if (!canUseMobileGestures) return;
+
+      const start = touchStartRef.current;
+      clearLongPressTimer();
+      touchStartRef.current = null;
+
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+
+      if (!didLongPressRef.current && start) {
+        const deltaX = event.clientX - start.x;
+        const deltaY = event.clientY - start.y;
+        if (deltaX >= MOBILE_REPLY_SWIPE_THRESHOLD && Math.abs(deltaY) < 40) {
+          setIsMobileActionsOpen(false);
+          onReply(message);
+        }
+      }
+
+      setSwipeOffset(0);
+    }
+
+    function runMobileAction(action: (message: MessageRecord) => void) {
+      setIsMobileActionsOpen(false);
+      action(message);
+    }
 
     return (
       <div id={`message-${message.id}`} className={cn("mb-2 flex items-center gap-2", fromMe ? "justify-end" : "justify-start")}>
@@ -65,8 +144,15 @@ export const MessageBubble = memo(
         )}
         <div
           id={`message-bubble-${message.id}`}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerEnd}
+          onPointerCancel={handlePointerEnd}
+          style={{
+            transform: swipeOffset ? `translateX(${swipeOffset}px)` : undefined,
+          }}
           className={cn(
-            "group relative max-w-[72%] rounded-lg px-3 py-2 shadow-sm transition-all",
+            "group relative max-w-[72%] touch-pan-y rounded-lg px-3 py-2 shadow-sm transition-all",
             fromMe ? "rounded-tr-none bg-(--chat-me)" : "rounded-tl-none bg-(--chat-other)",
             selected && "ring-2 ring-teal-500/70",
             isHighlighted && "ring-2 ring-teal-500/30 bg-teal-500/20 duration-300",
@@ -106,7 +192,7 @@ export const MessageBubble = memo(
         >
           {message.participant && !fromMe && <p className="mb-1 text-sm font-medium text-(--chat-primary)">{incomingSenderName}</p>}
 
-          {canUseActions && !deleted && !isSelectionMode && (
+          {canUseActions && !isMobile && !deleted && !isSelectionMode && (
             <div className={cn("absolute top-1 flex rounded-full bg-(--chat-card)/90 p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100", fromMe ? "right-full mr-2" : "left-full ml-2")}>
               <Button type="button" variant="ghost" size="icon-sm" className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground" onClick={() => onReply(message)} aria-label="Responder mensagem">
                 <Reply className="h-4 w-4" />
@@ -225,6 +311,34 @@ export const MessageBubble = memo(
             )}
           </div>
 
+          {canUseMobileGestures && swipeOffset > 10 && (
+            <div className="pointer-events-none absolute top-1/2 left-[-42px] flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-teal-500 text-white shadow-sm">
+              <Reply className="h-4 w-4" />
+            </div>
+          )}
+
+          {canUseMobileGestures && isMobileActionsOpen && (
+            <div className={cn("absolute z-10 flex rounded-full bg-(--chat-card)/95 p-0.5 shadow-lg ring-1 ring-border", fromMe ? "right-0 bottom-full mb-1" : "left-0 bottom-full mb-1")}>
+              <Button type="button" variant="ghost" size="icon-sm" className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground" onClick={() => runMobileAction(onReply)} aria-label="Responder mensagem">
+                <Reply className="h-4 w-4" />
+              </Button>
+              <Button type="button" variant="ghost" size="icon-sm" className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground" onClick={() => runMobileAction(onForward)} aria-label="Encaminhar mensagem">
+                <Forward className="h-4 w-4" />
+              </Button>
+              <Button type="button" variant="ghost" size="icon-sm" className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground" onClick={() => runMobileAction(onToggleSelection)} aria-label="Selecionar mensagem">
+                <CheckSquare className="h-4 w-4" />
+              </Button>
+              <Button type="button" variant="ghost" size="icon-sm" className="h-8 w-8 rounded-full text-muted-foreground hover:text-yellow-300" onClick={() => runMobileAction(onCreateNote)} aria-label="Criar anotação vinculada">
+                <StickyNoteCheck />
+              </Button>
+              {fromMe && (
+                <Button type="button" variant="ghost" size="icon-sm" className="h-8 w-8 rounded-full text-muted-foreground hover:text-red-500" onClick={() => runMobileAction(onDelete)} aria-label="Apagar mensagem">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          )}
+
           <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-(--chat-muted-foreground) opacity-70">
             <span>{getTimeLabel(message.timestamp_msg)}</span>
             <MessageStatusIcon fromMe={message.from_me} status={message.status} timestamp={message.timestamp_msg} />
@@ -239,7 +353,9 @@ export const MessageBubble = memo(
       prevProps.selected === nextProps.selected &&
       prevProps.isSelectionMode === nextProps.isSelectionMode &&
       prevProps.chat === nextProps.chat &&
-      prevProps.isHighlighted === nextProps.isHighlighted
+      prevProps.isHighlighted === nextProps.isHighlighted &&
+      prevProps.canUseActions === nextProps.canUseActions &&
+      prevProps.isMobile === nextProps.isMobile
     );
   },
 );

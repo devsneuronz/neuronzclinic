@@ -454,204 +454,208 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
   return (
     <>
       <div className="min-w-0 p-4 space-y-4">
-      {isLoading && (
-        <motion.div className="space-y-3" variants={containerVariants} initial="hidden" animate="visible">
-          {Array.from({ length: 9 }).map((_, index) => (
-            <motion.div key={`skeleton-accordion-${index}`} variants={itemVariants} className="rounded-xl border border-border/60 bg-card/40 px-4 py-3.25 space-y-3 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <SkeletonShimmer className="h-4 w-8 rounded shrink-0" />
-                  <SkeletonShimmer className="h-4 w-32 sm:w-48 rounded" />
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <SkeletonShimmer className="h-5 w-16 rounded-md" />
-                  <SkeletonShimmer className="h-4 w-4 rounded-full" />
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </motion.div>
-      )}
-
-      {!isLoading && errorMessage ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">{errorMessage}</div> : null}
-
-      {!isLoading && !errorMessage && trainingData.length === 0 ? <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground text-center">Nenhuma interação encontrada para este contato.</div> : null}
-
-      {!isLoading && !errorMessage && trainingData.length > 0 && (
-        <Accordion type="single" collapsible className="w-full min-w-0 space-y-3">
-          {trainingData.map((item) => {
-            const isSendingCorrection = sendingCorrectionIds.includes(item.id);
-            const isDeletingInteraction = deletingInteractionIds.includes(item.id);
-            const correctionValue = correctionDrafts[item.id] ?? item.correctedResponse ?? "";
-            const hasCorrectionConfirmation = Boolean(item.correctedResponse) || confirmedCorrectionIds.includes(item.id);
-
-            return (
-              <AccordionItem key={item.id} value={`item-${item.id}`} className="relative min-w-0 overflow-hidden border rounded-xl shadow-sm bg-card">
-                <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/30 transition-colors  overflow-hidden">
-                  <div className="flex min-w-0 items-center justify-between w-full gap-3 pr-2 flex-nowrap">
-                    <div className="flex min-w-0 items-center gap-2.5 flex-1">
-                      <span className="text-xs sm:text-sm font-bold text-theme-primary shrink-0">#{item.number}</span>
-                      <span className="truncate text-xs sm:text-sm text-muted-foreground font-medium max-w-[120px] sm:max-w-[220px] md:max-w-[320px]">{item.received}</span>
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-2">
-                      <div className="px-2 py-1 rounded-md bg-muted text-[10px] font-bold uppercase text-muted-foreground whitespace-nowrap">{item.quality || "Sem avaliação"}</div>
-                    </div>
-
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
-                      title="Excluir histórico"
-                      aria-label="Excluir histórico"
-                      disabled={isDeletingInteraction}
-                      onClick={() => requestDeleteInteraction(item)}
-                    >
-                      {isDeletingInteraction ? <Loader2 className="h-3.5! w-3.5 animate-spin" /> : <Trash2 className="h-3.5! w-3.5" />}
-                    </Button>
+        {isLoading && (
+          <motion.div className="space-y-3" variants={containerVariants} initial="hidden" animate="visible">
+            {Array.from({ length: 9 }).map((_, index) => (
+              <motion.div key={`skeleton-accordion-${index}`} variants={itemVariants} className="rounded-xl border border-border/60 bg-card/40 px-4 py-3.25 space-y-3 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <SkeletonShimmer className="h-4 w-8 rounded shrink-0" />
+                    <SkeletonShimmer className="h-4 w-32 sm:w-48 rounded" />
                   </div>
-                </AccordionTrigger>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <SkeletonShimmer className="h-5 w-16 rounded-md" />
+                    <SkeletonShimmer className="h-4 w-4 rounded-full" />
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
 
-                <AccordionContent className="px-4 pb-4 pt-3 border-t border-dashed">
-                  <div className="min-w-0 space-y-4">
-                    <div>
-                      <div className="grid grid-cols-2 gap-4 text-[10px] uppercase tracking-wider font-bold text-muted-foreground w-full">
-                        <span>Data e Hora</span>
-                        <span className="text-right">Qualidade da Resposta</span>
+        {!isLoading && errorMessage ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">{errorMessage}</div> : null}
+
+        {!isLoading && !errorMessage && trainingData.length === 0 ? <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground text-center">Nenhuma interação encontrada para este contato.</div> : null}
+
+        {!isLoading && !errorMessage && trainingData.length > 0 && (
+          <Accordion type="single" collapsible className="w-full min-w-0 space-y-3">
+            {trainingData.map((item) => {
+              const isSendingCorrection = sendingCorrectionIds.includes(item.id);
+              const isDeletingInteraction = deletingInteractionIds.includes(item.id);
+              const correctionValue = correctionDrafts[item.id] ?? item.correctedResponse ?? "";
+              const hasCorrectionConfirmation = Boolean(item.correctedResponse) || confirmedCorrectionIds.includes(item.id);
+
+              return (
+                <AccordionItem key={item.id} value={`item-${item.id}`} className="relative min-w-0 overflow-hidden border rounded-xl shadow-sm bg-card">
+                  <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/30 transition-colors items-center overflow-hidden">
+                    <div className="flex min-w-0 items-center justify-between w-full gap-3 pr-2 flex-nowrap">
+                      <div className="flex min-w-0 items-center gap-2.5 flex-1">
+                        <span className="text-xs sm:text-sm font-bold text-theme-primary shrink-0">#{item.number}</span>
+                        <span className="truncate text-xs sm:text-sm text-muted-foreground font-medium max-w-[120px] sm:max-w-[220px] md:max-w-[320px]">{item.received}</span>
                       </div>
-                      <div className="flex justify-between items-center gap-2">
-                        <span className="text-xs sm:text-sm font-medium whitespace-nowrap">{formatInteractionDate(item.createdAt)}</span>
-                        <Select value={item.quality || EMPTY_QUALITY_VALUE} onValueChange={(quality) => void handleQualityChange(item.id, quality)} disabled={savingQualityIds.includes(item.id)}>
-                          <SelectTrigger className="w-28 h-8 text-xs bg-muted/40">
-                            <SelectValue placeholder="Avaliar" />
-                          </SelectTrigger>
-                          <SelectContent className="w-(--radix-select-trigger-width)!">
-                            <SelectItem value={EMPTY_QUALITY_VALUE}>Avaliar</SelectItem>
-                            <SelectItem value={NONE_QUALITY_VALUE}>Nenhuma</SelectItem>
-                            {qualityOptions.map((option) => (
-                              <SelectItem key={option} value={option}>
-                                {option}
-                              </SelectItem>
-                            ))}
-                            {qualityOptions.length === 0 ? (
-                              <SelectItem value="__sem_opcoes__" disabled>
-                                Sem opções encontradas
-                              </SelectItem>
-                            ) : null}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
 
-                    <div className="space-y-1.5">
-                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Mensagem Recebida</h4>
-                      <div className="bg-[#5fa77f]/20 text-(--chat-reply-me-border) px-3 py-2 rounded-lg rounded-tl-none inline-block text-xs sm:text-sm font-medium relative max-w-[90%] break-words before:absolute before:top-0 before:left-[-6px] before:w-0 before:h-0 before:border-t-[8px] before:border-t-[#5fa77f]/20 before:border-l-[6px] before:border-l-transparent">
-                        {item.received}
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end">
-                      <div className="flex min-w-0 max-w-[90%] items-start gap-1.5">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 shrink-0 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-md mt-1"
-                          title="Copiar resposta da IA"
-                          onClick={() => void handleCopyResponse(item.id, item.iaResponse)}
-                          disabled={!item.iaResponse}
-                        >
-                          {copiedResponseIds.includes(item.id) ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                        </Button>
-
-                        <div className="min-w-0 bg-blue-500/20 p-3 sm:p-4 rounded-xl rounded-tr-none text-xs sm:text-sm relative before:absolute before:top-0 before:right-[-6px] before:w-0 before:h-0 before:border-t-[8px] before:border-t-blue-500/20 before:border-r-[6px] before:border-r-transparent">
-                          <h4 className="text-[10px] font-bold text-blue-400 mb-1 text-right uppercase tracking-wider">Resposta IA</h4>
-                          <p className="text-foreground leading-relaxed break-words">
-                            <span className="font-semibold block mb-0.5">{assistantName}</span>
-                            {item.iaResponse}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="min-w-0 space-y-3 pt-2">
-                      <div className="min-w-0 space-y-2">
-                        <h4 className="text-xs font-bold">Mensagem Corrigida</h4>
-
-                        <Accordion type="single" collapsible className="w-full min-w-0 rounded-lg border border-border/70 bg-muted/10">
-                          <AccordionItem value="templates" className="border-b-0">
-                            <AccordionTrigger className="min-w-0 px-3 py-2 text-left hover:no-underline">
-                              <div className="flex min-w-0 items-center justify-between gap-2 pr-2 w-full">
-                                <span className="min-w-0 truncate text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Rotinas manuais</span>
-                                <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{isLoadingTemplates ? "Carregando..." : `${usableCorrectionTemplates.length}`}</span>
-                              </div>
-                            </AccordionTrigger>
-                            <AccordionContent className="px-2 pb-2">
-                              {!isLoadingTemplates && usableCorrectionTemplates.length === 0 ? <p className="px-1 pb-1 text-xs text-muted-foreground">Nenhuma rotina manual com texto encontrada.</p> : null}
-
-                              {usableCorrectionTemplates.length > 0 ? (
-                                <div className="grid max-h-44 min-w-0 gap-2 overflow-y-auto overflow-x-hidden pr-1 custom-scrollbar">
-                                  {usableCorrectionTemplates.map((template) => {
-                                    const renderedTemplate = renderTemplateContent(template.content);
-
-                                    return (
-                                      <div key={`${item.id}-${template.id}`} className="min-w-0 overflow-hidden rounded-md border bg-background/70 p-2">
-                                        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                          <div className="min-w-0">
-                                            <p className="truncate text-xs font-semibold">{template.label}</p>
-                                            <p className="mt-1 line-clamp-2 min-w-0 whitespace-pre-wrap break-words text-[11px] leading-snug text-muted-foreground">{renderedTemplate}</p>
-                                          </div>
-                                          <div className="flex shrink-0 items-center gap-1 self-end sm:self-start">
-                                            <Button type="button" variant="outline" className="h-7 px-2 text-[11px]" disabled={isSendingCorrection} onClick={() => applyTemplateToCorrection(item.id, template)}>
-                                              Usar
-                                            </Button>
-                                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Copiar template" onClick={() => void handleCopyTemplate(template)}>
-                                              {copiedTemplateIds.includes(template.id) ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                                            </Button>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              ) : null}
-                            </AccordionContent>
-                          </AccordionItem>
-                        </Accordion>
-
-                        <Textarea
-                          value={correctionValue}
-                          placeholder="Digite a resposta ideal para treinar a IA..."
-                          className="min-h-[100px] resize-none bg-muted/20 border-border text-xs sm:text-sm"
-                          disabled={isSendingCorrection}
-                          onChange={(event) => setCorrectionDrafts((current) => ({ ...current, [item.id]: event.target.value }))}
-                        />
-
-                        {hasCorrectionConfirmation ? (
-                          <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-500">
-                            <Check className="h-3.5 w-3.5" />
-                            Correção feita
-                          </div>
-                        ) : null}
+                      <div className="flex shrink-0 items-center gap-2">
+                        <div className="px-2 py-1 rounded-md bg-muted text-[10px] font-bold uppercase text-muted-foreground whitespace-nowrap">{item.quality || "Sem avaliação"}</div>
                       </div>
 
                       <Button
-                        className="h-9 px-4 w-full bg-theme-primary hover:bg-theme-primary/80 text-xs text-white font-bold rounded-lg gap-2"
-                        disabled={isSendingCorrection || !correctionValue.trim()}
-                        onClick={() => void handleSendCorrection(item)}
+                        asChild
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                        title="Excluir histórico"
+                        aria-label="Excluir histórico"
+                        disabled={isDeletingInteraction}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          requestDeleteInteraction(item);
+                        }}
                       >
-                        {isSendingCorrection ? "Enviando..." : "Responder"}
-                        <Send className="h-3.5 w-3.5" />
+                        {isDeletingInteraction ? <Loader2 className="h-3.5! w-3.5 animate-spin" /> : <Trash2 className="h-3.5! w-3.5" />}
                       </Button>
                     </div>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            );
-          })}
-        </Accordion>
-      )}
+                  </AccordionTrigger>
+
+                  <AccordionContent className="px-4 pb-4 pt-3 border-t border-dashed">
+                    <div className="min-w-0 space-y-4">
+                      <div>
+                        <div className="grid grid-cols-2 gap-4 text-[10px] uppercase tracking-wider font-bold text-muted-foreground w-full">
+                          <span>Data e Hora</span>
+                          <span className="text-right">Qualidade da Resposta</span>
+                        </div>
+                        <div className="flex justify-between items-center gap-2">
+                          <span className="text-xs sm:text-sm font-medium whitespace-nowrap">{formatInteractionDate(item.createdAt)}</span>
+                          <Select value={item.quality || EMPTY_QUALITY_VALUE} onValueChange={(quality) => void handleQualityChange(item.id, quality)} disabled={savingQualityIds.includes(item.id)}>
+                            <SelectTrigger className="w-28 h-8 text-xs bg-muted/40">
+                              <SelectValue placeholder="Avaliar" />
+                            </SelectTrigger>
+                            <SelectContent className="w-(--radix-select-trigger-width)!">
+                              <SelectItem value={EMPTY_QUALITY_VALUE}>Avaliar</SelectItem>
+                              <SelectItem value={NONE_QUALITY_VALUE}>Nenhuma</SelectItem>
+                              {qualityOptions.map((option) => (
+                                <SelectItem key={option} value={option}>
+                                  {option}
+                                </SelectItem>
+                              ))}
+                              {qualityOptions.length === 0 ? (
+                                <SelectItem value="__sem_opcoes__" disabled>
+                                  Sem opções encontradas
+                                </SelectItem>
+                              ) : null}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Mensagem Recebida</h4>
+                        <div className="bg-[#5fa77f]/20 text-(--chat-reply-me-border) px-3 py-2 rounded-lg rounded-tl-none inline-block text-xs sm:text-sm font-medium relative max-w-[90%] break-words before:absolute before:top-0 before:left-[-6px] before:w-0 before:h-0 before:border-t-[8px] before:border-t-[#5fa77f]/20 before:border-l-[6px] before:border-l-transparent">
+                          {item.received}
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end">
+                        <div className="flex min-w-0 max-w-[90%] items-start gap-1.5">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-md mt-1"
+                            title="Copiar resposta da IA"
+                            onClick={() => void handleCopyResponse(item.id, item.iaResponse)}
+                            disabled={!item.iaResponse}
+                          >
+                            {copiedResponseIds.includes(item.id) ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                          </Button>
+
+                          <div className="min-w-0 bg-blue-500/20 p-3 sm:p-4 rounded-xl rounded-tr-none text-xs sm:text-sm relative before:absolute before:top-0 before:right-[-6px] before:w-0 before:h-0 before:border-t-[8px] before:border-t-blue-500/20 before:border-r-[6px] before:border-r-transparent">
+                            <h4 className="text-[10px] font-bold text-blue-400 mb-1 text-right uppercase tracking-wider">Resposta IA</h4>
+                            <p className="text-foreground leading-relaxed break-words">
+                              <span className="font-semibold block mb-0.5">{assistantName}</span>
+                              {item.iaResponse}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="min-w-0 space-y-3 pt-2">
+                        <div className="min-w-0 space-y-2">
+                          <h4 className="text-xs font-bold">Mensagem Corrigida</h4>
+
+                          <Accordion type="single" collapsible className="w-full min-w-0 rounded-lg border border-border/70 bg-muted/10">
+                            <AccordionItem value="templates" className="border-b-0">
+                              <AccordionTrigger className="min-w-0 px-3 py-2 text-left hover:no-underline">
+                                <div className="flex min-w-0 items-center justify-between gap-2 pr-2 w-full">
+                                  <span className="min-w-0 truncate text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Rotinas manuais</span>
+                                  <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{isLoadingTemplates ? "Carregando..." : `${usableCorrectionTemplates.length}`}</span>
+                                </div>
+                              </AccordionTrigger>
+                              <AccordionContent className="px-2 pb-2">
+                                {!isLoadingTemplates && usableCorrectionTemplates.length === 0 ? <p className="px-1 pb-1 text-xs text-muted-foreground">Nenhuma rotina manual com texto encontrada.</p> : null}
+
+                                {usableCorrectionTemplates.length > 0 ? (
+                                  <div className="grid max-h-44 min-w-0 gap-2 overflow-y-auto overflow-x-hidden pr-1 custom-scrollbar">
+                                    {usableCorrectionTemplates.map((template) => {
+                                      const renderedTemplate = renderTemplateContent(template.content);
+
+                                      return (
+                                        <div key={`${item.id}-${template.id}`} className="min-w-0 overflow-hidden rounded-md border bg-background/70 p-2">
+                                          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                            <div className="min-w-0">
+                                              <p className="truncate text-xs font-semibold">{template.label}</p>
+                                              <p className="mt-1 line-clamp-2 min-w-0 whitespace-pre-wrap break-words text-[11px] leading-snug text-muted-foreground">{renderedTemplate}</p>
+                                            </div>
+                                            <div className="flex shrink-0 items-center gap-1 self-end sm:self-start">
+                                              <Button type="button" variant="outline" className="h-7 px-2 text-[11px]" disabled={isSendingCorrection} onClick={() => applyTemplateToCorrection(item.id, template)}>
+                                                Usar
+                                              </Button>
+                                              <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Copiar template" onClick={() => void handleCopyTemplate(template)}>
+                                                {copiedTemplateIds.includes(template.id) ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : null}
+                              </AccordionContent>
+                            </AccordionItem>
+                          </Accordion>
+
+                          <Textarea
+                            value={correctionValue}
+                            placeholder="Digite a resposta ideal para treinar a IA..."
+                            className="h-40 resize-none bg-muted/20 border-border text-xs sm:text-sm custom-scrollbar"
+                            disabled={isSendingCorrection}
+                            onChange={(event) => setCorrectionDrafts((current) => ({ ...current, [item.id]: event.target.value }))}
+                          />
+
+                          {hasCorrectionConfirmation ? (
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-500">
+                              <Check className="h-3.5 w-3.5" />
+                              Correção feita
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <Button
+                          className="h-9 px-4 w-full bg-theme-primary hover:bg-theme-primary/80 text-xs text-white font-bold rounded-lg gap-2"
+                          disabled={isSendingCorrection || !correctionValue.trim()}
+                          onClick={() => void handleSendCorrection(item)}
+                        >
+                          {isSendingCorrection ? "Enviando..." : "Responder"}
+                          <Send className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              );
+            })}
+          </Accordion>
+        )}
       </div>
 
       <Dialog open={Boolean(deleteConfirmationInteraction)} onOpenChange={(open) => !open && !isDeletingConfirmation && setDeleteConfirmationInteraction(null)}>

@@ -60,6 +60,7 @@ type MessageListProps = {
   onUpdate: ({ id, text, scheduledAt }: { id: string; text: string; scheduledAt: string }) => Promise<void>;
   isInternalNoteOpen: boolean;
   canUseMessageActions?: boolean;
+  isMobile?: boolean;
   isTyping?: boolean;
 };
 
@@ -235,6 +236,7 @@ export function MessageList({
   onUpdate,
   isInternalNoteOpen,
   canUseMessageActions = true,
+  isMobile,
   isTyping = false,
 }: MessageListProps) {
   return (
@@ -294,6 +296,7 @@ export function MessageList({
                         onExpandImage={onExpandImage}
                         onScrollToMessage={onScrollToMessage}
                         canUseActions={canUseMessageActions}
+                        isMobile={isMobile}
                       />
                     ),
                   )}

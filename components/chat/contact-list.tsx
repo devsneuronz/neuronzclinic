@@ -69,8 +69,38 @@ const stateTabs = [
 type ScopeTab = (typeof scopeTabs)[number]["id"];
 type StateTab = (typeof stateTabs)[number]["id"];
 
+const CONTACT_LIST_STATE_STORAGE_KEY = "neuronzclinic:chat-contact-list-state";
 const INITIAL_SKELETON_COUNT = 50;
 const MIN_SEARCH_SKELETON_COUNT = 1;
+
+type StoredContactListState = {
+  statusFilter?: string;
+  tagFilter?: string;
+  interestFilter?: string;
+  sectorFilter?: string;
+  scopeTab?: ScopeTab;
+  stateTab?: StateTab;
+};
+
+function isScopeTab(value: unknown): value is ScopeTab {
+  return typeof value === "string" && scopeTabs.some((tab) => tab.id === value);
+}
+
+function isStateTab(value: unknown): value is StateTab {
+  return typeof value === "string" && stateTabs.some((tab) => tab.id === value);
+}
+
+function readStoredContactListState() {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const storedState = window.sessionStorage.getItem(CONTACT_LIST_STATE_STORAGE_KEY);
+    if (!storedState) return null;
+    return JSON.parse(storedState) as StoredContactListState;
+  } catch {
+    return null;
+  }
+}
 
 const skeletonContainerVariants: Variants = {
   hidden: { opacity: 0 },
@@ -324,12 +354,18 @@ export function ContactList({
   onResetChats,
 }: ContactListProps) {
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState(ALL_FILTERS);
-  const [tagFilter, setTagFilter] = useState(ALL_FILTERS);
-  const [interestFilter, setInterestFilter] = useState(ALL_FILTERS);
-  const [sectorFilter, setSectorFilter] = useState(ALL_FILTERS);
-  const [scopeTab, setScopeTab] = useState<ScopeTab>("all");
-  const [stateTab, setStateTab] = useState<StateTab>("entrada");
+  const [statusFilter, setStatusFilter] = useState(() => readStoredContactListState()?.statusFilter ?? ALL_FILTERS);
+  const [tagFilter, setTagFilter] = useState(() => readStoredContactListState()?.tagFilter ?? ALL_FILTERS);
+  const [interestFilter, setInterestFilter] = useState(() => readStoredContactListState()?.interestFilter ?? ALL_FILTERS);
+  const [sectorFilter, setSectorFilter] = useState(() => readStoredContactListState()?.sectorFilter ?? ALL_FILTERS);
+  const [scopeTab, setScopeTab] = useState<ScopeTab>(() => {
+    const storedScopeTab = readStoredContactListState()?.scopeTab;
+    return isScopeTab(storedScopeTab) ? storedScopeTab : "all";
+  });
+  const [stateTab, setStateTab] = useState<StateTab>(() => {
+    const storedStateTab = readStoredContactListState()?.stateTab;
+    return isStateTab(storedStateTab) ? storedStateTab : "entrada";
+  });
   const [sectorLabels, setSectorLabels] = useState<Record<string, string>>({});
   const [sectorCatalog, setSectorCatalog] = useState<string[]>([]);
   const [draftsByChatId, setDraftsByChatId] = useState<Record<string, string>>({});
@@ -342,6 +378,24 @@ export function ContactList({
   const [expandedContactPhoto, setExpandedContactPhoto] = useState<{ url: string; alt: string } | null>(null);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const autoLoadKeyRef = useRef("");
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        CONTACT_LIST_STATE_STORAGE_KEY,
+        JSON.stringify({
+          statusFilter,
+          tagFilter,
+          interestFilter,
+          sectorFilter,
+          scopeTab,
+          stateTab,
+        } satisfies StoredContactListState),
+      );
+    } catch {
+      // Ignore unavailable sessionStorage so the contact list keeps working.
+    }
+  }, [interestFilter, scopeTab, sectorFilter, stateTab, statusFilter, tagFilter]);
 
   const statusOptions = useMemo(() => {
     const statuses = new Map<string, ChatStatusOption>();
