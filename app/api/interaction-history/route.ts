@@ -174,6 +174,11 @@ export async function PATCH(request: Request) {
     const payload: Record<string, unknown> = { updated_at: new Date().toISOString(), source: "supabase" };
     if (shouldUpdateQuality) payload.quality = quality || null;
     if (shouldUpdateCorrectedResponse) payload.corrected_response = correctedResponse;
+    if (shouldUpdateQuality || shouldUpdateCorrectedResponse) {
+      const nextQuality = shouldUpdateQuality ? quality : getString(existing.quality);
+      const nextCorrectedResponse = shouldUpdateCorrectedResponse ? correctedResponse : getString(existing.corrected_response);
+      payload.training_status = nextQuality || nextCorrectedResponse ? "pending" : "unreviewed";
+    }
 
     await supabaseRequest<unknown>(`interaction_history?id=eq.${encodeURIComponent(existing.id)}`, {
       method: "PATCH",
