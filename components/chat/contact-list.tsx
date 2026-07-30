@@ -857,7 +857,7 @@ export function ContactList({
             </div>
 
             {isFiltersOpen && (
-              <div className="space-y-2 px-3 pb-4">
+              <div className="grid grid-cols-2 gap-2 px-3 pb-4">
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className={cn("h-8 w-full bg-card text-xs gap-2 font-medium hover:bg-accent transition-colors", statusFilter === ALL_FILTERS && "border-dashed")}>
                     <div className="flex items-center gap-2 truncate">
@@ -878,13 +878,13 @@ export function ContactList({
                           <div className="relative w-4 h-4 p-0">
                             <span className="absolute h-2 w-2 left-1/2 top-1/2 -translate-1/2 rounded-full bg-muted-foreground" />
                           </div>
-                          <span className="text-muted-foreground">Filtrar por status</span>
+                          <span className="text-muted-foreground">Status</span>
                         </>
                       )}
                     </div>
                   </SelectTrigger>
 
-                  <SelectContent>
+                  <SelectContent className="max-h-80">
                     <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm cursor-pointer">
                       Selecione um status
                     </SelectItem>
@@ -923,13 +923,13 @@ export function ContactList({
                           <div className="w-4 h-4">
                             <TagsIcon className=" text-muted-foreground shrink-0" />
                           </div>
-                          <span className="text-muted-foreground">Filtrar por tag</span>
+                          <span className="text-muted-foreground">Tag</span>
                         </>
                       )}
                     </div>
                   </SelectTrigger>
 
-                  <SelectContent>
+                  <SelectContent className="max-h-80">
                     <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm">
                       Todas as tags
                     </SelectItem>
@@ -961,13 +961,13 @@ export function ContactList({
                           <div className="w-4 h-4">
                             <Star className=" text-muted-foreground shrink-0" />
                           </div>
-                          <span className="text-muted-foreground">Filtrar por interesse</span>
+                          <span className="text-muted-foreground">Interesse</span>
                         </>
                       )}
                     </div>
                   </SelectTrigger>
 
-                  <SelectContent>
+                  <SelectContent className="max-h-80">
                     <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm cursor-pointer">
                       Selecione um interesse
                     </SelectItem>
@@ -994,13 +994,13 @@ export function ContactList({
                           <div className="w-4 h-4">
                             <Building2 className=" text-muted-foreground shrink-0" />
                           </div>
-                          <span className="text-muted-foreground">Filtrar por setor</span>
+                          <span className="text-muted-foreground">Setor</span>
                         </>
                       )}
                     </div>
                   </SelectTrigger>
 
-                  <SelectContent>
+                  <SelectContent className="max-h-80 ">
                     <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm cursor-pointer">
                       Selecione um setor
                     </SelectItem>
