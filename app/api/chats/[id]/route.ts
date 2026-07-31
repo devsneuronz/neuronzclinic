@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { CHAT_INTEREST_FIELD_CANDIDATES } from "@/lib/chat-tags"
+import { forwardPendingIncomingMessagesForChat } from "@/lib/ai-message-forwarding"
 
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
@@ -336,6 +337,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
     const patch = buildPatch(body as RawChat, currentChat)
     const addedTags = getAddedTags(body as RawChat, currentChat)
+    const shouldReplayPendingAiMessages = patch.ia_responde === true && currentChat.ia_responde !== true
     if (Object.keys(patch).length === 0) {
       return NextResponse.json({ message: "Nenhum campo valido para atualizar." }, { status: 400 })
     }
@@ -353,11 +355,28 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
 
     const data = (await response.json()) as RawChat[]
-    await notifyRoutineTagAdded({ chatId, currentChat: data[0] ?? { ...currentChat, ...patch }, addedTags })
+    const updatedChat = data[0] ?? { ...currentChat, ...patch }
+    const aiReplay = shouldReplayPendingAiMessages
+      ? await forwardPendingIncomingMessagesForChat({
+          id: getString(updatedChat.id),
+          chat_id: getString(updatedChat.chat_id),
+          contact_id: getString(updatedChat.contact_id),
+          nome_contato: getString(updatedChat.nome_contato),
+          pushname: getString(updatedChat.pushname),
+          phone_contact: getString(updatedChat.phone_contact),
+        }).catch((error) => ({
+          forwarded: false,
+          skipped: false,
+          reason: error instanceof Error ? error.message : "ai_replay_failed",
+        }))
+      : null
+
+    await notifyRoutineTagAdded({ chatId, currentChat: updatedChat, addedTags })
 
     return NextResponse.json({
-      chat: data[0] ?? { ...currentChat, ...patch },
+      chat: updatedChat,
       patch,
+      aiReplay,
       routineEvents: {
         tagAdded: addedTags.length,
       },

@@ -1,4 +1,5 @@
 import { encodeEq, getBrazilPhoneVariants, getString, isUuid, onlyDigits, supabaseJson } from "@/lib/supabase-server"
+import { markIncomingPayloadForwarded } from "@/lib/ai-message-forwarding"
 import { NextRequest, NextResponse } from "next/server"
 
 const AI_RECEIVE_MESSAGE_WEBHOOK_URL = process.env.AI_RECEIVE_MESSAGE_WEBHOOK_URL
@@ -316,6 +317,10 @@ export async function POST(request: NextRequest) {
       forwarded: true,
       chat: { id: chat.id, chat_id: chat.chat_id },
       webhook: webhookBody,
+      forwardedMessage: await markIncomingPayloadForwarded({ chat, payload: body, received }).catch((error) => ({
+        marked: false,
+        reason: error instanceof Error ? error.message : "mark_failed",
+      })),
     })
   } catch (error) {
     const message = error instanceof DOMException && error.name === "AbortError" ? "Webhook da IA demorou para responder." : error instanceof Error ? error.message : "Nao foi possivel encaminhar a mensagem para a IA."
