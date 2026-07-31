@@ -149,7 +149,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const activeOnly = searchParams.get("activeOnly") === "true";
     const activeFilter = activeOnly ? "&is_active=is.true" : "";
-    const replies = await supabaseRequest<QuickReplyRecord[]>(`quick_replies?select=*&auth_user_id=eq.${encodeURIComponent(authUser.id)}&order=shortcut.asc&order=created_at.desc${activeFilter}`);
+    const replies = await supabaseRequest<QuickReplyRecord[]>(`quick_replies?select=*&auth_user_id=eq.${encodeURIComponent(authUser.id as string)}&order=shortcut.asc&order=created_at.desc${activeFilter}`);
 
     return NextResponse.json({ replies });
   } catch (error) {
@@ -187,7 +187,7 @@ export async function PATCH(request: Request) {
 
     if (!isUuid(id)) return NextResponse.json({ message: "Resposta rápida inválida." }, { status: 400 });
 
-    const [reply] = await supabaseRequest<QuickReplyRecord[]>(`quick_replies?id=eq.${encodeURIComponent(id)}&auth_user_id=eq.${encodeURIComponent(authUser.id)}`, {
+    const [reply] = await supabaseRequest<QuickReplyRecord[]>(`quick_replies?id=eq.${encodeURIComponent(id)}&auth_user_id=eq.${encodeURIComponent(authUser.id as string)}`, {
       method: "PATCH",
       body: JSON.stringify({ ...buildPayload(body), updated_by: authUser.email }),
     });
@@ -208,7 +208,7 @@ export async function DELETE(request: Request) {
 
     if (!isUuid(id)) return NextResponse.json({ message: "Resposta rápida inválida." }, { status: 400 });
 
-    await supabaseRequest<unknown>(`quick_replies?id=eq.${encodeURIComponent(id)}&auth_user_id=eq.${encodeURIComponent(authUser.id)}`, {
+    await supabaseRequest<unknown>(`quick_replies?id=eq.${encodeURIComponent(id)}&auth_user_id=eq.${encodeURIComponent(authUser.id as string)}`, {
       method: "DELETE",
       headers: { Prefer: "return=minimal" },
     });
@@ -218,3 +218,4 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ message: getApiErrorMessage(error, "Não foi possível remover a resposta rápida.") }, { status: getErrorStatus(error) });
   }
 }
+
