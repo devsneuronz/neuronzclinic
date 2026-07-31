@@ -4,13 +4,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { cn } from "@/lib/utils";
-import { Bolt, Building2, CalendarClock, CopyPlus, Loader2, Sparkles, Stethoscope, Tags, Users } from "lucide-react";
+import { Bolt, Building2, CalendarClock, CopyPlus, Loader2, MessageSquareQuote, Sparkles, Stethoscope, Tags, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProfessionalSchedulePreview } from "../professional-schedule/professional-schedule-preview";
 import { BackgroundOptions } from "./background-options";
 import { ClinicInfoManager, SupabaseProcedure } from "./clinic-info-manager";
 import ColorScheme from "./color-scheme";
 import { Expertise, Professionals, SettingsProfessional } from "./professionals";
+import { QuickRepliesManager } from "./quick-replies-manager";
 import { SavedAttachmentsManager } from "./saved-attachments-manager";
 import { ScheduledMessagesManager } from "./scheduled-messages-manager";
 import { SectorsManager, type Sector } from "./sectors-manager";
@@ -208,6 +209,11 @@ export default function SettingsPage() {
                       </TabsTrigger>
                     )}
 
+                    <TabsTrigger value="respostas-rapidas" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
+                      <MessageSquareQuote className="w-0! opacity-0 transition-all duration-200 ease-out group-data-[state=active]:w-4! group-data-[state=active]:opacity-100 mr-0 group-data-[state=active]:mr-2" />
+                      <span>Respostas</span>
+                    </TabsTrigger>
+
                     {isAdmin && (
                       <>
                         <TabsTrigger value="usuarios" className="group relative data-[state=active]:bg-card shrink-0 px-4 py-2 rounded-full">
@@ -354,6 +360,17 @@ export default function SettingsPage() {
                     </CardHeader>
                     <CardContent className="flex-1 overflow-y-auto custom-scrollbar">
                       <SavedAttachmentsManager />
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                <TabsContent value="respostas-rapidas" className="w-full flex-1 flex justify-center overflow-hidden p-6 data-[state=inactive]:hidden! data-[state=active]:flex">
+                  <Card className="w-full max-w-7xl border border-border bg-card shadow-sm flex flex-col min-h-0 overflow-hidden">
+                    <CardHeader className="space-y-1 shrink-0">
+                      <CardTitle className="text-xl font-semibold text-foreground">Respostas Rápidas</CardTitle>
+                      <CardDescription className="text-sm text-muted-foreground">Crie textos reutilizáveis acionados por / nos chats.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex min-h-0 flex-1 overflow-y-auto lg:overflow-hidden custom-scrollbar">
+                      <QuickRepliesManager />
                     </CardContent>
                   </Card>
                 </TabsContent>

@@ -14,12 +14,14 @@ import {
   deleteChatNote,
   fetchChatNotes,
   fetchChats,
+  fetchQuickReplies,
   fetchSavedAttachments,
   fetchScheduledMessages,
   scheduleMessage,
   updateChatNote,
   updateScheduledMessage,
   type ChatNoteRecord,
+  type QuickReplyRecord,
   type SavedAttachmentRecord,
   type ScheduledMessageRecord,
 } from "@/lib/supabase-rest";
@@ -201,6 +203,7 @@ export function ChatWindow({
   const [internalNotes, setInternalNotes] = useState<InternalNote[]>([]);
   const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessageRecord[]>([]);
   const [savedAttachments, setSavedAttachments] = useState<SavedAttachmentRecord[]>([]);
+  const [quickReplies, setQuickReplies] = useState<QuickReplyRecord[]>([]);
   const [isLoadingSavedAttachments, setIsLoadingSavedAttachments] = useState(false);
   const [noteMentionUsers, setNoteMentionUsers] = useState<MentionableUser[]>([]);
   const [isInternalNoteOpen, setIsInternalNoteOpen] = useState(false);
@@ -622,20 +625,36 @@ export function ChatWindow({
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+
     if (isAssistantChat) {
-      setSavedAttachments([]);
-      return;
+      queueMicrotask(() => {
+        if (!isMounted) return;
+        setSavedAttachments([]);
+        setQuickReplies([]);
+      });
+
+      return () => {
+        isMounted = false;
+      };
     }
 
-    let isMounted = true;
-    setIsLoadingSavedAttachments(true);
+    queueMicrotask(() => {
+      if (isMounted) setIsLoadingSavedAttachments(true);
+    });
 
-    fetchSavedAttachments({ activeOnly: true })
-      .then((attachments) => {
-        if (isMounted) setSavedAttachments(attachments);
+    Promise.all([fetchSavedAttachments({ activeOnly: true }), fetchQuickReplies({ activeOnly: true })])
+      .then(([attachments, replies]) => {
+        if (isMounted) {
+          setSavedAttachments(attachments);
+          setQuickReplies(replies);
+        }
       })
       .catch(() => {
-        if (isMounted) setSavedAttachments([]);
+        if (isMounted) {
+          setSavedAttachments([]);
+          setQuickReplies([]);
+        }
       })
       .finally(() => {
         if (isMounted) setIsLoadingSavedAttachments(false);
@@ -1349,6 +1368,7 @@ export function ChatWindow({
               videoInputRef={videoInputRef}
               cameraInputRef={cameraInputRef}
               savedAttachments={savedAttachments}
+              quickReplies={quickReplies}
               isLoadingSavedAttachments={isLoadingSavedAttachments}
               onSubmit={handleSubmit}
               onDraftChange={setDraft}

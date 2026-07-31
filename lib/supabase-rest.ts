@@ -1,4 +1,5 @@
 import { buildEvolutionQuotedPayload } from "@/lib/message-replies"
+import { getFreshSavedSession } from "@/lib/auth-session"
 
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL
 
@@ -273,6 +274,25 @@ export interface SavedAttachmentUploadResult {
   fileName: string
 }
 
+export interface QuickReplyRecord {
+  id: string
+  auth_user_id: string | null
+  user_profile_id: string | null
+  shortcut: string
+  content: string
+  is_active: boolean | null
+  created_by: string | null
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface QuickReplyInput {
+  shortcut: string
+  content: string
+  isActive?: boolean
+}
+
 async function supabaseGet<T>(path: string): Promise<T> {
   if (!supabaseRestUrl || !SUPABASE_PUBLISHABLE_KEY) {
     throw new Error("Missing NEXT_PUBLIC_SUPABASE_REST_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
@@ -532,6 +552,84 @@ export async function uploadSavedAttachmentFile(file: File, kind: Exclude<SavedA
   }
 
   return response.json() as Promise<SavedAttachmentUploadResult>
+}
+
+export async function fetchQuickReplies({ activeOnly = false }: { activeOnly?: boolean } = {}) {
+  const params = new URLSearchParams()
+  if (activeOnly) params.set("activeOnly", "true")
+  const suffix = params.toString() ? `?${params.toString()}` : ""
+  const session = await getFreshSavedSession()
+  const response = await fetch(`/api/quick-replies${suffix}`, {
+    cache: "no-store",
+    headers: {
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || `Nao foi possivel carregar respostas rapidas (${response.status}).`)
+  }
+
+  const data = await response.json() as { replies?: QuickReplyRecord[] }
+  return data.replies ?? []
+}
+
+export async function createQuickReply(input: QuickReplyInput) {
+  const session = await getFreshSavedSession()
+  const response = await fetch("/api/quick-replies", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+    body: JSON.stringify(input),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || `Nao foi possivel criar a resposta rapida (${response.status}).`)
+  }
+
+  const data = await response.json() as { reply?: QuickReplyRecord }
+  if (!data.reply) throw new Error("A API nao retornou a resposta rapida criada.")
+  return data.reply
+}
+
+export async function updateQuickReply(id: string, input: QuickReplyInput) {
+  const session = await getFreshSavedSession()
+  const response = await fetch("/api/quick-replies", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+    body: JSON.stringify({ ...input, id }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || `Nao foi possivel atualizar a resposta rapida (${response.status}).`)
+  }
+
+  const data = await response.json() as { reply?: QuickReplyRecord }
+  if (!data.reply) throw new Error("A API nao retornou a resposta rapida atualizada.")
+  return data.reply
+}
+
+export async function deleteQuickReply(id: string) {
+  const session = await getFreshSavedSession()
+  const response = await fetch(`/api/quick-replies?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: {
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || `Nao foi possivel excluir a resposta rapida (${response.status}).`)
+  }
 }
 
 export async function sendMessage({ chatId, text, file, replyTo, contactName }: SendMessageInput) {

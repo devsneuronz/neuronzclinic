@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { ChatStatusOption } from "@/lib/chat-status";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getReadableTextColor } from "@/lib/chat-tags";
+import { messageDirectives } from "@/lib/message-directives";
 import { actionLabels, createEmptyAction, triggerColors, triggerOptions, type Routine, type RoutineAction, type RoutineActionType, type RoutineMessageTemplate, type RoutineTrigger } from "@/lib/routines";
 import { uploadSavedAttachmentFile, type SavedAttachmentKind } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
@@ -97,13 +98,6 @@ const intervalOptions = [
   { label: "Dias", minutes: 1440 },
   { label: "Semanas", minutes: 10080 },
   { label: "Meses", minutes: 43200 },
-];
-const messageDirectives = [
-  { key: "nome", label: "%nome%", description: "Nome completo do contato" },
-  { key: "primeiro_nome", label: "%primeiro_nome%", description: "Primeiro nome do contato" },
-  { key: "telefone", label: "%telefone%", description: "Telefone do contato" },
-  { key: "celular", label: "%celular%", description: "Telefone do contato" },
-  { key: "hoje", label: "%hoje%", description: "Data de hoje" },
 ];
 const templateTypeOptions = ["Relacionamento", "Marketing", "Vendas", "Aviso", "Informação"];
 

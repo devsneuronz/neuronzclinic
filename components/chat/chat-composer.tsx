@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useIsMobile } from "@/hooks/use-mobile";
-import type { ChatRecord, MessageRecord, SavedAttachmentRecord } from "@/lib/supabase-rest";
+import { renderMessageDirectives } from "@/lib/message-directives";
+import type { ChatRecord, MessageRecord, QuickReplyRecord, SavedAttachmentRecord } from "@/lib/supabase-rest";
 import { getMentionLabel, getMentionSlug } from "@/lib/user-mentions";
 import type { MentionableUser } from "@/lib/user-roles";
 import { cn } from "@/lib/utils";
@@ -39,6 +40,7 @@ type ChatComposerProps = {
   videoInputRef: RefObject<HTMLInputElement | null>;
   cameraInputRef: RefObject<HTMLInputElement | null>;
   savedAttachments: SavedAttachmentRecord[];
+  quickReplies: QuickReplyRecord[];
   isLoadingSavedAttachments: boolean;
 
   isSignatureMode: boolean;
@@ -83,6 +85,7 @@ export function ChatComposer({
   videoInputRef,
   cameraInputRef,
   savedAttachments,
+  quickReplies,
   isLoadingSavedAttachments,
   onSubmit,
   onRegisterFocus,
@@ -106,6 +109,11 @@ export function ChatComposer({
 }: ChatComposerProps) {
   const mentionMatch = noteDraft.match(/(^|\s)@([\p{L}\p{N}._-]*)$/u);
   const mentionQuery = mentionMatch?.[2] ?? "";
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [caretPosition, setCaretPosition] = useState(draft.length);
+  const textBeforeCaret = draft.slice(0, caretPosition);
+  const quickReplyMatch = !isInternalNoteOpen && !isAssistantChat ? textBeforeCaret.match(/(^|[\s\n])\/([\p{L}\p{N}._-]*)$/u) : null;
+  const quickReplyQuery = quickReplyMatch?.[2]?.toLowerCase() ?? "";
 
   const isMobile = useIsMobile();
   const canSend = !!draft.trim() || (!isAssistantChat && !!attachment);
@@ -122,6 +130,21 @@ export function ChatComposer({
       })
       .slice(0, 5);
   }, [isInternalNoteOpen, mentionMatch, mentionQuery, noteMentionUsers]);
+
+  const quickReplySuggestions = useMemo(() => {
+    if (!quickReplyMatch) return [];
+
+    return quickReplies
+      .filter((reply) => {
+        const haystack = reply.shortcut.toLowerCase();
+        return !quickReplyQuery || haystack.includes(quickReplyQuery);
+      })
+      .slice(0, 7);
+  }, [quickReplies, quickReplyMatch, quickReplyQuery]);
+
+  function updateDraftCaretPosition(element: HTMLTextAreaElement) {
+    setCaretPosition(element.selectionStart ?? element.value.length);
+  }
 
   function insertMention(user: MentionableUser) {
     if (!mentionMatch) return;
@@ -166,15 +189,39 @@ export function ChatComposer({
     );
   }
 
+  function insertQuickReply(reply: QuickReplyRecord) {
+    if (!quickReplyMatch) return;
+
+    const matchStart = quickReplyMatch.index ?? 0;
+    const shortcutStart = matchStart + quickReplyMatch[1].length;
+    const prefix = draft.slice(0, shortcutStart);
+    const suffix = draft.slice(caretPosition);
+    const renderedContent = renderMessageDirectives(reply.content, chat);
+    const spacer = suffix.trim() ? " " : "";
+    const nextValue = `${prefix}${renderedContent}${spacer}${suffix}`;
+    const nextCaretPosition = prefix.length + renderedContent.length + spacer.length;
+
+    onDraftChange(nextValue);
+    setCaretPosition(nextCaretPosition);
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(nextCaretPosition, nextCaretPosition);
+    });
+  }
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && quickReplySuggestions.length > 0) {
+      event.preventDefault();
+      insertQuickReply(quickReplySuggestions[0]);
+      return;
+    }
+
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
 
       event.currentTarget.form?.requestSubmit();
     }
   };
-
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (onRegisterFocus) {
@@ -438,13 +485,37 @@ export function ChatComposer({
                   ref={textareaRef}
                   onKeyDown={handleKeyDown}
                   value={draft}
-                  onChange={(event) => onDraftChange(event.target.value)}
+                  onChange={(event) => {
+                    onDraftChange(event.target.value);
+                    updateDraftCaretPosition(event.target);
+                  }}
+                  onClick={(event) => updateDraftCaretPosition(event.currentTarget)}
+                  onKeyUp={(event) => updateDraftCaretPosition(event.currentTarget)}
+                  onSelect={(event) => updateDraftCaretPosition(event.currentTarget)}
                   disabled={isSending}
                   placeholder={attachment ? "Legenda opcional" : "Digite uma mensagem..."}
                   className={cn("custom-scrollbar flex-1 border-0 bg-input/50 resize-none transition-[color,box-shadow] h-full w-0 min-h-0", isInputActive && "ring-3 ring-ring/50", isMobile ? "rounded-[20px] pr-7" : "rounded-md")}
                   onFocus={() => setIsInputActive(true)}
                   onBlur={() => setIsInputActive(false)}
                 />
+                {quickReplySuggestions.length > 0 && (
+                  <div className="absolute bottom-full left-0 z-30 mb-2 w-[min(420px,calc(100vw-2rem))] overflow-hidden rounded-md border border-border bg-popover p-1 text-sm shadow-xl">
+                    {quickReplySuggestions.map((reply) => (
+                      <button
+                        key={reply.id}
+                        type="button"
+                        className="flex w-full items-center gap-2 rounded-sm p-1 text-left text-foreground transition hover:bg-accent"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => insertQuickReply(reply)}
+                      >
+                        <span className="mt-0.5 flex h-6 shrink-0 items-center justify-center rounded bg-theme-primary/10 px-1.5 font-mono text-[10px] font-bold text-theme-primary">/{reply.shortcut}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block line-clamp-2 text-[11px] leading-snug text-muted-foreground">{reply.content}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {!isAssistantChat && isMobile && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild className="absolute right-0">
