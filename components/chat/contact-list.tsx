@@ -904,6 +904,72 @@ export function ContactList({
                   </SelectContent>
                 </Select>
 
+                <Select value={sectorFilter} onValueChange={setSectorFilter}>
+                  <SelectTrigger className={cn("h-8 w-full bg-card text-xs gap-2 font-medium hover:bg-accent transition-colors", sectorFilter === ALL_FILTERS && "border-dashed")}>
+                    <div className="flex items-center gap-2 truncate">
+                      {sectorFilter && sectorFilter !== ALL_FILTERS ? (
+                        <>
+                          {(() => {
+                            return <span className="flex items-center rounded-md py-0.5 text-[11px]">{sectorFilter}</span>;
+                          })()}
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-4 h-4">
+                            <Building2 className=" text-muted-foreground shrink-0" />
+                          </div>
+                          <span className="text-muted-foreground">Setor</span>
+                        </>
+                      )}
+                    </div>
+                  </SelectTrigger>
+
+                  <SelectContent className="max-h-80 ">
+                    <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm cursor-pointer">
+                      Selecione um setor
+                    </SelectItem>
+
+                    {sectorOptions.map((sector) => (
+                      <SelectItem key={sector} value={sector} className="text-xs my-0.5 rounded-sm focus:bg-accent cursor-pointer">
+                        <span className="flex items-center gap-2 font-medium">{sector}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={interestFilter} onValueChange={setInterestFilter}>
+                  <SelectTrigger className={cn("h-8 w-full bg-card text-xs gap-2 font-medium hover:bg-accent transition-colors", interestFilter === ALL_FILTERS && "border-dashed")}>
+                    <div className="flex items-center gap-2 truncate">
+                      {interestFilter && interestFilter !== ALL_FILTERS ? (
+                        <>
+                          {(() => {
+                            return <span className="flex items-center rounded-md py-0.5 text-[11px]">{interestFilter}</span>;
+                          })()}
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-4 h-4">
+                            <Star className=" text-muted-foreground shrink-0" />
+                          </div>
+                          <span className="text-muted-foreground">Interesse</span>
+                        </>
+                      )}
+                    </div>
+                  </SelectTrigger>
+
+                  <SelectContent className="max-h-80">
+                    <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm cursor-pointer">
+                      Selecione um interesse
+                    </SelectItem>
+
+                    {interestOptions.map((interest) => (
+                      <SelectItem key={interest} value={interest} className="text-xs my-0.5 rounded-sm focus:bg-accent cursor-pointer">
+                        <span className="flex items-center gap-2 font-medium">{interest}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
                 <Select value={tagFilter} onValueChange={setTagFilter}>
                   <SelectTrigger className={cn("h-8 w-full bg-card text-xs gap-2 font-medium hover:bg-accent transition-colors", tagFilter === ALL_FILTERS && "border-dashed")}>
                     <div className="flex items-center gap-2 truncate">
@@ -944,72 +1010,6 @@ export function ContactList({
                         </SelectItem>
                       );
                     })}
-                  </SelectContent>
-                </Select>
-
-                <Select value={interestFilter} onValueChange={setInterestFilter}>
-                  <SelectTrigger className={cn("h-8 w-full bg-card text-xs gap-2 font-medium hover:bg-accent transition-colors", interestFilter === ALL_FILTERS && "border-dashed")}>
-                    <div className="flex items-center gap-2 truncate">
-                      {interestFilter && interestFilter !== ALL_FILTERS ? (
-                        <>
-                          {(() => {
-                            return <span className="flex items-center rounded-md py-0.5 text-[11px]">{interestFilter}</span>;
-                          })()}
-                        </>
-                      ) : (
-                        <>
-                          <div className="w-4 h-4">
-                            <Star className=" text-muted-foreground shrink-0" />
-                          </div>
-                          <span className="text-muted-foreground">Interesse</span>
-                        </>
-                      )}
-                    </div>
-                  </SelectTrigger>
-
-                  <SelectContent className="max-h-80">
-                    <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm cursor-pointer">
-                      Selecione um interesse
-                    </SelectItem>
-
-                    {interestOptions.map((interest) => (
-                      <SelectItem key={interest} value={interest} className="text-xs my-0.5 rounded-sm focus:bg-accent cursor-pointer">
-                        <span className="flex items-center gap-2 font-medium">{interest}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select value={sectorFilter} onValueChange={setSectorFilter}>
-                  <SelectTrigger className={cn("h-8 w-full bg-card text-xs gap-2 font-medium hover:bg-accent transition-colors", sectorFilter === ALL_FILTERS && "border-dashed")}>
-                    <div className="flex items-center gap-2 truncate">
-                      {sectorFilter && sectorFilter !== ALL_FILTERS ? (
-                        <>
-                          {(() => {
-                            return <span className="flex items-center rounded-md py-0.5 text-[11px]">{sectorFilter}</span>;
-                          })()}
-                        </>
-                      ) : (
-                        <>
-                          <div className="w-4 h-4">
-                            <Building2 className=" text-muted-foreground shrink-0" />
-                          </div>
-                          <span className="text-muted-foreground">Setor</span>
-                        </>
-                      )}
-                    </div>
-                  </SelectTrigger>
-
-                  <SelectContent className="max-h-80 ">
-                    <SelectItem value={ALL_FILTERS} className="text-xs text-muted-foreground rounded-sm cursor-pointer">
-                      Selecione um setor
-                    </SelectItem>
-
-                    {sectorOptions.map((sector) => (
-                      <SelectItem key={sector} value={sector} className="text-xs my-0.5 rounded-sm focus:bg-accent cursor-pointer">
-                        <span className="flex items-center gap-2 font-medium">{sector}</span>
-                      </SelectItem>
-                    ))}
                   </SelectContent>
                 </Select>
               </div>
