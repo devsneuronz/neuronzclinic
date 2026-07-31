@@ -370,10 +370,9 @@ function GroupedDecisionSection({ title, description, decisions }: { title: stri
                 </div>
 
                 <Accordion type="single" collapsible className="w-full min-w-0 space-y-3">
-                  {items.map((decision) => {
-                    const globalIndex = decisions.indexOf(decision) + 1;
-                    return <DecisionItem key={decision.id} item={decision} number={globalIndex} />;
-                  })}
+                  {items.map((decision) => (
+                    <DecisionItem key={decision.id} item={decision} />
+                  ))}
                 </Accordion>
               </div>
             );
@@ -477,4 +476,3 @@ function DecisionItem({ item }: { item: InteractionDecision }) {
     </AccordionItem>
   );
 }
-
