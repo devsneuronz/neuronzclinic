@@ -258,16 +258,18 @@ export function QuickRepliesManager() {
                     onClick={() => editReply(reply)}
                     className={cn("w-full relative rounded-xl border border-border bg-card p-2 text-left transition-all hover:shadow-md", editingReply?.id === reply.id && "border-theme-primary ring-1 ring-theme-primary/50 shadow-sm")}
                   >
-                    <div className="flex items-start justify-between gap-4  h-14">
-                      <div className=" flex-1  h-full flex flex-col justify-between">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 flex flex-col justify-between">
                         <div className="flex min-w-0 items-center gap-2 mb-1.5">
                           <div className="relative flex h-7 max-w-full shrink-0 items-center px-2 border border-black/10 bg-theme-primary text-theme-primary-fg shadow-3xs rounded-md">
-                            <span className=" text-[12px] tracking-wide">/{reply.shortcut}</span>
+                            <span className="text-[12px] tracking-wide">/{reply.shortcut}</span>
                           </div>
                         </div>
-                        <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">{reply.content}</p>
+
+                        <p className="line-clamp-3 text-sm leading-tight text-muted-foreground w-full break-all">{reply.content}</p>
                       </div>
-                      <div className="flex shrink-0 items-center gap-3 h-full">
+
+                      <div className="flex shrink-0 items-center gap-3">
                         <Badge variant="outline" className="text-[10px] uppercase bg-background absolute right-4 top-0 -translate-y-1/2">
                           {reply.is_active ? "Disponível no chat" : "Inativa"}
                         </Badge>
@@ -298,8 +300,8 @@ export function QuickRepliesManager() {
             )}
           </div>
         </div>
-        <div className="w-full flex flex-col gap-5 overflow-visible pt-2 lg:h-full lg:w-[45%] lg:overflow-hidden xl:w-[40%]">
-          <div className="relative flex flex-col flex-1 min-h-0 rounded-xl border border-dashed border-border bg-muted/20 text-sm text-muted-foreground">
+        <div className="w-full flex flex-col gap-5 overflow-visible pt-2 lg:h-full lg:w-[45%] overflow-y-auto xl:w-[40%]">
+          <div className="relative flex flex-col flex-1 min-h- rounded-xl border border-dashed border-border bg-muted/20 text-sm text-muted-foreground">
             <div className="absolute -top-2.5 left-4 rounded-md border border-border bg-background px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary shadow-3xs">{editingReply ? "Editando" : "Nova resposta"}</div>
             <div className="relative flex flex-col flex-1 min-h-0 p-5 sm:p-6">
               <div className="mb-6 flex shrink-0 items-start justify-between gap-3 border-b border-border/50 pb-5">
@@ -363,7 +365,7 @@ export function QuickRepliesManager() {
               </div>
             </div>
           </div>
-          <div className="shrink-0 rounded-xl border border-border bg-card p-5 text-sm">
+          <div className=" rounded-xl border border-border bg-card p-5 text-sm">
             <div className="flex items-center gap-2 font-bold text-foreground mb-2">
               <MessageSquareQuote className="h-5 w-5 text-theme-primary" />
               Como utilizar?

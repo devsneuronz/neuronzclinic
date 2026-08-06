@@ -362,7 +362,7 @@ export function ChatComposer({
       {recordingError && <p className="mb-2 rounded-md bg-red-500/10 px-3 py-2 text-xs text-red-500">{recordingError}</p>}
 
       {!isInternalNoteOpen && (
-        <div className="flex min-h-10 shrink-0 items-center gap-3">
+        <div className="flex h-full shrink-0 items-center gap-3">
           {isRecording ? (
             <div className="flex min-w-0 flex-1 items-center gap-3 rounded-full bg-secondary px-2 py-2 shadow-sm">
               <Button type="button" variant="ghost" size="icon" className="shrink-0 rounded-full text-muted-foreground hover:text-red-500" onClick={onCancelRecording} disabled={isSending} aria-label="Cancelar gravação">

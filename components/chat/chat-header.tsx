@@ -2,11 +2,12 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getAvatarInitials } from "@/lib/avatar-initials";
 import type { ChatRecord } from "@/lib/supabase-rest";
-import { cn } from "@/lib/utils";
-import { Bot, CheckCircle2, ChevronLeft, Forward, Info, Play, RotateCcw, Trash2, X } from "lucide-react";
+import { Bot, Check, CheckCircle2, ChevronLeft, Copy, Forward, Info, Play, RotateCcw, Trash2, X } from "lucide-react";
+import { useState } from "react";
 import { getDisplayName } from "./message-utils";
 
 type ChatHeaderProps = {
@@ -47,6 +48,18 @@ export function ChatHeader({
   const hasContactPhoto = !!chat.url_foto_perfil;
   const { user } = useCurrentUser();
   const isAdmin = user?.role === "admin";
+  const [isNameCopied, setIsNameCopied] = useState(false);
+  const displayName = getDisplayName(chat);
+
+  async function handleCopyName() {
+    try {
+      await navigator.clipboard.writeText(displayName);
+      setIsNameCopied(true);
+      setTimeout(() => setIsNameCopied(false), 2000);
+    } catch (error) {
+      console.error("Falha ao copiar o nome do contato:", error);
+    }
+  }
 
   return (
     <div className="flex items-center justify-between border-b border-border bg-card px-4 min-h-15.25">
@@ -74,7 +87,7 @@ export function ChatHeader({
         </>
       ) : (
         <>
-          <div onClick={isAssistantChat ? undefined : onToggleDetails} className={cn("flex items-center gap-3", !isAssistantChat && "cursor-pointer")}>
+          <div className="flex items-center gap-3">
             {isMobile && onCloseChat && (
               <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onCloseChat}>
                 <ChevronLeft className="h-5 w-5" />
@@ -96,12 +109,29 @@ export function ChatHeader({
               }}
             >
               <Avatar className="h-10 w-10">
-                <AvatarImage src={chat.url_foto_perfil ?? undefined} alt={getDisplayName(chat)} />
-                <AvatarFallback className="bg-gradient-to-br from-teal-500 to-teal-700 text-sm font-semibold text-white">{getAvatarInitials(getDisplayName(chat), "C")}</AvatarFallback>
+                <AvatarImage src={chat.url_foto_perfil ?? undefined} alt={displayName} />
+                <AvatarFallback className="bg-gradient-to-br from-teal-500 to-teal-700 text-sm font-semibold text-white">{getAvatarInitials(displayName, "C")}</AvatarFallback>
               </Avatar>
             </button>
             <div className="flex min-w-0 flex-col">
-              <span className="truncate font-medium leading-none text-foreground">{getDisplayName(chat)}</span>
+              <div className="flex min-w-0 items-center gap-1">
+                <span className="select-text truncate font-medium leading-none text-foreground">{displayName}</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => void handleCopyName()}
+                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        aria-label="Copiar nome do contato"
+                      >
+                        {isNameCopied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>{isNameCopied ? "Nome copiado" : "Copiar nome"}</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
               <span className="mt-1 text-[10px] text-muted-foreground">{isAssistantChat ? "Chat interno" : chat.finalizada ? "Finalizada" : chat.ia_responde ? "IA responde" : "Atendimento aberto"}</span>
             </div>
           </div>

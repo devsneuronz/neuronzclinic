@@ -38,6 +38,21 @@ type InteractionHistoryDecisionRow = {
   updated_at: string;
 };
 
+type AiTrainingExampleEmbeddingRow = {
+  interaction_history_id: string;
+  embedding_model: string | null;
+};
+
+type InteractionHistoryDecisionWithEmbedding = InteractionHistoryDecisionRow & {
+  embedding_model: string | null;
+};
+
+type UpdateTrainingBody = {
+  id?: unknown;
+  quality?: unknown;
+  correctedResponse?: unknown;
+};
+
 function getSupabaseBaseUrl() {
   const baseUrl = SUPABASE_URL ?? SUPABASE_REST_URL?.replace(/\/rest\/v1\/?$/, "");
   return baseUrl?.replace(/\/$/, "") ?? null;
@@ -52,6 +67,10 @@ function getBearerToken(request: Request) {
   const authorization = request.headers.get("authorization") ?? "";
   const match = authorization.match(/^Bearer\s+(.+)$/i);
   return match?.[1]?.trim() ?? "";
+}
+
+function getString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -125,6 +144,30 @@ async function requireActiveSession(request: Request) {
   return { error: null };
 }
 
+async function fetchEmbeddingModelByInteractionId(id: string) {
+  const params = new URLSearchParams({
+    select: "embedding_model",
+    interaction_history_id: `eq.${id}`,
+    is_active: "is.true",
+    embedding_model: "not.is.null",
+    limit: "1",
+  });
+  const rows = await supabaseRequest<Array<{ embedding_model: string | null }>>(`ai_training_examples?${params}`);
+  return rows[0]?.embedding_model ?? null;
+}
+
+async function fetchInteractionById(id: string) {
+  const params = new URLSearchParams({
+    select: "id,quality,corrected_response",
+    id: `eq.${id}`,
+    is_active: "is.true",
+    deleted_at: "is.null",
+    limit: "1",
+  });
+  const rows = await supabaseRequest<Array<{ id: string; quality: string | null; corrected_response: string | null }>>(`interaction_history?${params}`);
+  return rows[0] ?? null;
+}
+
 export async function GET(request: Request) {
   try {
     const session = await requireActiveSession(request);
@@ -138,11 +181,81 @@ export async function GET(request: Request) {
       order: "updated_at.desc",
       limit: "500",
     });
+    const embeddingsParams = new URLSearchParams({
+      select: "interaction_history_id,embedding_model",
+      is_active: "is.true",
+      embedding_model: "not.is.null",
+      limit: "10000",
+    });
 
-    const decisions = await supabaseRequest<InteractionHistoryDecisionRow[]>(`interaction_history?${decisionsParams}`);
+    const [decisions, embeddings] = await Promise.all([
+      supabaseRequest<InteractionHistoryDecisionRow[]>(`interaction_history?${decisionsParams}`),
+      supabaseRequest<AiTrainingExampleEmbeddingRow[]>(`ai_training_examples?${embeddingsParams}`),
+    ]);
+    const embeddingModelByInteractionId = new Map(embeddings.map((example) => [example.interaction_history_id, example.embedding_model]));
+    const decisionsWithEmbeddings: InteractionHistoryDecisionWithEmbedding[] = decisions.map((decision) => ({
+      ...decision,
+      embedding_model: embeddingModelByInteractionId.get(decision.id) ?? null,
+    }));
 
-    return NextResponse.json({ decisions });
+    return NextResponse.json({ decisions: decisionsWithEmbeddings });
   } catch (error) {
     return NextResponse.json({ decisions: [], message: getErrorMessage(error, "Nao foi possivel carregar os dados de treinamento.") }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const session = await requireActiveSession(request);
+    if (session.error) return session.error;
+
+    const body = (await request.json()) as UpdateTrainingBody;
+    const id = getString(body.id);
+    const quality = getString(body.quality);
+    const correctedResponse = getString(body.correctedResponse);
+    const shouldUpdateQuality = Object.prototype.hasOwnProperty.call(body, "quality");
+    const shouldUpdateCorrectedResponse = Object.prototype.hasOwnProperty.call(body, "correctedResponse");
+
+    if (!id) return NextResponse.json({ message: "Interacao invalida." }, { status: 400 });
+    if (!shouldUpdateQuality && !shouldUpdateCorrectedResponse) return NextResponse.json({ message: "Nenhuma alteracao informada." }, { status: 400 });
+
+    const embeddingModel = await fetchEmbeddingModelByInteractionId(id);
+    if (embeddingModel) {
+      return NextResponse.json({ message: "Este item ja foi transformado em embedding e nao pode ser editado." }, { status: 409 });
+    }
+
+    const existing = await fetchInteractionById(id);
+    if (!existing) return NextResponse.json({ message: "Interacao nao encontrada." }, { status: 404 });
+
+    const nextQuality = shouldUpdateQuality ? quality : getString(existing.quality);
+    const nextCorrectedResponse = shouldUpdateCorrectedResponse ? correctedResponse : getString(existing.corrected_response);
+    const nextTrainingStatus = nextQuality || nextCorrectedResponse ? "pending" : "unreviewed";
+    const payload: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+      quality: nextQuality || null,
+      corrected_response: nextCorrectedResponse || null,
+      training_status: nextTrainingStatus,
+      training_decision: null,
+      similarity_score: null,
+      training_analysis: null,
+      training_error: null,
+      training_issues: null,
+      has_critical_change: null,
+      human_quality_consistent: null,
+      training_processed_at: null,
+      training_processing_started_at: null,
+      training_batch_id: null,
+      source: "supabase",
+    };
+
+    await supabaseRequest<unknown>(`interaction_history?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(payload),
+    });
+
+    return NextResponse.json({ message: nextTrainingStatus === "pending" ? "Item atualizado e reenfileirado." : "Item atualizado como nao revisado.", trainingStatus: nextTrainingStatus });
+  } catch (error) {
+    return NextResponse.json({ message: getErrorMessage(error, "Nao foi possivel atualizar o item de treinamento.") }, { status: 500 });
   }
 }

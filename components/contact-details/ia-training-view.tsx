@@ -487,7 +487,7 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
 
               return (
                 <AccordionItem key={item.id} value={`item-${item.id}`} className="relative min-w-0 overflow-hidden border rounded-xl shadow-sm bg-card">
-                  <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/30 transition-colors items-center overflow-hidden">
+                  <AccordionTrigger className="px-4! py-3! hover:no-underline hover:bg-muted/30 transition-colors items-center overflow-hidden">
                     <div className="flex min-w-0 items-center justify-between w-full gap-3 pr-2 flex-nowrap">
                       <div className="flex min-w-0 items-center gap-2.5 flex-1">
                         <span className="text-xs sm:text-sm font-bold text-theme-primary shrink-0">#{item.number}</span>

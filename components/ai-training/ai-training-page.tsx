@@ -3,8 +3,10 @@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { getFreshSavedSession } from "@/lib/auth-session";
-import { AlertTriangle, CheckCircle2, Copy, FileWarning, Info, Loader2, RefreshCw, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, FileWarning, Info, Loader2, Pencil, RefreshCw, Save, Sparkles, X, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "../ui/sonner";
 
@@ -28,6 +30,7 @@ type InteractionDecision = {
   occurred_at: string | null;
   created_at: string;
   updated_at: string;
+  embedding_model: string | null;
 };
 
 type AiTrainingData = {
@@ -45,6 +48,8 @@ type BatchDecisionGroup = {
 };
 
 const INITIAL_VISIBLE_BATCHES = 3;
+const QUALITY_OPTIONS = ["Ótima", "Boa", "Razoável", "Ruim", "Péssima", "Incorreta"];
+const EMPTY_QUALITY_VALUE = "__sem_qualidade__";
 
 function formatDate(value: string | null) {
   if (!value) return "Sem data";
@@ -240,6 +245,37 @@ export function AiTrainingPage() {
   const visibleBatchGroups = batchGroups.slice(0, visibleBatchCount);
   const hasMoreBatches = visibleBatchCount < batchGroups.length;
 
+  async function updateTrainingItem(item: InteractionDecision, values: { quality: string; correctedResponse: string }) {
+    const session = await getFreshSavedSession();
+    const token = session?.access_token;
+
+    if (!token) {
+      throw new Error("Sessão ausente.");
+    }
+
+    const response = await fetch("/api/ai-training", {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      cache: "no-store",
+      body: JSON.stringify({
+        id: item.id,
+        quality: values.quality,
+        correctedResponse: values.correctedResponse,
+      }),
+    });
+    const data = (await response.json()) as { message?: string; trainingStatus?: string };
+
+    if (!response.ok) {
+      throw new Error(data.message || "Não foi possível atualizar o item.");
+    }
+
+    setData((current) => ({ decisions: current.decisions.filter((decision) => decision.id !== item.id) }));
+    toast.success(data.message || "Item atualizado.");
+  }
+
   async function loadTrainingData() {
     setIsLoading(true);
     setErrorMessage("");
@@ -300,7 +336,7 @@ export function AiTrainingPage() {
             {visibleBatchGroups.length === 0 ? <EmptyState message="Nenhum lote de treinamento encontrado." /> : null}
 
             {visibleBatchGroups.map((group) => (
-              <BatchGroupSection key={group.id} group={group} />
+              <BatchGroupSection key={group.id} group={group} onSave={updateTrainingItem} />
             ))}
 
             {hasMoreBatches ? (
@@ -317,7 +353,7 @@ export function AiTrainingPage() {
   );
 }
 
-function BatchGroupSection({ group }: { group: BatchDecisionGroup }) {
+function BatchGroupSection({ group, onSave }: { group: BatchDecisionGroup; onSave: (item: InteractionDecision, values: { quality: string; correctedResponse: string }) => Promise<void> }) {
   return (
     <section className="min-w-0 space-y-4 rounded-xl border bg-card/40 p-4">
       <div className="flex flex-col gap-2 border-b pb-3 sm:flex-row sm:items-center sm:justify-between">
@@ -336,14 +372,24 @@ function BatchGroupSection({ group }: { group: BatchDecisionGroup }) {
       </div>
 
       <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <GroupedDecisionSection title="Aprovados para treinamento" description="Correções válidas e exemplos positivos deste lote." decisions={group.approvedDecisions} />
-        <GroupedDecisionSection title="Não selecionados" description="Registros deste lote que não viraram exemplo." decisions={group.rejectedDecisions} />
+        <GroupedDecisionSection title="Aprovados para treinamento" description="Correções válidas e exemplos positivos deste lote." decisions={group.approvedDecisions} onSave={onSave} />
+        <GroupedDecisionSection title="Não selecionados" description="Registros deste lote que não viraram exemplo." decisions={group.rejectedDecisions} onSave={onSave} />
       </div>
     </section>
   );
 }
 
-function GroupedDecisionSection({ title, description, decisions }: { title: string; description: string; decisions: InteractionDecision[] }) {
+function GroupedDecisionSection({
+  title,
+  description,
+  decisions,
+  onSave,
+}: {
+  title: string;
+  description: string;
+  decisions: InteractionDecision[];
+  onSave: (item: InteractionDecision, values: { quality: string; correctedResponse: string }) => Promise<void>;
+}) {
   const groupedDecisions = groupDecisionsByLabel(decisions);
   const entries = Object.entries(groupedDecisions);
 
@@ -371,7 +417,7 @@ function GroupedDecisionSection({ title, description, decisions }: { title: stri
 
                 <Accordion type="single" collapsible className="w-full min-w-0 space-y-3">
                   {items.map((decision) => (
-                    <DecisionItem key={decision.id} item={decision} />
+                    <DecisionItem key={decision.id} item={decision} onSave={onSave} />
                   ))}
                 </Accordion>
               </div>
@@ -401,20 +447,45 @@ function EmptyState({ message }: { message: string }) {
   return <div className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">{message}</div>;
 }
 
-function DecisionItem({ item }: { item: InteractionDecision }) {
+function DecisionItem({ item, onSave }: { item: InteractionDecision; onSave: (item: InteractionDecision, values: { quality: string; correctedResponse: string }) => Promise<void> }) {
   const config = getDecisionConfig(item.training_decision, item.training_status);
   const Icon = config.icon;
   const score = formatScore(item.similarity_score);
   const issues = stringifyValue(item.training_issues);
+  const hasEmbedding = Boolean(item.embedding_model);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [qualityDraft, setQualityDraft] = useState(item.quality || "");
+  const [correctedResponseDraft, setCorrectedResponseDraft] = useState(item.corrected_response || "");
+
+  async function handleSave() {
+    setIsSaving(true);
+    try {
+      await onSave(item, {
+        quality: qualityDraft,
+        correctedResponse: correctedResponseDraft,
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível atualizar o item.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   return (
-    <AccordionItem value={item.id} className={`relative min-w-0 overflow-hidden rounded-xl border shadow-sm bg-card ${config.className}`}>
+    <AccordionItem value={item.id} className={`relative min-w-0 overflow-hidden rounded-xl border shadow-sm bg-card ${config.className} ${hasEmbedding ? "ring-1 ring-cyan-500/35" : ""}`}>
       <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/20 transition-colors items-center overflow-hidden">
         <div className="flex min-w-0 items-center justify-between w-full gap-3 pr-2 flex-nowrap">
           <div className="flex min-w-0 items-center gap-2.5 flex-1">
             <span className="truncate text-xs sm:text-sm text-foreground/85 font-medium max-w-[140px] sm:max-w-[260px] md:max-w-[360px]">{getText(item.received)}</span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {hasEmbedding ? (
+              <Badge className="border-cyan-500/40 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300" variant="outline">
+                <Sparkles className="h-3 w-3 mr-1" />
+                Embedding
+              </Badge>
+            ) : null}
             <Badge className={config.badgeClassName} variant="outline">
               <Icon className="h-3 w-3 mr-1" />
               {config.label}
@@ -452,8 +523,77 @@ function DecisionItem({ item }: { item: InteractionDecision }) {
 
           {item.corrected_response ? (
             <div className="space-y-1.5 mt-2">
-              <h4 className="text-xs font-bold opacity-80">Resposta Ideal Informada</h4>
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-xs font-bold opacity-80">Resposta Ideal Informada</h4>
+                {!hasEmbedding && !isEditing ? (
+                  <Button type="button" variant="outline" className="h-7 gap-1.5 px-2 text-[11px]" onClick={() => setIsEditing(true)}>
+                    <Pencil className="h-3.5 w-3.5" />
+                    Editar
+                  </Button>
+                ) : null}
+              </div>
               <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 p-3 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words">{item.corrected_response}</div>
+            </div>
+          ) : !hasEmbedding ? (
+            <div className="flex justify-end">
+              <Button type="button" variant="outline" className="h-7 gap-1.5 px-2 text-[11px]" onClick={() => setIsEditing(true)}>
+                <Pencil className="h-3.5 w-3.5" />
+                Editar resposta ideal
+              </Button>
+            </div>
+          ) : null}
+
+          {isEditing ? (
+            <div className="space-y-3 rounded-lg border border-dashed border-theme-primary/40 bg-muted/20 p-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Qualidade</p>
+                  <Select value={qualityDraft || EMPTY_QUALITY_VALUE} onValueChange={(value) => setQualityDraft(value === EMPTY_QUALITY_VALUE ? "" : value)} disabled={isSaving}>
+                    <SelectTrigger className="h-8 w-36 text-xs bg-background">
+                      <SelectValue placeholder="Sem avaliação" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={EMPTY_QUALITY_VALUE}>Sem avaliação</SelectItem>
+                      {QUALITY_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 gap-1.5 text-xs"
+                    disabled={isSaving}
+                    onClick={() => {
+                      setQualityDraft(item.quality || "");
+                      setCorrectedResponseDraft(item.corrected_response || "");
+                      setIsEditing(false);
+                    }}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Cancelar
+                  </Button>
+                  <Button type="button" className="h-8 gap-1.5 text-xs" disabled={isSaving} onClick={() => void handleSave()}>
+                    {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    Salvar
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Resposta ideal</p>
+                <Textarea
+                  value={correctedResponseDraft}
+                  className="min-h-[120px] resize-none bg-background text-sm"
+                  placeholder="Digite a resposta ideal antes de reenfileirar para análise da IA..."
+                  disabled={isSaving}
+                  onChange={(event) => setCorrectedResponseDraft(event.target.value)}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">Ao salvar, este item volta para a fila de treinamento e sai desta lista até ser processado novamente.</p>
             </div>
           ) : null}
 
@@ -464,6 +604,12 @@ function DecisionItem({ item }: { item: InteractionDecision }) {
             {score ? (
               <Badge variant="outline" className="justify-start px-2 py-1.5 font-normal">
                 <span className="font-semibold mr-1 opacity-70">Similaridade:</span> {score}
+              </Badge>
+            ) : null}
+            {hasEmbedding ? (
+              <Badge className="justify-start border-cyan-500/40 bg-cyan-500/10 px-2 py-1.5 font-normal text-cyan-700 dark:text-cyan-300" variant="outline">
+                <Sparkles className="h-3 w-3 mr-1" />
+                <span className="font-semibold mr-1 opacity-70">Embedding:</span> {item.embedding_model}
               </Badge>
             ) : null}
           </div>
