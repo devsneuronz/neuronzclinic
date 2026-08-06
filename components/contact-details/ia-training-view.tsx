@@ -27,6 +27,7 @@ type CorrectionTextTemplate = Pick<RoutineMessageTemplate, "id" | "label" | "con
 
 const EMPTY_QUALITY_VALUE = "__avaliar__";
 const NONE_QUALITY_VALUE = "__nenhuma__";
+const GOOD_QUALITY_VALUE = "Boa";
 
 interface IATrainingViewProps {
   chat?: ChatRecord;
@@ -71,6 +72,7 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
   const [copiedTemplateIds, setCopiedTemplateIds] = useState<string[]>([]);
   const [correctionDrafts, setCorrectionDrafts] = useState<Record<string, string>>({});
   const [sendingCorrectionIds, setSendingCorrectionIds] = useState<string[]>([]);
+  const [sendingIaResponseIds, setSendingIaResponseIds] = useState<string[]>([]);
   const [confirmedCorrectionIds, setConfirmedCorrectionIds] = useState<string[]>([]);
   const [templateSource] = useState<"manual-routines" | "message-templates">("manual-routines");
   const [manualRoutines, setManualRoutines] = useState<Routine[]>([]);
@@ -435,6 +437,71 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
     }
   }
 
+  async function handleSendIaResponse(item: TrainingInteraction) {
+    const iaResponse = item.iaResponse.trim();
+
+    if (!chatId) {
+      toast.warning("Contato sem chat_id para envio da mensagem.");
+      return;
+    }
+
+    if (!iaResponse) {
+      toast.warning("Resposta da IA vazia.");
+      return;
+    }
+
+    setSendingIaResponseIds((current) => [...current, item.id]);
+    setErrorMessage("");
+
+    try {
+      const formData = new FormData();
+      const messageWithSignature = `*${assistantName}*\n${iaResponse}`;
+
+      formData.set("chat_id", chatId);
+      formData.set("text", messageWithSignature);
+
+      const sendResponse = await fetch("/api/send-message", {
+        method: "POST",
+        body: formData,
+      });
+      const sendData = (await sendResponse.json()) as { message?: string };
+
+      if (!sendResponse.ok) {
+        throw new Error(sendData.message || "Não foi possível enviar a resposta da IA ao chat.");
+      }
+
+      const interactionHistoryResponse = await fetch("/api/interaction-history", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+        body: JSON.stringify({ id: item.id, quality: GOOD_QUALITY_VALUE }),
+      });
+      const interactionHistoryData = (await interactionHistoryResponse.json()) as { interaction?: TrainingInteraction; message?: string };
+
+      if (!interactionHistoryResponse.ok) {
+        throw new Error(interactionHistoryData.message || "Mensagem enviada, mas nao foi possivel marcar a resposta como boa.");
+      }
+
+      setTrainingData((current) =>
+        current.map((interaction) =>
+          interaction.id === item.id
+            ? {
+                ...interaction,
+                quality: interactionHistoryData.interaction?.quality || GOOD_QUALITY_VALUE,
+              }
+            : interaction,
+        ),
+      );
+      toast.success("Resposta da IA enviada e marcada como Boa.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível enviar a resposta da IA.");
+    } finally {
+      setSendingIaResponseIds((current) => current.filter((id) => id !== item.id));
+    }
+  }
+
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -481,6 +548,7 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
           <Accordion type="single" collapsible className="w-full min-w-0 space-y-3">
             {trainingData.map((item) => {
               const isSendingCorrection = sendingCorrectionIds.includes(item.id);
+              const isSendingIaResponse = sendingIaResponseIds.includes(item.id);
               const isDeletingInteraction = deletingInteractionIds.includes(item.id);
               const correctionValue = correctionDrafts[item.id] ?? item.correctedResponse ?? "";
               const hasCorrectionConfirmation = Boolean(item.correctedResponse) || confirmedCorrectionIds.includes(item.id);
@@ -556,26 +624,33 @@ export function IATrainingView({ chat, contactPhone }: IATrainingViewProps) {
                       </div>
 
                       <div className="flex justify-end">
-                        <div className="flex min-w-0 max-w-[90%] items-start gap-1.5">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 shrink-0 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-md mt-1"
-                            title="Copiar resposta da IA"
-                            onClick={() => void handleCopyResponse(item.id, item.iaResponse)}
-                            disabled={!item.iaResponse}
-                          >
-                            {copiedResponseIds.includes(item.id) ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                          </Button>
+                        <div className="flex min-w-0 max-w-[90%] flex-col items-end gap-2">
+                          <div className="flex min-w-0 items-start gap-1.5">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 shrink-0 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-md mt-1"
+                              title="Copiar resposta da IA"
+                              onClick={() => void handleCopyResponse(item.id, item.iaResponse)}
+                              disabled={!item.iaResponse || isSendingIaResponse}
+                            >
+                              {copiedResponseIds.includes(item.id) ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                            </Button>
 
-                          <div className="min-w-0 bg-blue-500/20 p-3 sm:p-4 rounded-xl rounded-tr-none text-xs sm:text-sm relative before:absolute before:top-0 before:right-[-6px] before:w-0 before:h-0 before:border-t-[8px] before:border-t-blue-500/20 before:border-r-[6px] before:border-r-transparent">
-                            <h4 className="text-[10px] font-bold text-blue-400 mb-1 text-right uppercase tracking-wider">Resposta IA</h4>
-                            <p className="text-foreground leading-relaxed break-words">
-                              <span className="font-semibold block mb-0.5">{assistantName}</span>
-                              {item.iaResponse}
-                            </p>
+                            <div className="min-w-0 bg-blue-500/20 p-3 sm:p-4 rounded-xl rounded-tr-none text-xs sm:text-sm relative before:absolute before:top-0 before:right-[-6px] before:w-0 before:h-0 before:border-t-[8px] before:border-t-blue-500/20 before:border-r-[6px] before:border-r-transparent">
+                              <h4 className="text-[10px] font-bold text-blue-400 mb-1 text-right uppercase tracking-wider">Resposta IA</h4>
+                              <p className="text-foreground leading-relaxed break-words">
+                                <span className="font-semibold block mb-0.5">{assistantName}</span>
+                                {item.iaResponse}
+                              </p>
+                            </div>
                           </div>
+
+                          <Button type="button" variant="outline" className="h-8 gap-2 px-3 text-[11px]" disabled={isSendingIaResponse || isSendingCorrection || !item.iaResponse} onClick={() => void handleSendIaResponse(item)}>
+                            {isSendingIaResponse ? "Enviando..." : "Responder diretamente"}
+                            {isSendingIaResponse ? <Loader2 className="h-3.5! w-3.5! animate-spin" /> : <Send className="h-3.5! w-3.5!" />}
+                          </Button>
                         </div>
                       </div>
 

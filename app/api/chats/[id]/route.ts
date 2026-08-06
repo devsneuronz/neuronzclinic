@@ -23,10 +23,6 @@ function getBoolean(value: unknown) {
   return typeof value === "boolean" ? value : null
 }
 
-function isTagId(value: string) {
-  return /^rec[a-zA-Z0-9]+$/.test(value) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
-}
-
 function getUnreadCount(value: unknown) {
   if (value === null) return null
   if (typeof value !== "number" || !Number.isFinite(value)) return undefined
@@ -50,7 +46,7 @@ function normalizeTags(value: unknown): TagInput[] | null {
         ...(color ? { color } : {}),
       }
     })
-    .filter((tag) => isTagId(tag.id) && tag.label)
+    .filter((tag) => tag.id && tag.label)
 
   return tags
 }
@@ -68,7 +64,7 @@ function normalizeTagFromUnknown(value: unknown): TagInput | null {
       }
     }
 
-    return isTagId(trimmed) ? { id: trimmed, label: trimmed } : null
+    return { id: trimmed, label: trimmed }
   }
 
   if (!value || typeof value !== "object" || Array.isArray(value)) return null
@@ -78,7 +74,7 @@ function normalizeTagFromUnknown(value: unknown): TagInput | null {
   const label = getString(source.label) || getString(source.Tag) || getString(source.tag) || getString(source.Nome) || getString(source.name) || id
   const color = getHexColor(source.color) || getHexColor(source.HEXCOR) || getHexColor(source.hexcor) || getHexColor(source.hex_status)
 
-  return isTagId(id) && label ? { id, label, ...(color ? { color } : {}) } : null
+  return id && label ? { id, label, ...(color ? { color } : {}) } : null
 }
 
 function extractTagsFromChat(chat: RawChat): TagInput[] {
@@ -197,7 +193,7 @@ function buildPatch(body: RawChat, currentChat: RawChat) {
 
     if (tags) {
       if (tags.length !== (Array.isArray(body.tags) ? body.tags.length : 0)) {
-        throw new Error("Todas as tags precisam ter um id valido do Airtable.")
+        throw new Error("Todas as tags precisam ter um id e um nome validos.")
       }
 
       const tagFields = ["json_tags_parsed", "json_tags", "tag_chat_array"]
@@ -215,7 +211,7 @@ function buildPatch(body: RawChat, currentChat: RawChat) {
 
     if (interestTags) {
       if (interestTags.length !== (Array.isArray(body.interestTags) ? body.interestTags.length : 0)) {
-        throw new Error("Todos os interesses precisam ter um id valido do Airtable.")
+        throw new Error("Todos os interesses precisam ter um id e um nome validos.")
       }
 
       const fieldsToUpdate = CHAT_INTEREST_FIELD_CANDIDATES.filter((field) => Object.prototype.hasOwnProperty.call(currentChat, field))
