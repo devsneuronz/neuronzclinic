@@ -1,6 +1,27 @@
-import { Cake, Calendar, Circle, Hand, LucideIcon, Tag } from "lucide-react";
+import { Cake, Calendar, Circle, Hand, LucideIcon, MessageSquareText, Sparkles, Tag } from "lucide-react";
 
-export type RoutineTrigger = "manual" | "specific_date" | "tag" | "status" | "birthday";
+export type RoutineTrigger = "manual" | "specific_date" | "tag" | "status" | "birthday" | "specific_message" | "ai_message";
+
+export type RoutineConditionOperator = "all" | "any";
+
+export type RoutineComparisonOperator = "exists" | "equals" | "contains" | "starts_with" | "regex" | "is_today" | "ai_matches";
+
+export interface RoutineCondition {
+  id: string;
+  type: RoutineTrigger;
+  comparisonOperator: RoutineComparisonOperator;
+  value: string;
+  targetId?: string;
+  targetLabel?: string;
+  targetColor?: string;
+  active: boolean;
+}
+
+export interface RoutineConditionGroup {
+  id: string;
+  operator: RoutineConditionOperator;
+  conditions: RoutineCondition[];
+}
 
 export type RoutineActionType = "create_notice" | "create_task" | "send_message" | "add_tag" | "wait" | "webhook";
 
@@ -52,6 +73,8 @@ export interface Routine {
   targetColor?: string;
   specificDate?: string;
   birthdayEnabled: boolean;
+  conditionOperator: RoutineConditionOperator;
+  conditionGroups: RoutineConditionGroup[];
   active: boolean;
   actions: RoutineAction[];
   processIds?: string[];
@@ -91,6 +114,16 @@ export const triggerOptions: TriggerOption[] = [
     label: "Aniversário",
     icon: Cake,
   },
+  {
+    value: "specific_message",
+    label: "Mensagem específica",
+    icon: MessageSquareText,
+  },
+  {
+    value: "ai_message",
+    label: "Mensagem específica com IA",
+    icon: Sparkles,
+  },
 ];
 
 export const actionLabels: Record<RoutineActionType, string> = {
@@ -108,7 +141,37 @@ export const triggerColors: Record<RoutineTrigger, string> = {
   tag: "#b40a88",
   status: "#078b18",
   birthday: "#d97706",
+  specific_message: "#2563eb",
+  ai_message: "#7c3aed",
 };
+
+export function getDefaultComparisonOperator(type: RoutineTrigger): RoutineComparisonOperator {
+  if (type === "manual") return "exists";
+  if (type === "birthday") return "is_today";
+  if (type === "ai_message") return "ai_matches";
+  return "equals";
+}
+
+export function createEmptyCondition(type: RoutineTrigger = "manual"): RoutineCondition {
+  return {
+    id: crypto.randomUUID(),
+    type,
+    comparisonOperator: getDefaultComparisonOperator(type),
+    value: "",
+    targetId: "",
+    targetLabel: "",
+    targetColor: "",
+    active: true,
+  };
+}
+
+export function createEmptyConditionGroup(): RoutineConditionGroup {
+  return {
+    id: crypto.randomUUID(),
+    operator: "all",
+    conditions: [createEmptyCondition()],
+  };
+}
 
 export function createEmptyAction(index: number): RoutineAction {
   return {

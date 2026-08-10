@@ -1,5 +1,16 @@
 import { NextResponse } from "next/server";
-import { actionLabels, type Routine, type RoutineAction, type RoutineActionType, type RoutineTrigger } from "@/lib/routines";
+import {
+  actionLabels,
+  getDefaultComparisonOperator,
+  type Routine,
+  type RoutineAction,
+  type RoutineActionType,
+  type RoutineComparisonOperator,
+  type RoutineCondition,
+  type RoutineConditionGroup,
+  type RoutineConditionOperator,
+  type RoutineTrigger,
+} from "@/lib/routines";
 
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -27,6 +38,22 @@ type RoutineActionRow = {
   message_templates?: TemplateRow | null;
   tags?: TagRow | null;
 };
+type RoutineConditionRow = {
+  id: string;
+  condition_type: string;
+  comparison_operator: string;
+  value_text: string | null;
+  value_json: Record<string, unknown> | null;
+  position: number | null;
+  is_active: boolean | null;
+  target_tag?: TagRow | null;
+};
+type RoutineConditionGroupRow = {
+  id: string;
+  operator: string;
+  position: number | null;
+  routine_conditions?: RoutineConditionRow[];
+};
 type RoutineRow = {
   id: string;
   airtable_record_id: string | null;
@@ -36,11 +63,13 @@ type RoutineRow = {
   target_status: string | null;
   specific_date: string | null;
   birthday_enabled: boolean | null;
+  condition_operator: string | null;
   is_active: boolean | null;
   created_at: string | null;
   updated_at: string | null;
   target_tag?: TagRow | null;
   routine_actions?: RoutineActionRow[];
+  routine_condition_groups?: RoutineConditionGroupRow[];
 };
 
 function getString(value: unknown) {
@@ -61,11 +90,14 @@ function normalizeText(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
+    .replace(/\s+/g, " ")
     .trim();
 }
 
 function normalizeTrigger(value: unknown): RoutineTrigger {
   const normalized = normalizeText(getString(value));
+  if (normalized === "ai_message" || (normalized.includes("mensagem") && normalized.includes("ia"))) return "ai_message";
+  if (normalized === "specific_message" || normalized.includes("mensagem especifica")) return "specific_message";
   if (normalized.includes("data") || normalized === "specific_date") return "specific_date";
   if (normalized.includes("tag")) return "tag";
   if (normalized.includes("status")) return "status";
@@ -81,6 +113,16 @@ function normalizeActionType(value: unknown): RoutineActionType {
   if (normalized === "wait" || normalized.includes("aguard")) return "wait";
   if (normalized === "webhook" || normalized.includes("webhook")) return "webhook";
   return "create_task";
+}
+
+function normalizeConditionOperator(value: unknown): RoutineConditionOperator {
+  return normalizeText(getString(value)) === "any" ? "any" : "all";
+}
+
+function normalizeComparisonOperator(value: unknown, type: RoutineTrigger): RoutineComparisonOperator {
+  const normalized = normalizeText(getString(value)).replace(/ /g, "_");
+  if (["exists", "equals", "contains", "starts_with", "regex", "is_today", "ai_matches"].includes(normalized)) return normalized as RoutineComparisonOperator;
+  return getDefaultComparisonOperator(type);
 }
 
 function getSupabaseRestUrl() {
@@ -139,21 +181,58 @@ function mapAction(row: RoutineActionRow): RoutineAction {
   };
 }
 
+function mapCondition(row: RoutineConditionRow): RoutineCondition {
+  const type = normalizeTrigger(row.condition_type);
+  const targetTag = row.target_tag;
+  const value = row.value_text || "";
+
+  return {
+    id: row.id,
+    type,
+    comparisonOperator: normalizeComparisonOperator(row.comparison_operator, type),
+    value: type === "tag" ? targetTag?.label || value : value,
+    targetId: type === "tag" && targetTag ? externalId(targetTag) : "",
+    targetLabel: type === "tag" ? targetTag?.label || value : value,
+    targetColor: type === "tag" ? targetTag?.color || "" : "",
+    active: row.is_active !== false,
+  };
+}
+
+function mapConditionGroup(row: RoutineConditionGroupRow): RoutineConditionGroup {
+  return {
+    id: row.id,
+    operator: normalizeConditionOperator(row.operator),
+    conditions: (row.routine_conditions ?? []).map(mapCondition).sort((a, b) => {
+      const rowA = row.routine_conditions?.find((condition) => condition.id === a.id)?.position ?? 0;
+      const rowB = row.routine_conditions?.find((condition) => condition.id === b.id)?.position ?? 0;
+      return rowA - rowB;
+    }),
+  };
+}
+
 function mapRoutine(row: RoutineRow): Routine {
   const trigger = normalizeTrigger(row.trigger);
   const targetTag = row.target_tag;
   const actions = (row.routine_actions ?? []).map(mapAction).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const conditionGroups = (row.routine_condition_groups ?? [])
+    .slice()
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+    .map(mapConditionGroup);
+  const primaryCondition = conditionGroups[0]?.conditions[0];
+  const effectiveTrigger = primaryCondition?.type ?? trigger;
 
   return {
     id: externalId(row),
     name: row.name,
     description: row.description || "",
-    trigger,
-    targetId: trigger === "tag" && targetTag ? externalId(targetTag) : trigger === "status" ? row.target_status || "" : "",
-    targetLabel: trigger === "tag" ? targetTag?.label || "" : trigger === "status" ? row.target_status || "" : trigger === "specific_date" ? row.specific_date || "" : "",
-    targetColor: trigger === "tag" ? targetTag?.color || "" : "",
-    specificDate: row.specific_date || "",
-    birthdayEnabled: row.birthday_enabled === true,
+    trigger: effectiveTrigger,
+    targetId: primaryCondition?.targetId || (trigger === "tag" && targetTag ? externalId(targetTag) : trigger === "status" ? row.target_status || "" : ""),
+    targetLabel: primaryCondition?.targetLabel || (trigger === "tag" ? targetTag?.label || "" : trigger === "status" || trigger === "specific_message" || trigger === "ai_message" ? row.target_status || "" : trigger === "specific_date" ? row.specific_date || "" : ""),
+    targetColor: primaryCondition?.targetColor || (trigger === "tag" ? targetTag?.color || "" : ""),
+    specificDate: effectiveTrigger === "specific_date" ? primaryCondition?.value || row.specific_date || "" : row.specific_date || "",
+    birthdayEnabled: effectiveTrigger === "birthday" || row.birthday_enabled === true,
+    conditionOperator: normalizeConditionOperator(row.condition_operator),
+    conditionGroups,
     active: row.is_active !== false,
     actions,
     processIds: actions.map((action) => action.id),
@@ -163,8 +242,9 @@ function mapRoutine(row: RoutineRow): Routine {
 }
 
 const ROUTINE_SELECT = [
-  "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,is_active,created_at,updated_at",
+  "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,condition_operator,is_active,created_at,updated_at",
   "target_tag:target_tag_id(id,airtable_record_id,label,color)",
+  "routine_condition_groups(id,operator,position,routine_conditions(id,condition_type,comparison_operator,value_text,value_json,position,is_active,target_tag:target_tag_id(id,airtable_record_id,label,color)))",
   "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,label,content),tags:tag_id(id,airtable_record_id,label,color))",
 ].join(",");
 
@@ -187,21 +267,75 @@ async function resolveMessageTemplateId(id: string) {
   return rows[0]?.id ?? null;
 }
 
-function normalizePayload(body: unknown): Required<Pick<Routine, "name" | "description" | "trigger" | "targetId" | "targetLabel" | "specificDate" | "active" | "actions">> {
+function getLegacyCondition(payload: RoutinePayload): RoutineCondition {
+  const type = normalizeTrigger(payload.trigger);
+  const value = type === "specific_date" ? getString(payload.specificDate) : getString(payload.targetLabel);
+  return {
+    id: "legacy",
+    type,
+    comparisonOperator: getDefaultComparisonOperator(type),
+    value,
+    targetId: getString(payload.targetId),
+    targetLabel: getString(payload.targetLabel),
+    targetColor: getString(payload.targetColor),
+    active: true,
+  };
+}
+
+function normalizeCondition(value: unknown): RoutineCondition {
+  const input = value && typeof value === "object" ? (value as Partial<RoutineCondition>) : {};
+  const type = normalizeTrigger(input.type);
+  const targetId = getString(input.targetId);
+  const targetLabel = getString(input.targetLabel);
+  const conditionValue = getString(input.value) || targetLabel;
+
+  if (type === "tag" && !targetId) throw new Error("Escolha a tag de cada condicao de tag.");
+  if (["status", "specific_date", "specific_message", "ai_message"].includes(type) && !conditionValue) throw new Error("Preencha o valor de todas as condicoes.");
+
+  return {
+    id: getString(input.id) || crypto.randomUUID(),
+    type,
+    comparisonOperator: normalizeComparisonOperator(input.comparisonOperator, type),
+    value: conditionValue,
+    targetId,
+    targetLabel: targetLabel || conditionValue,
+    targetColor: getString(input.targetColor),
+    active: input.active !== false,
+  };
+}
+
+function normalizeConditionGroups(payload: RoutinePayload): RoutineConditionGroup[] {
+  const groups = Array.isArray(payload.conditionGroups) ? payload.conditionGroups : [];
+  if (groups.length === 0) {
+    return [{ id: "legacy", operator: "all", conditions: [getLegacyCondition(payload)] }];
+  }
+
+  return groups.map((group, groupIndex) => {
+    const input = group && typeof group === "object" ? (group as Partial<RoutineConditionGroup>) : {};
+    const conditions = Array.isArray(input.conditions) ? input.conditions.map(normalizeCondition) : [];
+    if (conditions.length === 0) throw new Error(`Adicione ao menos uma condicao ao grupo ${groupIndex + 1}.`);
+    return {
+      id: getString(input.id) || crypto.randomUUID(),
+      operator: normalizeConditionOperator(input.operator),
+      conditions,
+    };
+  });
+}
+
+function normalizePayload(body: unknown) {
   if (!body || typeof body !== "object") throw new Error("Dados invalidos.");
   const payload = body as RoutinePayload;
   const name = getString(payload.name);
   if (!name) throw new Error("Informe o nome da rotina.");
 
-  const trigger = normalizeTrigger(payload.trigger);
-  const targetId = getString(payload.targetId);
-  const targetLabel = getString(payload.targetLabel);
-  const specificDate = getString(payload.specificDate);
+  const conditionGroups = normalizeConditionGroups(payload);
+  const primaryCondition = conditionGroups[0].conditions[0];
+  const trigger = primaryCondition.type;
+  const targetId = primaryCondition.targetId || "";
+  const targetLabel = primaryCondition.targetLabel || primaryCondition.value;
+  const specificDate = trigger === "specific_date" ? primaryCondition.value : "";
   const actions = Array.isArray(payload.actions) ? payload.actions : [];
 
-  if (trigger === "tag" && !targetId) throw new Error("Escolha a tag que dispara a rotina.");
-  if (trigger === "status" && !targetLabel) throw new Error("Escolha o status que dispara a rotina.");
-  if (trigger === "specific_date" && !specificDate) throw new Error("Informe a data especifica da rotina.");
   if (actions.some((action) => action.type === "add_tag" && !getString(action.tagId))) throw new Error("Escolha a tag da acao Vincular tag.");
   if (actions.some((action) => action.type === "send_message" && !getString(action.templateId) && !getString(action.message))) throw new Error("Digite uma mensagem ou escolha um template para a acao Enviar mensagem.");
 
@@ -212,6 +346,8 @@ function normalizePayload(body: unknown): Required<Pick<Routine, "name" | "descr
     targetId,
     targetLabel,
     specificDate,
+    conditionOperator: normalizeConditionOperator(payload.conditionOperator),
+    conditionGroups,
     active: payload.active !== false,
     actions,
   };
@@ -226,12 +362,62 @@ async function getRoutineWritePayload(payload: ReturnType<typeof normalizePayloa
     description: payload.description || null,
     trigger: payload.trigger,
     target_tag_id: targetTagId,
-    target_status: payload.trigger === "status" ? payload.targetLabel : null,
+    target_status: payload.trigger === "status" || payload.trigger === "specific_message" || payload.trigger === "ai_message" ? payload.targetLabel : null,
     specific_date: payload.trigger === "specific_date" ? payload.specificDate : null,
     birthday_enabled: payload.trigger === "birthday",
+    condition_operator: payload.conditionOperator,
     is_active: payload.active,
     source: "supabase",
   };
+}
+
+async function getConditionWritePayload(condition: RoutineCondition, groupId: string, position: number) {
+  const targetTagId = condition.type === "tag" ? await resolveExternalId("tags", getString(condition.targetId)) : null;
+  if (condition.type === "tag" && !targetTagId) throw new Error("Tag de condicao nao encontrada no Supabase.");
+
+  return {
+    group_id: groupId,
+    condition_type: condition.type,
+    comparison_operator: condition.comparisonOperator,
+    value_text: condition.type === "tag" || condition.type === "manual" || condition.type === "birthday" ? null : condition.value || null,
+    value_json: {},
+    target_tag_id: targetTagId,
+    position,
+    is_active: condition.active,
+  };
+}
+
+async function replaceConditionGroups(routineId: string, groups: RoutineConditionGroup[]) {
+  for (const group of groups) {
+    for (const condition of group.conditions) {
+      if (condition.type !== "tag") continue;
+      const tagId = await resolveExternalId("tags", getString(condition.targetId));
+      if (!tagId) throw new Error("Tag de condicao nao encontrada no Supabase.");
+    }
+  }
+
+  await supabaseRequest<unknown>(`routine_condition_groups?routine_id=eq.${encodeURIComponent(routineId)}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" },
+  });
+
+  for (const [groupIndex, group] of groups.entries()) {
+    const createdGroups = await supabaseRequest<Array<{ id: string }>>("routine_condition_groups?select=id", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({ routine_id: routineId, operator: group.operator, position: groupIndex }),
+    });
+    const groupId = createdGroups[0]?.id;
+    if (!groupId) throw new Error("Supabase nao retornou o grupo de condicoes criado.");
+
+    const rows = [];
+    for (const [conditionIndex, condition] of group.conditions.entries()) rows.push(await getConditionWritePayload(condition, groupId, conditionIndex));
+    await supabaseRequest<unknown>("routine_conditions", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(rows),
+    });
+  }
 }
 
 async function getActionWritePayload(action: RoutineAction, routineId: string, index: number) {
@@ -282,6 +468,7 @@ async function updateRoutine(id: string, body: unknown) {
     body: JSON.stringify(await getRoutineWritePayload(payload)),
   });
   await replaceActions(existing.id, payload.actions);
+  await replaceConditionGroups(existing.id, payload.conditionGroups);
 
   const routine = await fetchRoutineById(existing.id);
   return routine ? mapRoutine(routine) : null;
@@ -325,6 +512,7 @@ export async function POST(request: Request) {
     if (!row?.id) throw new Error("Supabase nao retornou a rotina criada.");
 
     await replaceActions(row.id, payload.actions);
+    await replaceConditionGroups(row.id, payload.conditionGroups);
     const routine = await fetchRoutineById(row.id);
     return NextResponse.json({ routine: routine ? mapRoutine(routine) : null, message: "Rotina criada." }, { status: 201 });
   } catch (error) {

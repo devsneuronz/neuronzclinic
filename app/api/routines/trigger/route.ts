@@ -19,6 +19,9 @@ type TriggerBody = {
   targetId?: unknown;
   targetLabel?: unknown;
   occurredAt?: unknown;
+  message?: unknown;
+  messageText?: unknown;
+  aiMatched?: unknown;
 };
 
 type TagRow = { id: string; airtable_record_id: string | null; label: string; color: string | null };
@@ -73,11 +76,14 @@ function normalizeText(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
+    .replace(/\s+/g, " ")
     .trim();
 }
 
 function normalizeTrigger(value: string): RoutineTrigger {
   const normalized = normalizeText(value);
+  if (normalized === "ai_message" || (normalized.includes("mensagem") && normalized.includes("ia"))) return "ai_message";
+  if (normalized === "specific_message" || normalized.includes("mensagem especifica")) return "specific_message";
   if (normalized.includes("data") || normalized === "specific_date") return "specific_date";
   if (normalized.includes("tag")) return "tag";
   if (normalized.includes("status")) return "status";
@@ -214,17 +220,21 @@ function mapRoutine(row: RoutineRow): Routine {
   const trigger = normalizeTrigger(row.trigger);
   const targetTag = row.target_tag;
   const actions = (row.routine_actions ?? []).map(mapAction).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const targetId = trigger === "tag" && targetTag ? externalId(targetTag) : trigger === "status" ? row.target_status || "" : "";
+  const targetLabel = trigger === "tag" ? targetTag?.label || "" : trigger === "status" || trigger === "specific_message" || trigger === "ai_message" ? row.target_status || "" : trigger === "specific_date" ? row.specific_date || "" : "";
 
   return {
     id: externalId(row),
     name: row.name,
     description: row.description || "",
     trigger,
-    targetId: trigger === "tag" && targetTag ? externalId(targetTag) : trigger === "status" ? row.target_status || "" : "",
-    targetLabel: trigger === "tag" ? targetTag?.label || "" : trigger === "status" ? row.target_status || "" : trigger === "specific_date" ? row.specific_date || "" : "",
+    targetId,
+    targetLabel,
     targetColor: trigger === "tag" ? targetTag?.color || "" : "",
     specificDate: row.specific_date || "",
     birthdayEnabled: row.birthday_enabled === true,
+    conditionOperator: "all",
+    conditionGroups: [{ id: `legacy-${row.id}`, operator: "all", conditions: [{ id: `legacy-condition-${row.id}`, type: trigger, comparisonOperator: trigger === "manual" ? "exists" : trigger === "birthday" ? "is_today" : trigger === "ai_message" ? "ai_matches" : "equals", value: targetLabel, targetId, targetLabel, targetColor: targetTag?.color || "", active: true }] }],
     active: row.is_active !== false,
     actions,
   };
@@ -245,6 +255,7 @@ function matchesRoutine(routine: Routine, body: TriggerBody) {
   const routineId = getString(body.routineId) || getString(body.routineAirtableId);
   const targetId = getString(body.targetId);
   const targetLabel = getString(body.targetLabel);
+  const message = getString(body.message) || getString(body.messageText) || targetLabel;
 
   if (!routine.active || routine.trigger !== trigger) return false;
   if (routineId && routine.id !== routineId) return false;
@@ -252,6 +263,8 @@ function matchesRoutine(routine: Routine, body: TriggerBody) {
   if (trigger === "tag") return Boolean(targetId && routine.targetId === targetId);
   if (trigger === "status") return Boolean(targetLabel && routine.targetLabel.toLowerCase() === targetLabel.toLowerCase());
   if (trigger === "specific_date") return Boolean(routine.specificDate && routine.specificDate === targetLabel);
+  if (trigger === "specific_message") return Boolean(message && normalizeText(routine.targetLabel) === normalizeText(message));
+  if (trigger === "ai_message") return body.aiMatched === true && Boolean(routineId);
 
   return false;
 }

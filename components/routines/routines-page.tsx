@@ -12,7 +12,22 @@ import type { ChatStatusOption } from "@/lib/chat-status";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getReadableTextColor } from "@/lib/chat-tags";
 import { messageDirectives } from "@/lib/message-directives";
-import { actionLabels, createEmptyAction, triggerColors, triggerOptions, type Routine, type RoutineAction, type RoutineActionType, type RoutineMessageTemplate, type RoutineTrigger } from "@/lib/routines";
+import {
+  actionLabels,
+  createEmptyAction,
+  createEmptyCondition,
+  createEmptyConditionGroup,
+  getDefaultComparisonOperator,
+  triggerColors,
+  triggerOptions,
+  type Routine,
+  type RoutineAction,
+  type RoutineActionType,
+  type RoutineCondition,
+  type RoutineConditionGroup,
+  type RoutineMessageTemplate,
+  type RoutineTrigger,
+} from "@/lib/routines";
 import { uploadSavedAttachmentFile, type SavedAttachmentKind } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 import { Clock3, CopyPlus, CornerDownRight, FileText, GitFork, Loader2, Paperclip, Pause, PenSquare, Play, Plus, RefreshCw, Save, Search, Target, Trash2, Upload, Workflow, X, Zap } from "lucide-react";
@@ -47,6 +62,8 @@ const emptyRoutine: RoutineForm = {
   targetColor: "",
   specificDate: "",
   birthdayEnabled: true,
+  conditionOperator: "all",
+  conditionGroups: [createEmptyConditionGroup()],
   active: true,
   actions: [createEmptyAction(0)],
 };
@@ -61,6 +78,8 @@ const fallbackRoutines: Routine[] = [
     targetLabel: "Indicação",
     targetColor: "#db351f",
     birthdayEnabled: false,
+    conditionOperator: "all",
+    conditionGroups: [],
     active: true,
     actions: [
       { id: "sample-action-1", type: "create_notice", label: "Criar aviso", delayMinutes: 10, subject: "Repasse recebido" },
@@ -76,6 +95,8 @@ const fallbackRoutines: Routine[] = [
     targetLabel: "Aniversário",
     targetColor: "#d97706",
     birthdayEnabled: true,
+    conditionOperator: "all",
+    conditionGroups: [],
     active: false,
     actions: [{ id: "sample-action-3", type: "send_message", label: "Enviar mensagem", delayMinutes: 0, message: "Feliz aniversário!" }],
   },
@@ -124,6 +145,9 @@ function formatInterval(action: RoutineAction) {
 }
 
 function cloneRoutine(routine: Routine): RoutineForm {
+  const conditionGroups = routine.conditionGroups?.length
+    ? routine.conditionGroups.map((group) => ({ ...group, conditions: group.conditions.map((condition) => ({ ...condition })) }))
+    : [{ id: crypto.randomUUID(), operator: "all" as const, conditions: [{ ...createEmptyCondition(routine.trigger), value: routine.specificDate || routine.targetLabel, targetId: routine.targetId, targetLabel: routine.targetLabel, targetColor: routine.targetColor }] }];
   return {
     id: routine.id,
     name: routine.name,
@@ -134,6 +158,8 @@ function cloneRoutine(routine: Routine): RoutineForm {
     targetColor: routine.targetColor,
     specificDate: routine.specificDate,
     birthdayEnabled: routine.birthdayEnabled,
+    conditionOperator: routine.conditionOperator || "all",
+    conditionGroups,
     active: routine.active,
     actions: routine.actions.length > 0 ? routine.actions.map((action) => ({ ...action })) : [createEmptyAction(0)],
   };
@@ -143,6 +169,7 @@ function getTargetLabel(routine: Routine | RoutineForm) {
   if (routine.trigger === "manual") return "Manual";
   if (routine.trigger === "birthday") return routine.birthdayEnabled ? "Ligado" : "Desligado";
   if (routine.trigger === "specific_date") return routine.specificDate || "Definir data";
+  if (routine.trigger === "specific_message" || routine.trigger === "ai_message") return routine.targetLabel || "Definir mensagem";
   return routine.targetLabel || "Escolher alvo";
 }
 
@@ -355,10 +382,11 @@ export function RoutinesPage() {
     const normalizedQuery = query.trim().toLowerCase();
 
     return routines.filter((routine) => {
-      if (triggerFilter !== "all" && routine.trigger !== triggerFilter) return false;
+      const routineTriggers = routine.conditionGroups?.flatMap((group) => group.conditions.map((condition) => condition.type)) ?? [routine.trigger];
+      if (triggerFilter !== "all" && !routineTriggers.includes(triggerFilter)) return false;
       if (!normalizedQuery) return true;
 
-      const triggerLabel = triggerOptions.find((opt) => opt.value === routine.trigger)?.label || "";
+      const triggerLabel = routineTriggers.map((trigger) => triggerOptions.find((opt) => opt.value === trigger)?.label || "").join(" ");
 
       return [routine.name, routine.description, routine.targetLabel, triggerLabel].some((value) => value && value.toLowerCase().includes(normalizedQuery));
     });
@@ -367,7 +395,7 @@ export function RoutinesPage() {
   const stats = useMemo(
     () => ({
       active: routines.filter((routine) => routine.active).length,
-      triggerBased: routines.filter((routine) => ["tag", "status", "birthday"].includes(routine.trigger)).length,
+      triggerBased: routines.filter((routine) => ["tag", "status", "birthday", "specific_message", "ai_message"].includes(routine.trigger)).length,
       actions: routines.reduce((total, routine) => total + routine.actions.length, 0),
     }),
     [routines],
@@ -379,10 +407,8 @@ export function RoutinesPage() {
     return !action.templateId || !messageTemplates.some((template) => template.id === action.templateId && (template.content || template.media));
   });
 
-  const targetOptions = form.trigger === "tag" ? tags.map((tag) => ({ id: tag.id, label: tag.label, color: tag.color })) : statuses.map((status) => ({ id: status.label, label: status.label, color: status.color }));
-
   function openNewRoutine() {
-    setForm({ ...emptyRoutine, actions: [createEmptyAction(0)] });
+    setForm({ ...emptyRoutine, conditionGroups: [createEmptyConditionGroup()], actions: [createEmptyAction(0)] });
     setAssistantPrompt("");
     setIsDialogOpen(true);
   }
@@ -430,6 +456,25 @@ export function RoutinesPage() {
       ...current,
       actions: current.actions.length === 1 ? current.actions : current.actions.filter((action) => action.id !== actionId),
     }));
+  }
+
+  function updateConditionGroup(groupId: string, patch: Partial<RoutineConditionGroup>) {
+    setForm((current) => ({ ...current, conditionGroups: current.conditionGroups.map((group) => (group.id === groupId ? { ...group, ...patch } : group)) }));
+  }
+
+  function updateCondition(groupId: string, conditionId: string, patch: Partial<RoutineCondition>) {
+    setForm((current) => ({
+      ...current,
+      conditionGroups: current.conditionGroups.map((group) => group.id === groupId ? { ...group, conditions: group.conditions.map((condition) => condition.id === conditionId ? { ...condition, ...patch } : condition) } : group),
+    }));
+  }
+
+  function removeCondition(groupId: string, conditionId: string) {
+    setForm((current) => ({ ...current, conditionGroups: current.conditionGroups.map((group) => group.id === groupId && group.conditions.length > 1 ? { ...group, conditions: group.conditions.filter((condition) => condition.id !== conditionId) } : group) }));
+  }
+
+  function removeConditionGroup(groupId: string) {
+    setForm((current) => ({ ...current, conditionGroups: current.conditionGroups.length > 1 ? current.conditionGroups.filter((group) => group.id !== groupId) : current.conditionGroups }));
   }
 
   async function saveRoutine() {
@@ -589,11 +634,6 @@ export function RoutinesPage() {
     } finally {
       setIsDeletingTemplate(false);
     }
-  }
-
-  function applyTarget(value: string) {
-    const target = targetOptions.find((option) => option.id === value || option.label === value);
-    updateForm({ targetId: target?.id ?? value, targetLabel: target?.label ?? value, targetColor: target?.color ?? "" });
   }
 
   function applyAssistantPrompt() {
@@ -780,60 +820,44 @@ export function RoutinesPage() {
               <hr className="border-border/60" />
 
               <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-4">
-                <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-                  <Zap className="h-4 w-4 text-amber-500 fill-amber-500/20" />
-                  <span>Quando isso acontecer... (Gatilho de Entrada)</span>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2 items-end">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold text-muted-foreground">Selecione o Evento</Label>
-                    <Select
-                      value={form.trigger}
-                      onValueChange={(value) =>
-                        updateForm({
-                          trigger: value as RoutineTrigger,
-                          targetId: "",
-                          targetLabel: "",
-                          targetColor: "",
-                          specificDate: value === "specific_date" ? form.specificDate : "",
-                        })
-                      }
-                    >
-                      <SelectTrigger className="w-full bg-background/50 h-9">
-                        <SelectValue />
-                      </SelectTrigger>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+                    <Zap className="h-4 w-4 text-amber-500 fill-amber-500/20" />
+                    <span>Quando estas condições forem atendidas</span>
+                  </div>
+                  {form.conditionGroups.length > 1 ? (
+                    <Select value={form.conditionOperator} onValueChange={(value) => updateForm({ conditionOperator: value as "all" | "any" })}>
+                      <SelectTrigger className="h-8 w-full bg-background sm:w-48"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">
-                          <div className="flex items-center gap-2">
-                            <span className="h-2 w-2 rounded-full bg-muted-foreground/40 shrink-0 mx-1" />
-                            <span>Todos os gatilhos</span>
-                          </div>
-                        </SelectItem>
-
-                        {triggerOptions.map((option) => {
-                          const Icon = option.icon;
-
-                          const triggerKey = option.value as RoutineTrigger;
-                          const iconColor = triggerColors[triggerKey] || "#6b7280";
-
-                          return (
-                            <SelectItem key={option.value} value={option.value}>
-                              <div className="flex items-center gap-2">
-                                <Icon className="h-4 w-4 shrink-0 transition-colors" style={{ color: iconColor }} />
-                                <span>{option.label}</span>
-                              </div>
-                            </SelectItem>
-                          );
-                        })}
+                        <SelectItem value="all">Todos os grupos (E)</SelectItem>
+                        <SelectItem value="any">Qualquer grupo (OU)</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <TargetField form={form} targetOptions={targetOptions} onApplyTarget={applyTarget} onUpdate={updateForm} />
-                  </div>
+                  ) : null}
                 </div>
+
+                <div className="space-y-3">
+                  {form.conditionGroups.map((group, groupIndex) => (
+                    <ConditionGroupEditor
+                      key={group.id}
+                      group={group}
+                      groupIndex={groupIndex}
+                      tags={tags}
+                      statuses={statuses}
+                      canRemoveGroup={form.conditionGroups.length > 1}
+                      onChange={(patch) => updateConditionGroup(group.id, patch)}
+                      onConditionChange={(conditionId, patch) => updateCondition(group.id, conditionId, patch)}
+                      onAddCondition={() => updateConditionGroup(group.id, { conditions: [...group.conditions, createEmptyCondition()] })}
+                      onRemoveCondition={(conditionId) => removeCondition(group.id, conditionId)}
+                      onRemoveGroup={() => removeConditionGroup(group.id)}
+                    />
+                  ))}
+                </div>
+
+                <Button type="button" variant="outline" size="sm" className="gap-2 text-xs" onClick={() => updateForm({ conditionGroups: [...form.conditionGroups, createEmptyConditionGroup()] })}>
+                  <GitFork className="h-3.5 w-3.5" />
+                  Adicionar grupo de condições
+                </Button>
               </div>
 
               {/* <section className="rounded-xl border border-dashed border-theme-primary/30 bg-theme-primary/2 p-4">
@@ -1267,12 +1291,14 @@ function RoutineRow({ routine, isTogglingActive, onOpen, onToggleActive, onDelet
   const color = getRoutineColor(routine);
   const currentTrigger = triggerOptions.find((opt) => opt.value === routine.trigger);
   const TriggerIcon = currentTrigger?.icon;
+  const conditionCount = routine.conditionGroups?.reduce((total, group) => total + group.conditions.length, 0) || 1;
 
   return (
     <div className="relative grid gap-3 px-4 py-3 transition-colors hover:bg-muted/40 md:grid-cols-[140px_minmax(0,1fr)_160px_110px] md:items-center">
       <Badge className="w-fit border-0 px-2.5 py-0.5 text-xs font-semibold rounded-sm shadow-xs flex items-center gap-1.5" style={{ backgroundColor: triggerColors[routine.trigger], color: "#fff" }}>
         {TriggerIcon && <TriggerIcon className="h-3.5 w-3.5 shrink-0" />}
         <span>{currentTrigger?.label}</span>
+        {conditionCount > 1 ? <span className="rounded-full bg-white/20 px-1.5 text-[10px]">+{conditionCount - 1}</span> : null}
       </Badge>
 
       <div className="flex flex-col gap-4 min-[400px]:flex-row min-[400px]:justify-between md:contents ">
@@ -1348,65 +1374,45 @@ function RoutineRow({ routine, isTogglingActive, onOpen, onToggleActive, onDelet
   );
 }
 
-function TargetField({
-  form,
-  targetOptions,
-  onApplyTarget,
-  onUpdate,
-}: {
-  form: RoutineForm;
-  targetOptions: Array<{ id: string; label: string; color?: string }>;
-  onApplyTarget: (value: string) => void;
-  onUpdate: (patch: Partial<RoutineForm>) => void;
+function ConditionGroupEditor({ group, groupIndex, tags, statuses, canRemoveGroup, onChange, onConditionChange, onAddCondition, onRemoveCondition, onRemoveGroup }: {
+  group: RoutineConditionGroup; groupIndex: number; tags: ChatTag[]; statuses: ChatStatusOption[]; canRemoveGroup: boolean;
+  onChange: (patch: Partial<RoutineConditionGroup>) => void; onConditionChange: (conditionId: string, patch: Partial<RoutineCondition>) => void;
+  onAddCondition: () => void; onRemoveCondition: (conditionId: string) => void; onRemoveGroup: () => void;
 }) {
-  if (form.trigger === "manual") {
-    return (
-      <div className="space-y-2">
-        <label className="text-xs font-semibold text-muted-foreground">Alvo</label>
-        <div className="flex h-9 items-center rounded-md border border-border px-3 text-sm text-muted-foreground">Executada pelo usuário</div>
-      </div>
-    );
-  }
-
-  if (form.trigger === "specific_date") {
-    return (
-      <div className="space-y-2">
-        <label className="text-xs font-semibold text-muted-foreground">Data específica</label>
-        <Input type="date" value={form.specificDate ?? ""} onChange={(event) => onUpdate({ specificDate: event.target.value, targetLabel: event.target.value })} />
-      </div>
-    );
-  }
-
-  if (form.trigger === "birthday") {
-    return (
-      <div className="space-y-2">
-        <label className="text-xs font-semibold text-muted-foreground">Aniversário</label>
-        <label className="flex h-9 items-center justify-between rounded-md border border-border px-3 text-sm">
-          <span>{form.birthdayEnabled ? "Ligado" : "Desligado"}</span>
-          <Switch checked={form.birthdayEnabled} onCheckedChange={(birthdayEnabled) => onUpdate({ birthdayEnabled })} />
-        </label>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <label className="text-xs font-semibold text-muted-foreground">Alvo</label>
-      <Select value={form.targetId || form.targetLabel} onValueChange={onApplyTarget}>
-        <SelectTrigger className="w-full">
-          <SelectValue placeholder={form.trigger === "tag" ? "Escolher tag" : "Escolher status"} />
-        </SelectTrigger>
-        <SelectContent>
-          {targetOptions.map((option) => (
-            <SelectItem key={`${option.id}-${option.label}`} value={option.id || option.label}>
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: option.color || triggerColors[form.trigger] }} />
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+  return <div className="space-y-3 rounded-lg border border-border bg-background/70 p-3">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center gap-2"><span className="text-xs font-bold">Grupo {groupIndex + 1}</span>{group.conditions.length > 1 ? <Select value={group.operator} onValueChange={(value) => onChange({ operator: value as "all" | "any" })}><SelectTrigger className="h-7 w-40 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas (E)</SelectItem><SelectItem value="any">Qualquer uma (OU)</SelectItem></SelectContent></Select> : null}</div>
+      <div className="flex gap-1"><Button type="button" variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={onAddCondition}><Plus className="h-3.5 w-3.5" />Condição</Button>{canRemoveGroup ? <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={onRemoveGroup}><Trash2 className="h-3.5 w-3.5" /></Button> : null}</div>
     </div>
-  );
+    <div className="space-y-2">{group.conditions.map((condition, index) => <ConditionEditor key={condition.id} condition={condition} index={index} tags={tags} statuses={statuses} canRemove={group.conditions.length > 1} onChange={(patch) => onConditionChange(condition.id, patch)} onRemove={() => onRemoveCondition(condition.id)} />)}</div>
+  </div>;
+}
+
+function ConditionEditor({ condition, index, tags, statuses, canRemove, onChange, onRemove }: {
+  condition: RoutineCondition; index: number; tags: ChatTag[]; statuses: ChatStatusOption[]; canRemove: boolean;
+  onChange: (patch: Partial<RoutineCondition>) => void; onRemove: () => void;
+}) {
+  function changeType(type: RoutineTrigger) { onChange({ type, comparisonOperator: getDefaultComparisonOperator(type), value: "", targetId: "", targetLabel: "", targetColor: "" }); }
+  function applyOption(value: string) {
+    if (condition.type === "tag") { const tag = tags.find((item) => item.id === value || item.label === value); onChange({ targetId: tag?.id || value, targetLabel: tag?.label || value, targetColor: tag?.color || "", value: tag?.label || value }); return; }
+    const status = statuses.find((item) => item.label === value); onChange({ targetId: value, targetLabel: status?.label || value, targetColor: status?.color || "", value: status?.label || value });
+  }
+  return <div className="grid gap-2 rounded-md border border-border/70 bg-card p-2 md:grid-cols-[minmax(180px,0.8fr)_minmax(220px,1.2fr)_32px] md:items-start">
+    <div className="space-y-1"><Label className="text-[11px] text-muted-foreground">Condição {index + 1}</Label><Select value={condition.type} onValueChange={(value) => changeType(value as RoutineTrigger)}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent>{triggerOptions.map((option) => { const Icon = option.icon; return <SelectItem key={option.value} value={option.value}><Icon className="h-4 w-4" style={{ color: triggerColors[option.value] }} />{option.label}</SelectItem>; })}</SelectContent></Select></div>
+    <ConditionValueField condition={condition} tags={tags} statuses={statuses} onChange={onChange} onApplyOption={applyOption} />
+    <Button type="button" variant="ghost" size="icon" className="mt-5 h-8 w-8 hover:text-destructive" disabled={!canRemove} onClick={onRemove}><X className="h-4 w-4" /></Button>
+  </div>;
+}
+
+function ConditionValueField({ condition, tags, statuses, onChange, onApplyOption }: { condition: RoutineCondition; tags: ChatTag[]; statuses: ChatStatusOption[]; onChange: (patch: Partial<RoutineCondition>) => void; onApplyOption: (value: string) => void }) {
+  if (condition.type === "manual" || condition.type === "birthday") return <div className="space-y-1"><Label className="text-[11px] text-muted-foreground">Configuração</Label><div className="flex h-9 items-center rounded-md border px-3 text-sm text-muted-foreground">{condition.type === "manual" ? "Executada pelo usuário" : "Aniversário do contato é hoje"}</div></div>;
+  if (condition.type === "specific_date") return <div className="space-y-1"><Label className="text-[11px] text-muted-foreground">Data específica</Label><Input type="date" value={condition.value} onChange={(event) => onChange({ value: event.target.value, targetLabel: event.target.value })} /></div>;
+  if (condition.type === "tag" || condition.type === "status") {
+    const options = condition.type === "tag" ? tags.map((tag) => ({ id: tag.id, label: tag.label, color: tag.color })) : statuses.map((status) => ({ id: status.label, label: status.label, color: status.color }));
+    return <div className="space-y-1"><Label className="text-[11px] text-muted-foreground">Alvo</Label><Select value={condition.targetId || condition.targetLabel || condition.value} onValueChange={onApplyOption}><SelectTrigger className="h-9"><SelectValue placeholder={condition.type === "tag" ? "Escolher tag" : "Escolher status"} /></SelectTrigger><SelectContent>{options.map((option) => <SelectItem key={`${option.id}-${option.label}`} value={option.id || option.label}><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: option.color || triggerColors[condition.type] }} />{option.label}</SelectItem>)}</SelectContent></Select></div>;
+  }
+  const usesAi = condition.type === "ai_message";
+  return <div className="space-y-1"><div className="flex items-center justify-between gap-2"><Label className="text-[11px] text-muted-foreground">{usesAi ? "Intenção da mensagem" : "Mensagem"}</Label>{!usesAi ? <Select value={condition.comparisonOperator} onValueChange={(value) => onChange({ comparisonOperator: value as RoutineCondition["comparisonOperator"] })}><SelectTrigger className="h-6 w-28 text-[10px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="equals">Igual a</SelectItem><SelectItem value="contains">Contém</SelectItem><SelectItem value="starts_with">Começa com</SelectItem></SelectContent></Select> : null}</div><Textarea value={condition.value} onChange={(event) => onChange({ value: event.target.value, targetLabel: event.target.value })} placeholder={usesAi ? "Ex: paciente demonstra interesse em agendar uma avaliação" : "Texto que deve disparar a automação"} className="min-h-16 resize-y" /></div>;
 }
 
 function ActionEditor({
