@@ -40,6 +40,7 @@ export interface RoutineAction {
   templateId?: string;
   templateLabel?: string;
   templateContent?: string;
+  blocksAiReply?: boolean;
   tagId?: string;
   tagLabel?: string;
   order?: number;
@@ -179,6 +180,7 @@ export function createEmptyAction(index: number): RoutineAction {
     type: index === 0 ? "create_notice" : "create_task",
     label: index === 0 ? "Criar aviso" : "Criar tarefa",
     delayMinutes: index === 0 ? 10 : 0,
+    blocksAiReply: true,
     subject: "",
     notes: "",
   };

@@ -10,6 +10,7 @@ import {
   type RoutineConditionOperator,
   type RoutineTrigger,
 } from "@/lib/routines";
+import { validateRoutineTriggerLogic } from "@/lib/routine-trigger-rules";
 
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -76,6 +77,7 @@ type RoutineActionRow = {
   message: string | null;
   notes: string | null;
   webhook_url: string | null;
+  blocks_ai_reply: boolean | null;
   position: number | null;
   responsible_user_profiles?: UserProfileRow | null;
   message_templates?: TemplateRow | null;
@@ -261,7 +263,8 @@ function mapAction(row: RoutineActionRow): RoutineAction {
     intervalAmount: row.interval_amount === null ? undefined : getNumber(row.interval_amount), intervalLabel: row.interval_label || undefined,
     responsibleUserId: row.responsible_user_profiles ? externalId(row.responsible_user_profiles) : "", subject: row.subject || "", message: row.message || "",
     notes: row.notes || "", webhookUrl: row.webhook_url || "", templateId: row.message_templates?.id || "", templateLabel: row.message_templates?.label || "",
-    templateContent: row.message_templates?.content || "", tagId: row.tags ? externalId(row.tags) : "", tagLabel: row.tags?.label || "", order: row.position ?? 0,
+    templateContent: row.message_templates?.content || "", blocksAiReply: row.blocks_ai_reply !== false,
+    tagId: row.tags ? externalId(row.tags) : "", tagLabel: row.tags?.label || "", order: row.position ?? 0,
   };
 }
 
@@ -296,7 +299,7 @@ async function fetchRoutines(event: NormalizedEvent) {
   const select = [
     "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,condition_operator,is_active",
     "routine_condition_groups(id,operator,position,routine_conditions(id,condition_type,comparison_operator,value_text,position,is_active,target_tag:target_tag_id(id,airtable_record_id,label,color)))",
-    "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,label,content),tags:tag_id(id,airtable_record_id,label,color))",
+    "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,blocks_ai_reply,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,label,content),tags:tag_id(id,airtable_record_id,label,color))",
   ].join(",");
   const routineFilter = event.routineId ? (isUuid(event.routineId) ? `&id=eq.${encodeURIComponent(event.routineId)}` : `&airtable_record_id=eq.${encodeURIComponent(event.routineId)}`) : "";
   const rows = await supabaseRequest<RoutineRow[]>(`routines?select=${select}&is_active=is.true${routineFilter}&order=name.asc`);
@@ -476,12 +479,25 @@ export async function POST(request: Request) {
     const body = (await request.json()) as EventBody;
     const event = normalizeEvent(body);
     const [routines, contact] = await Promise.all([fetchRoutines(event), fetchContactState(event)]);
-    const ai = await classifyAiConditions(event.messageText, routines);
+    const invalidRoutines = routines.flatMap((routine) => {
+      const issues = validateRoutineTriggerLogic(routine.conditionGroups, routine.conditionOperator);
+      return issues.length > 0 ? [{ routineId: routine.id, routineName: routine.name, issues: issues.map((issue) => issue.message) }] : [];
+    });
+    const eligibleRoutines = routines.filter((routine) => !invalidRoutines.some((invalid) => invalid.routineId === routine.id));
+    const ai = await classifyAiConditions(event.messageText, eligibleRoutines);
     const context: EvaluationContext = { event, contact, aiMatches: ai.matches };
-    const evaluations = routines.map((routine) => ({ routine, result: evaluateRoutine(routine, context) }));
+    const evaluations = eligibleRoutines.map((routine) => ({ routine, result: evaluateRoutine(routine, context) }));
     const matched = evaluations.filter((evaluation) => evaluation.result.matched);
+    const blockingRoutineIds = event.eventType === "message_received"
+      ? matched.filter(({ routine }) => routine.actions.some((action) => action.type === "send_message" && action.blocksAiReply !== false)).map(({ routine }) => routine.id)
+      : [];
+    const aiReplySuppression = {
+      suppressAiReply: blockingRoutineIds.length > 0,
+      suppressionReason: blockingRoutineIds.length > 0 ? "routine_will_send_message" : null,
+      blockingRoutineIds,
+    };
 
-    if (event.dryRun) return NextResponse.json({ dryRun: true, evaluated: routines.length, matched: matched.length, ai: { configured: ai.configured, requested: ai.requested, error: ai.error || undefined }, evaluations: evaluations.map((evaluation) => evaluation.result) });
+    if (event.dryRun) return NextResponse.json({ dryRun: true, evaluated: eligibleRoutines.length, invalidRoutines, matched: matched.length, ...aiReplySuppression, ai: { configured: ai.configured, requested: ai.requested, error: ai.error || undefined }, evaluations: evaluations.map((evaluation) => evaluation.result) });
 
     const runs: RawRecord[] = [];
     let actionRuns = 0;
@@ -494,7 +510,7 @@ export async function POST(request: Request) {
       runs.push({ id: result.run_id });
     }
 
-    return NextResponse.json({ evaluated: routines.length, matched: matched.length, created: runs.length, duplicates, actionRuns, runIds: runs.map((run) => run.id).filter(Boolean), ai: { configured: ai.configured, requested: ai.requested, error: ai.error || undefined } });
+    return NextResponse.json({ evaluated: eligibleRoutines.length, invalidRoutines, matched: matched.length, created: runs.length, duplicates, actionRuns, runIds: runs.map((run) => run.id).filter(Boolean), ...aiReplySuppression, ai: { configured: ai.configured, requested: ai.requested, error: ai.error || undefined } });
   } catch (error) {
     const message = error instanceof DOMException && error.name === "AbortError" ? "O classificador de IA excedeu o tempo limite." : error instanceof Error ? error.message : "Nao foi possivel avaliar as rotinas.";
     return NextResponse.json({ message }, { status: /obrigatorio|invalido/i.test(message) ? 400 : 500 });

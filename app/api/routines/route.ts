@@ -11,6 +11,7 @@ import {
   type RoutineConditionOperator,
   type RoutineTrigger,
 } from "@/lib/routines";
+import { validateRoutineTriggerLogic } from "@/lib/routine-trigger-rules";
 
 const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -33,6 +34,7 @@ type RoutineActionRow = {
   message: string | null;
   notes: string | null;
   webhook_url: string | null;
+  blocks_ai_reply: boolean | null;
   position: number | null;
   responsible_user_profiles?: UserProfileRow | null;
   message_templates?: TemplateRow | null;
@@ -175,6 +177,7 @@ function mapAction(row: RoutineActionRow): RoutineAction {
     templateId: template?.id || "",
     templateLabel: template?.label || "",
     templateContent: template?.content || "",
+    blocksAiReply: row.blocks_ai_reply !== false,
     tagId: tag ? externalId(tag) : "",
     tagLabel: tag?.label || "",
     order: row.position ?? 0,
@@ -245,7 +248,7 @@ const ROUTINE_SELECT = [
   "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,condition_operator,is_active,created_at,updated_at",
   "target_tag:target_tag_id(id,airtable_record_id,label,color)",
   "routine_condition_groups(id,operator,position,routine_conditions(id,condition_type,comparison_operator,value_text,value_json,position,is_active,target_tag:target_tag_id(id,airtable_record_id,label,color)))",
-  "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,label,content),tags:tag_id(id,airtable_record_id,label,color))",
+  "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,blocks_ai_reply,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,label,content),tags:tag_id(id,airtable_record_id,label,color))",
 ].join(",");
 
 async function fetchRoutineById(id: string) {
@@ -329,6 +332,8 @@ function normalizePayload(body: unknown) {
   if (!name) throw new Error("Informe o nome da rotina.");
 
   const conditionGroups = normalizeConditionGroups(payload);
+  const triggerIssues = validateRoutineTriggerLogic(conditionGroups, normalizeConditionOperator(payload.conditionOperator));
+  if (triggerIssues.length > 0) throw new Error(triggerIssues[0].message);
   const primaryCondition = conditionGroups[0].conditions[0];
   const trigger = primaryCondition.type;
   const targetId = primaryCondition.targetId || "";
@@ -434,6 +439,7 @@ async function getActionWritePayload(action: RoutineAction, routineId: string, i
     message: getString(action.message) || null,
     notes: getString(action.notes) || null,
     webhook_url: getString(action.webhookUrl) || null,
+    blocks_ai_reply: type === "send_message" ? action.blocksAiReply !== false : true,
     template_id: await resolveMessageTemplateId(getString(action.templateId)),
     tag_id: await resolveExternalId("tags", getString(action.tagId)),
     position: index,

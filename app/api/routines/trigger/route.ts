@@ -23,6 +23,7 @@ type TriggerBody = {
   message?: unknown;
   messageText?: unknown;
   aiMatched?: unknown;
+  executionMode?: unknown;
 };
 
 type TagRow = { id: string; airtable_record_id: string | null; label: string; color: string | null };
@@ -40,6 +41,7 @@ type RoutineActionRow = {
   message: string | null;
   notes: string | null;
   webhook_url: string | null;
+  blocks_ai_reply: boolean | null;
   position: number | null;
   responsible_user_profiles?: UserProfileRow | null;
   message_templates?: TemplateRow | null;
@@ -211,6 +213,7 @@ function mapAction(row: RoutineActionRow): RoutineAction {
     webhookUrl: row.webhook_url || "",
     templateId: template?.id || "",
     templateLabel: template?.label || "",
+    blocksAiReply: row.blocks_ai_reply !== false,
     tagId: tag ? externalId(tag) : "",
     tagLabel: tag?.label || "",
     order: row.position ?? 0,
@@ -245,7 +248,7 @@ async function fetchRoutines(): Promise<Routine[]> {
   const select = [
     "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,is_active",
     "target_tag:target_tag_id(id,airtable_record_id,label,color)",
-    "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,label),tags:tag_id(id,airtable_record_id,label,color))",
+    "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,blocks_ai_reply,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,label),tags:tag_id(id,airtable_record_id,label,color))",
   ].join(",");
   const rows = (await supabaseRequest(`routines?select=${select}&is_active=is.true&order=name.asc`)) as RoutineRow[];
   return rows.map(mapRoutine);
@@ -254,12 +257,15 @@ async function fetchRoutines(): Promise<Routine[]> {
 function matchesRoutine(routine: Routine, body: TriggerBody) {
   const trigger = normalizeTrigger(getString(body.trigger));
   const routineId = getString(body.routineId) || getString(body.routineAirtableId);
+  const manualOverride = getString(body.executionMode) === "manual_override";
   const targetId = getString(body.targetId);
   const targetLabel = getString(body.targetLabel);
   const message = getString(body.message) || getString(body.messageText) || targetLabel;
 
-  if (!routine.active || routine.trigger !== trigger) return false;
+  if (!routine.active) return false;
   if (routineId && routine.id !== routineId) return false;
+  if (manualOverride) return trigger === "manual" && Boolean(routineId);
+  if (routine.trigger !== trigger) return false;
   if (trigger === "manual" || trigger === "birthday") return true;
   if (trigger === "tag") return Boolean(targetId && routine.targetId === targetId);
   if (trigger === "status") return Boolean(targetLabel && routine.targetLabel.toLowerCase() === targetLabel.toLowerCase());
@@ -273,6 +279,9 @@ function matchesRoutine(routine: Routine, body: TriggerBody) {
 export async function POST(request: Request) {
   try {
     const body = await parseTriggerBody(request);
+    if (getString(body.executionMode) === "manual_override" && !isSameOriginRequest(request)) {
+      return NextResponse.json({ message: "A execução semimanual só pode ser iniciada pela aplicação." }, { status: 403 });
+    }
 
     if (!isAuthorized(request, body)) {
       return NextResponse.json({ message: "Nao autorizado." }, { status: 401 });
@@ -290,6 +299,7 @@ export async function POST(request: Request) {
     let duplicates = 0;
     const actionRunIds: string[] = [];
     const eventId = getString(body.eventId) || crypto.randomUUID();
+    const manualOverride = getString(body.executionMode) === "manual_override";
 
     for (const routine of routines) {
       let accumulatedDelayMinutes = 0;
@@ -314,8 +324,8 @@ export async function POST(request: Request) {
           p_chat_id: getString(body.chatId),
           p_contact_name: getString(body.contactName),
           p_contact_phone: getString(body.contactPhone),
-          p_trigger_type: routine.trigger,
-          p_trigger_target: getString(body.targetId) || getString(body.targetLabel),
+          p_trigger_type: manualOverride ? "manual" : routine.trigger,
+          p_trigger_target: manualOverride ? "manual_override" : getString(body.targetId) || getString(body.targetLabel),
           p_event_id: eventId,
           p_payload: body as RawRecord,
           p_actions: actions,

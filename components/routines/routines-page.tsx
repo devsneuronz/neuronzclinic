@@ -12,6 +12,7 @@ import type { ChatStatusOption } from "@/lib/chat-status";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getReadableTextColor } from "@/lib/chat-tags";
 import { messageDirectives } from "@/lib/message-directives";
+import { getTriggerOptionConflict, validateRoutineTriggerLogic, type RoutineTriggerIssue } from "@/lib/routine-trigger-rules";
 import {
   actionLabels,
   createEmptyAction,
@@ -28,10 +29,36 @@ import {
   type RoutineMessageTemplate,
   type RoutineTrigger,
 } from "@/lib/routines";
+import type { ChatRecord } from "@/lib/supabase-rest";
 import { uploadSavedAttachmentFile, type SavedAttachmentKind } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
-import { Clock3, CopyPlus, CornerDownRight, FileText, GitFork, Loader2, Paperclip, Pause, PenSquare, Play, Plus, RefreshCw, Save, Search, Target, Trash2, Upload, Workflow, X, Zap } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  Clock3,
+  CopyPlus,
+  CornerDownRight,
+  FileText,
+  GitFork,
+  GripVertical,
+  Loader2,
+  Paperclip,
+  PenSquare,
+  Play,
+  Plus,
+  Power,
+  RefreshCw,
+  Save,
+  Search,
+  Target,
+  Trash2,
+  Upload,
+  Workflow,
+  X,
+  Zap,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Label } from "../ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
@@ -321,6 +348,14 @@ export function RoutinesPage() {
   const [routinePendingDelete, setRoutinePendingDelete] = useState<Routine | null>(null);
   const [isDeletingRoutine, setIsDeletingRoutine] = useState(false);
   const [togglingRoutineId, setTogglingRoutineId] = useState<string | null>(null);
+  const [routinePendingRun, setRoutinePendingRun] = useState<Routine | null>(null);
+  const [runContacts, setRunContacts] = useState<ChatRecord[]>([]);
+  const [runContactSearch, setRunContactSearch] = useState("");
+  const [isLoadingRunContacts, setIsLoadingRunContacts] = useState(false);
+  const [runningRoutineId, setRunningRoutineId] = useState<string | null>(null);
+  const [runRoutineMessage, setRunRoutineMessage] = useState("");
+  const [draggedActionId, setDraggedActionId] = useState<string | null>(null);
+  const [dragOverActionId, setDragOverActionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isTemplatesLoading, setIsTemplatesLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -412,6 +447,14 @@ export function RoutinesPage() {
     if (action.message?.trim()) return false;
     return !action.templateId || !messageTemplates.some((template) => template.id === action.templateId && (template.content || template.media));
   });
+  const triggerIssues = useMemo(() => validateRoutineTriggerLogic(form.conditionGroups, form.conditionOperator), [form.conditionGroups, form.conditionOperator]);
+  const hasManualTrigger = form.conditionGroups.some((group) => group.conditions.some((condition) => condition.active !== false && condition.type === "manual"));
+  const allGroupsConflict = form.conditionGroups.length > 1 ? validateRoutineTriggerLogic(form.conditionGroups, "all")[0]?.message || "" : "";
+  const filteredRunContacts = useMemo(() => {
+    const search = runContactSearch.trim().toLowerCase();
+    if (!search) return runContacts;
+    return runContacts.filter((chat) => [chat.nome_contato, chat.pushname, chat.phone_contact, chat.chat_id].some((value) => value?.toLowerCase().includes(search)));
+  }, [runContactSearch, runContacts]);
 
   function openNewRoutine() {
     setForm({ ...emptyRoutine, conditionGroups: [createEmptyConditionGroup()], actions: [createEmptyAction(0)] });
@@ -464,6 +507,30 @@ export function RoutinesPage() {
     }));
   }
 
+  function reorderActions(sourceId: string, targetId: string) {
+    if (sourceId === targetId) return;
+    setForm((current) => {
+      const sourceIndex = current.actions.findIndex((action) => action.id === sourceId);
+      const targetIndex = current.actions.findIndex((action) => action.id === targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return current;
+      const actions = [...current.actions];
+      const [moved] = actions.splice(sourceIndex, 1);
+      actions.splice(targetIndex, 0, moved);
+      return { ...current, actions: actions.map((action, order) => ({ ...action, order })) };
+    });
+  }
+
+  function moveAction(actionId: string, direction: -1 | 1) {
+    setForm((current) => {
+      const sourceIndex = current.actions.findIndex((action) => action.id === actionId);
+      const targetIndex = sourceIndex + direction;
+      if (sourceIndex < 0 || targetIndex < 0 || targetIndex >= current.actions.length) return current;
+      const actions = [...current.actions];
+      [actions[sourceIndex], actions[targetIndex]] = [actions[targetIndex], actions[sourceIndex]];
+      return { ...current, actions: actions.map((action, order) => ({ ...action, order })) };
+    });
+  }
+
   function updateConditionGroup(groupId: string, patch: Partial<RoutineConditionGroup>) {
     setForm((current) => ({ ...current, conditionGroups: current.conditionGroups.map((group) => (group.id === groupId ? { ...group, ...patch } : group)) }));
   }
@@ -491,6 +558,7 @@ export function RoutinesPage() {
     setError("");
 
     try {
+      if (triggerIssues.length > 0) throw new Error(triggerIssues[0].message);
       if (form.actions.some((action) => action.type === "send_message" && !action.templateId && !action.message?.trim())) {
         throw new Error("Digite uma mensagem ou escolha um template para cada ação Enviar mensagem.");
       }
@@ -573,6 +641,65 @@ export function RoutinesPage() {
       }
     } finally {
       setTogglingRoutineId(null);
+    }
+  }
+
+  async function openRunRoutineDialog(routine: Routine) {
+    setRoutinePendingRun(routine);
+    setRunContactSearch("");
+    setRunRoutineMessage("");
+    setIsLoadingRunContacts(true);
+    try {
+      const response = await fetch("/api/chat-data?resource=chats&limit=50", { cache: "no-store" });
+      const data = (await response.json().catch(() => ({}))) as { chats?: ChatRecord[]; message?: string };
+      if (!response.ok) throw new Error(data.message || "Não foi possível carregar os contatos.");
+      setRunContacts(data.chats ?? []);
+    } catch (error) {
+      setRunContacts([]);
+      setRunRoutineMessage(error instanceof Error ? error.message : "Não foi possível carregar os contatos.");
+    } finally {
+      setIsLoadingRunContacts(false);
+    }
+  }
+
+  async function runRoutineForContact(chat: ChatRecord) {
+    if (!routinePendingRun || runningRoutineId) return;
+    setRunningRoutineId(routinePendingRun.id);
+    setRunRoutineMessage("");
+    try {
+      const triggerResponse = await fetch("/api/routines/trigger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          trigger: "manual",
+          executionMode: "manual_override",
+          routineId: routinePendingRun.id,
+          contactId: chat.id,
+          contactAirtableId: chat.ida_contato || "",
+          chatId: chat.chat_id,
+          contactName: chat.nome_contato || chat.pushname || "",
+          contactPhone: chat.phone_contact || chat.chat_id,
+          occurredAt: new Date().toISOString(),
+          source: "routines-list-manual-override",
+        }),
+      });
+      const triggerData = (await triggerResponse.json().catch(() => ({}))) as { message?: string; matched?: number; actionRuns?: number; actionRunIds?: string[] };
+      if (!triggerResponse.ok) throw new Error(triggerData.message || "Não foi possível iniciar a rotina.");
+      if (!triggerData.matched) throw new Error("A rotina precisa estar ativa para ser executada.");
+
+      const dueResponse = await fetch("/api/routines/due", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actionRunIds: triggerData.actionRunIds ?? [] }),
+      });
+      const dueData = (await dueResponse.json().catch(() => ({}))) as { message?: string; processed?: number };
+      if (!dueResponse.ok) throw new Error(dueData.message || "A rotina foi criada, mas as ações imediatas não puderam ser processadas.");
+      const scheduled = Math.max((triggerData.actionRuns ?? 0) - (dueData.processed ?? 0), 0);
+      setRunRoutineMessage(scheduled > 0 ? `Rotina iniciada. ${scheduled} ação(ões) ficou(aram) agendada(s).` : "Rotina executada com sucesso.");
+    } catch (error) {
+      setRunRoutineMessage(error instanceof Error ? error.message : "Não foi possível executar a rotina.");
+    } finally {
+      setRunningRoutineId(null);
     }
   }
 
@@ -740,7 +867,7 @@ export function RoutinesPage() {
                   {error && <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive dynamic-fade-in shrink-0">{error}</div>}
 
                   <div className="flex flex-col bg-card rounded-xl border border-border shadow-sm overflow-hidden min-h-0">
-                    <div className="grid grid-cols-[140px_minmax(0,1fr)_160px_110px] border-b border-border bg-muted/20 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground max-md:hidden shrink-0 gap-3">
+                    <div className="grid grid-cols-[140px_minmax(0,1fr)_160px_140px] border-b border-border bg-muted/20 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground max-md:hidden shrink-0 gap-3">
                       <span>Gatilho</span>
                       <span>Descrição</span>
                       <span>Alvo</span>
@@ -766,6 +893,7 @@ export function RoutinesPage() {
                               routine={routine}
                               isTogglingActive={togglingRoutineId === routine.id}
                               onOpen={() => openRoutine(routine)}
+                              onRun={() => void openRunRoutineDialog(routine)}
                               onToggleActive={() => void toggleRoutineActive(routine)}
                               onDelete={() => openDeleteRoutineDialog(routine)}
                             />
@@ -828,9 +956,9 @@ export function RoutinesPage() {
 
               <hr className="border-border/60" />
 
-              <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-4">
+              <div className={cn("rounded-xl border bg-muted/30 p-4 space-y-4", triggerIssues.length > 0 ? "border-destructive bg-destructive/5" : "border-border")}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center text-sm font-medium text-foreground gap-2 h-5">
+                  <div className="flex items-center text-sm font-medium text-foreground gap-2 h-5">
                     <Zap className="h-4 w-4 text-amber-500 fill-amber-500/20" />
                     {form.conditionGroups.length > 1 ? (
                       <>
@@ -841,7 +969,9 @@ export function RoutinesPage() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="all">TODOS os grupos</SelectItem>
+                            <SelectItem value="all" disabled={form.conditionOperator !== "all" && Boolean(allGroupsConflict)}>
+                              TODOS os grupos
+                            </SelectItem>
                             <SelectItem value="any">QUALQUER grupo</SelectItem>
                           </SelectContent>
                         </Select>
@@ -852,25 +982,51 @@ export function RoutinesPage() {
                     )}
                   </div>
                 </div>
-                <div className="space-y-4">
+                {triggerIssues.length > 0 ? (
+                  <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    <p className="mb-1 flex items-center gap-1.5 font-semibold">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      Combinação de gatilhos inválida
+                    </p>
+                    {[...new Set(triggerIssues.map((issue) => issue.message))].map((message) => (
+                      <p key={message}>• {message}</p>
+                    ))}
+                  </div>
+                ) : allGroupsConflict && form.conditionGroups.length > 1 ? (
+                  <p className="text-xs text-muted-foreground">A opção TODOS os grupos está indisponível: {allGroupsConflict}</p>
+                ) : null}
+                <div className="space-y-2 flex flex-col">
                   {form.conditionGroups.map((group, groupIndex) => (
-                    <ConditionGroupEditor
-                      key={group.id}
-                      group={group}
-                      groupIndex={groupIndex}
-                      tags={tags}
-                      statuses={statuses}
-                      canRemoveGroup={form.conditionGroups.length > 1}
-                      onChange={(patch) => updateConditionGroup(group.id, patch)}
-                      onConditionChange={(conditionId, patch) => updateCondition(group.id, conditionId, patch)}
-                      onAddCondition={() => updateConditionGroup(group.id, { conditions: [...group.conditions, createEmptyCondition()] })}
-                      onRemoveCondition={(conditionId) => removeCondition(group.id, conditionId)}
-                      onRemoveGroup={() => removeConditionGroup(group.id)}
-                    />
+                    <div key={group.id}>
+                      {groupIndex > 0 && <span className="w-full text-center italic text-sm font-semibold">{form.conditionOperator === "all" ? "E" : "OU"}</span>}
+                      <ConditionGroupEditor
+                        group={group}
+                        groupIndex={groupIndex}
+                        tags={tags}
+                        statuses={statuses}
+                        allGroups={form.conditionGroups}
+                        routineOperator={form.conditionOperator}
+                        issues={triggerIssues}
+                        canRemoveGroup={form.conditionGroups.length > 1}
+                        onChange={(patch) => updateConditionGroup(group.id, patch)}
+                        onConditionChange={(conditionId, patch) => updateCondition(group.id, conditionId, patch)}
+                        onAddCondition={() => updateConditionGroup(group.id, { conditions: [...group.conditions, createEmptyCondition("tag")] })}
+                        onRemoveCondition={(conditionId) => removeCondition(group.id, conditionId)}
+                        onRemoveGroup={() => removeConditionGroup(group.id)}
+                      />
+                    </div>
                   ))}
                 </div>
 
-                <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto gap-2 border-dashed text-xs" onClick={() => updateForm({ conditionGroups: [...form.conditionGroups, createEmptyConditionGroup()] })}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={hasManualTrigger}
+                  title={hasManualTrigger ? "O gatilho Manual deve ser usado sozinho." : "Adicionar outro grupo lógico"}
+                  className="w-full sm:w-auto gap-2 border-dashed text-xs"
+                  onClick={() => updateForm({ conditionGroups: [...form.conditionGroups, { ...createEmptyConditionGroup(), conditions: [createEmptyCondition("tag")] }] })}
+                >
                   <GitFork className="h-3.5 w-3.5" />
                   Adicionar grupo de condições
                 </Button>
@@ -908,6 +1064,7 @@ export function RoutinesPage() {
                         {form.actions.length} <span className="hidden md:inline">{form.actions.length === 1 ? "ação" : "ações"}</span>
                       </span>
                     </h2>
+                    {form.actions.length > 1 ? <p className="text-[11px] text-muted-foreground">Arraste pelo ícone de pontos para alterar a ordem de execução.</p> : null}
                   </div>
                   <Button
                     type="button"
@@ -930,7 +1087,20 @@ export function RoutinesPage() {
                       const isLast = index === form.actions.length - 1;
 
                       return (
-                        <div key={action.id} className="grid grid-cols-[40px_1fr] group ">
+                        <div
+                          key={action.id}
+                          onDragOver={(event) => {
+                            event.preventDefault();
+                            if (draggedActionId && draggedActionId !== action.id) setDragOverActionId(action.id);
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            if (draggedActionId) reorderActions(draggedActionId, action.id);
+                            setDraggedActionId(null);
+                            setDragOverActionId(null);
+                          }}
+                          className={cn("grid grid-cols-[40px_1fr] rounded-md transition-colors group", dragOverActionId === action.id && "bg-theme-primary/10 ring-1 ring-theme-primary/40")}
+                        >
                           <div className="flex flex-col items-center">
                             <div className={cn("w-[3px] bg-theme-primary/30", isFirst ? "h-6 invisible" : "h-6")} />
 
@@ -969,6 +1139,19 @@ export function RoutinesPage() {
                               users={users}
                               tags={tags}
                               messageTemplates={messageTemplates}
+                              canMoveUp={!isFirst}
+                              canMoveDown={!isLast}
+                              onMoveUp={() => moveAction(action.id, -1)}
+                              onMoveDown={() => moveAction(action.id, 1)}
+                              onDragStart={(event) => {
+                                setDraggedActionId(action.id);
+                                event.dataTransfer.effectAllowed = "move";
+                                event.dataTransfer.setData("text/plain", action.id);
+                              }}
+                              onDragEnd={() => {
+                                setDraggedActionId(null);
+                                setDragOverActionId(null);
+                              }}
                               onChange={(patch) => updateAction(action.id, patch)}
                               onRemove={() => removeAction(action.id)}
                               canRemove={form.actions.length > 1}
@@ -987,11 +1170,64 @@ export function RoutinesPage() {
                 <X className="h-4 w-4" />
                 Cancelar
               </Button>
-              <Button variant="primary" onClick={() => void saveRoutine()} disabled={isSaving || !form.name.trim() || hasInvalidMessageAction} className="gap-2 h-9 text-xs font-bold bg-theme-primary text-white hover:bg-theme-primary/90">
+              <Button
+                variant="primary"
+                onClick={() => void saveRoutine()}
+                disabled={isSaving || !form.name.trim() || hasInvalidMessageAction || triggerIssues.length > 0}
+                title={triggerIssues[0]?.message}
+                className="gap-2 h-9 text-xs font-bold bg-theme-primary text-white hover:bg-theme-primary/90"
+              >
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 Salvar Automação
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={Boolean(routinePendingRun)}
+          onOpenChange={(open) => {
+            if (!open && !runningRoutineId) setRoutinePendingRun(null);
+          }}
+        >
+          <DialogContent className="max-w-lg p-0 overflow-hidden gap-0">
+            <DialogHeader className="border-b border-border px-5 py-4">
+              <DialogTitle className="text-base">Executar rotina agora</DialogTitle>
+              <DialogDescription>Escolha o contato que receberá a execução semimanual de “{routinePendingRun?.name}”. Os gatilhos automáticos não serão avaliados.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 p-4">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input value={runContactSearch} onChange={(event) => setRunContactSearch(event.target.value)} placeholder="Buscar contato ou telefone" className="pl-9" />
+              </div>
+              {runRoutineMessage ? <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">{runRoutineMessage}</div> : null}
+              <div className="max-h-[50vh] space-y-1 overflow-y-auto custom-scrollbar">
+                {isLoadingRunContacts ? (
+                  <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Carregando contatos...
+                  </div>
+                ) : filteredRunContacts.length === 0 ? (
+                  <div className="py-8 text-center text-sm text-muted-foreground">Nenhum contato encontrado.</div>
+                ) : (
+                  filteredRunContacts.map((chat) => (
+                    <button
+                      key={chat.id}
+                      type="button"
+                      disabled={Boolean(runningRoutineId)}
+                      onClick={() => void runRoutineForContact(chat)}
+                      className="flex w-full items-center justify-between gap-3 rounded-md border border-transparent px-3 py-2 text-left hover:border-border hover:bg-muted/40 disabled:opacity-50"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">{chat.nome_contato || chat.pushname || "Contato sem nome"}</span>
+                        <span className="block truncate text-xs text-muted-foreground">{chat.phone_contact || chat.chat_id}</span>
+                      </span>
+                      {runningRoutineId ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <Play className="h-4 w-4 shrink-0 text-theme-primary" />}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
 
@@ -1303,18 +1539,25 @@ function TemplateRow({ template, onEdit, onDelete }: { template: RoutineMessageT
   );
 }
 
-function RoutineRow({ routine, isTogglingActive, onOpen, onToggleActive, onDelete }: { routine: Routine; isTogglingActive: boolean; onOpen: () => void; onToggleActive: () => void; onDelete: () => void }) {
+function RoutineRow({ routine, isTogglingActive, onOpen, onRun, onToggleActive, onDelete }: { routine: Routine; isTogglingActive: boolean; onOpen: () => void; onRun: () => void; onToggleActive: () => void; onDelete: () => void }) {
   const color = getRoutineColor(routine);
   const currentTrigger = triggerOptions.find((opt) => opt.value === routine.trigger);
   const TriggerIcon = currentTrigger?.icon;
   const conditionCount = routine.conditionGroups?.reduce((total, group) => total + group.conditions.length, 0) || 1;
+  const triggerIssues = validateRoutineTriggerLogic(routine.conditionGroups || [], routine.conditionOperator || "all");
+  const invalidTrigger = triggerIssues[0];
 
   return (
-    <div className="relative grid gap-3 px-4 py-3 transition-colors hover:bg-muted/40 md:grid-cols-[140px_minmax(0,1fr)_160px_110px] md:items-center">
-      <Badge className="w-fit border-0 px-2.5 py-0.5 text-xs font-semibold rounded-sm shadow-xs flex items-center gap-1.5" style={{ backgroundColor: triggerColors[routine.trigger], color: "#fff" }}>
+    <div
+      className={cn(
+        "relative grid gap-3 border-l-2 px-4 py-3 transition-colors hover:bg-muted/40 md:grid-cols-[140px_minmax(0,1fr)_160px_140px] md:items-center",
+        invalidTrigger ? "border-l-destructive bg-destructive/5" : "border-l-transparent",
+      )}
+    >
+      <Badge className="w-fit max-w-full border-0 px-2.5 py-0.5 text-xs font-semibold rounded-sm shadow-xs flex items-center justify-start gap-1.5 overflow-hidden" style={{ backgroundColor: triggerColors[routine.trigger], color: "#fff" }}>
         {TriggerIcon && <TriggerIcon className="h-3.5 w-3.5 shrink-0" />}
-        <span>{currentTrigger?.label}</span>
-        {conditionCount > 1 ? <span className="rounded-full bg-white/20 px-1.5 text-[10px]">+{conditionCount - 1}</span> : null}
+        <span className="truncate">{currentTrigger?.label}</span>
+        {conditionCount > 1 ? <span className=" rounded-full bg-white/20 px-1.5 text-[10px]">+{conditionCount - 1}</span> : null}
       </Badge>
 
       <div className="flex flex-col gap-4 min-[400px]:flex-row min-[400px]:justify-between md:contents ">
@@ -1346,6 +1589,12 @@ function RoutineRow({ routine, isTogglingActive, onOpen, onToggleActive, onDelet
             </TooltipProvider>
           </div>
           <p className="truncate text-xs text-muted-foreground">{routine.description || `${routine.actions.length} ${routine.actions.length === 1 ? "ação configurada" : "ações configuradas"}`}</p>
+          {invalidTrigger ? (
+            <p className="mt-1 flex items-center gap-1 text-xs font-medium text-destructive">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{invalidTrigger.message}</span>
+            </p>
+          ) : null}
         </div>
 
         <div className="flex flex-col gap-1 min-w-0 w-fit md:w-full pt-1">
@@ -1354,7 +1603,7 @@ function RoutineRow({ routine, isTogglingActive, onOpen, onToggleActive, onDelet
             <Target className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0 max-md:hidden" />
             <CornerDownRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0 md:hidden" />
             <Badge
-              className="w-fit max-w-full border px-2.5 py-0.5 text-xs font-medium rounded-full"
+              className="w-fit max-w-32 border px-2.5 py-0.5 text-xs font-medium rounded-full"
               style={{
                 backgroundColor: `${color}50`,
                 borderColor: `${color}40`,
@@ -1372,12 +1621,23 @@ function RoutineRow({ routine, isTogglingActive, onOpen, onToggleActive, onDelet
           type="button"
           variant="ghost"
           size="icon"
+          onClick={onRun}
+          disabled={!routine.active || Boolean(invalidTrigger) || routine.actions.length === 0}
+          title={invalidTrigger?.message || (!routine.active ? "Ative a rotina antes de executar" : "Executar agora para um contato")}
+          className="text-theme-primary hover:bg-theme-primary/10"
+        >
+          <Play className="h-4 w-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
           onClick={onToggleActive}
           disabled={isTogglingActive}
-          title={routine.active ? "Pausar rotina" : "Ativar rotina"}
+          title={routine.active ? "Pausar disparos automáticos" : "Ativar disparos automáticos"}
           className={routine.active ? "text-amber-600 hover:bg-amber-500/10 hover:text-amber-600" : "text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-600"}
         >
-          {isTogglingActive ? <Loader2 className="h-4 w-4 animate-spin" /> : routine.active ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+          {isTogglingActive ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
         </Button>
         <Button type="button" variant="ghost" size="icon" onClick={onOpen} title="Editar">
           <PenSquare className="h-4 w-4" />
@@ -1395,6 +1655,9 @@ function ConditionGroupEditor({
   groupIndex,
   tags,
   statuses,
+  allGroups,
+  routineOperator,
+  issues,
   canRemoveGroup,
   onChange,
   onConditionChange,
@@ -1406,6 +1669,9 @@ function ConditionGroupEditor({
   groupIndex: number;
   tags: ChatTag[];
   statuses: ChatStatusOption[];
+  allGroups: RoutineConditionGroup[];
+  routineOperator: "all" | "any";
+  issues: RoutineTriggerIssue[];
   canRemoveGroup: boolean;
   onChange: (patch: Partial<RoutineConditionGroup>) => void;
   onConditionChange: (conditionId: string, patch: Partial<RoutineCondition>) => void;
@@ -1413,21 +1679,33 @@ function ConditionGroupEditor({
   onRemoveCondition: (conditionId: string) => void;
   onRemoveGroup: () => void;
 }) {
+  const groupIssues = issues.filter((issue) => issue.groupIds.includes(group.id));
+  const allConflict =
+    group.conditions.length > 1
+      ? validateRoutineTriggerLogic(
+          allGroups.map((candidate) => (candidate.id === group.id ? { ...candidate, operator: "all" } : candidate)),
+          routineOperator,
+        ).find((issue) => issue.groupIds.includes(group.id))?.message || ""
+      : "";
+  const hasManual = allGroups.some((candidate) => candidate.conditions.some((condition) => condition.active !== false && condition.type === "manual"));
+
   return (
-    <div className="rounded-lg border border-border bg-background p-3.5 space-y-3 shadow-sm">
-      <div className="flex items-center justify-between gap-2 border-b border-border/40 pb-2">
+    <div className={cn("rounded-lg border bg-background p-3.5 space-y-3 shadow-sm", groupIssues.length > 0 ? "border-destructive" : "border-border")}>
+      <div className="flex items-center justify-between gap-2 h-6!">
         <div className="flex items-center gap-2 text-xs">
           <span className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Grupo {groupIndex + 1}</span>
           {group.conditions.length > 1 && (
-            <div className="flex items-center gap-1.5 text-muted-foreground">
+            <div className=" flex items-center gap-1.5 text-muted-foreground">
               <span>• Coincidir com</span>
               <Select value={group.operator} onValueChange={(value) => onChange({ operator: value as "all" | "any" })}>
-                <SelectTrigger className="h-6 w-32 text-xs bg-muted/30">
+                <SelectTrigger className=" text-xs bg-muted/30">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas (E)</SelectItem>
-                  <SelectItem value="any">Qualquer (OU)</SelectItem>
+                  <SelectItem value="all" disabled={group.operator !== "all" && Boolean(allConflict)}>
+                    Todas
+                  </SelectItem>
+                  <SelectItem value="any">Qualquer</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1435,32 +1713,55 @@ function ConditionGroupEditor({
         </div>
 
         {canRemoveGroup && (
-          <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={onRemoveGroup}>
+          <Button type="button" variant="destructive" size="icon" onClick={onRemoveGroup}>
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
         )}
       </div>
 
-      <div className="space-y-2">
-        {group.conditions.map((condition, index) => (
-          <ConditionEditor
-            key={condition.id}
-            condition={condition}
-            index={index}
-            tags={tags}
-            statuses={statuses}
-            canRemove={group.conditions.length > 1}
-            onChange={(patch) => onConditionChange(condition.id, patch)}
-            onRemove={() => onRemoveCondition(condition.id)}
-          />
-        ))}
+      <div className="flex flex-col gap-2 sm:grid sm:grid-cols-4 sm:gap-x-6 sm:gap-y-3 overflow-clip">
+        {group.conditions.map((condition, index) => {
+          const usesWideCard = condition.type === "specific_message" || condition.type === "ai_message";
+
+          return (
+            <div key={condition.id} className={cn("relative min-w-0 ", usesWideCard ? "sm:col-span-2" : "sm:col-span-1")}>
+              {index > 0 ? (
+                <span className="mb-1 block text-center text-[9px] font-medium italic text-muted-foreground sm:absolute sm:-left-3 sm:top-1/2 sm:z-10 sm:mb-0 sm:-translate-x-1/2 sm:-translate-y-1/2">
+                  {group.operator === "all" ? "E" : "OU"}
+                </span>
+              ) : null}
+              <ConditionEditor
+                condition={condition}
+                index={index}
+                tags={tags}
+                statuses={statuses}
+                allGroups={allGroups}
+                routineOperator={routineOperator}
+                group={group}
+                issues={issues}
+                canRemove={group.conditions.length > 1}
+                onChange={(patch) => onConditionChange(condition.id, patch)}
+                onRemove={() => onRemoveCondition(condition.id)}
+              />
+            </div>
+          );
+        })}
       </div>
 
       <div className="pt-1">
-        <Button type="button" variant="ghost" size="sm" className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground" onClick={onAddCondition}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={hasManual}
+          title={hasManual ? "O gatilho Manual deve ser usado sozinho." : "Adicionar condição"}
+          className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+          onClick={onAddCondition}
+        >
           <Plus className="h-3.5 w-3.5" />
           Adicionar condição
         </Button>
+        {allConflict && group.operator !== "all" ? <p className="mt-1 text-[11px] text-muted-foreground">A opção Todas está indisponível: {allConflict}</p> : null}
       </div>
     </div>
   );
@@ -1471,6 +1772,10 @@ function ConditionEditor({
   index,
   tags,
   statuses,
+  allGroups,
+  routineOperator,
+  group,
+  issues,
   canRemove,
   onChange,
   onRemove,
@@ -1479,10 +1784,17 @@ function ConditionEditor({
   index: number;
   tags: ChatTag[];
   statuses: ChatStatusOption[];
+  allGroups: RoutineConditionGroup[];
+  routineOperator: "all" | "any";
+  group: RoutineConditionGroup;
+  issues: RoutineTriggerIssue[];
   canRemove: boolean;
   onChange: (patch: Partial<RoutineCondition>) => void;
   onRemove: () => void;
 }) {
+  const conditionIssues = issues.filter((issue) => issue.conditionIds.includes(condition.id));
+  const conflictingStatus = group.operator === "all" ? group.conditions.find((candidate) => candidate.id !== condition.id && candidate.active !== false && candidate.type === "status" && candidate.value)?.value || "" : "";
+
   function changeType(type: RoutineTrigger) {
     onChange({
       type,
@@ -1515,21 +1827,23 @@ function ConditionEditor({
   }
 
   return (
-    <div className="group relative flex flex-col gap-3 rounded-lg border border-border/60 bg-muted/20 p-3 sm:flex-row sm:items-start">
-      <div className="w-full space-y-1.5 sm:w-52 sm:shrink-0">
+    <div className={cn("group relative flex h-full w-full min-w-0 flex-col gap-2 rounded-lg border bg-muted/20 p-3", conditionIssues.length > 0 ? "border-destructive bg-destructive/5" : "border-border/60")}>
+      <div className="w-full min-w-0 space-y-1.5">
         <Label className="text-[11px] font-medium text-muted-foreground">Gatilho {index + 1}</Label>
         <Select value={condition.type} onValueChange={(value) => changeType(value as RoutineTrigger)}>
-          <SelectTrigger className="h-9 bg-background">
+          <SelectTrigger className="w-full h-9 bg-background">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {triggerOptions.map((option) => {
               const Icon = option.icon;
+              const conflict = option.value === condition.type ? "" : getTriggerOptionConflict(allGroups, routineOperator, condition.id, option.value);
               return (
-                <SelectItem key={option.value} value={option.value}>
-                  <div className="flex items-center gap-2">
+                <SelectItem key={option.value} value={option.value} disabled={Boolean(conflict)} title={conflict}>
+                  <div className="flex min-w-0 items-center gap-2">
                     <Icon className="h-4 w-4 shrink-0" style={{ color: triggerColors[option.value] }} />
-                    <span>{option.label}</span>
+                    <span className="truncate">{option.label}</span>
+                    {conflict ? <span className="text-[10px] text-muted-foreground">incompatível</span> : null}
                   </div>
                 </SelectItem>
               );
@@ -1539,14 +1853,13 @@ function ConditionEditor({
       </div>
 
       <div className="flex-1 min-w-0">
-        <ConditionValueField condition={condition} tags={tags} statuses={statuses} onChange={onChange} onApplyOption={applyOption} />
+        <ConditionValueField condition={condition} tags={tags} statuses={statuses} conflictingStatus={conflictingStatus} onChange={onChange} onApplyOption={applyOption} />
+        {conditionIssues.length > 0 ? <p className="mt-1 text-xs text-destructive">{conditionIssues[0].message}</p> : null}
       </div>
 
-      <div className="flex items-center justify-end sm:pt-6">
-        <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive" disabled={!canRemove} onClick={onRemove}>
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
+      <Button type="button" variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6 text-muted-foreground hover:text-destructive" disabled={!canRemove} onClick={onRemove}>
+        <X className="h-4 w-4" />
+      </Button>
     </div>
   );
 }
@@ -1555,12 +1868,14 @@ function ConditionValueField({
   condition,
   tags,
   statuses,
+  conflictingStatus,
   onChange,
   onApplyOption,
 }: {
   condition: RoutineCondition;
   tags: ChatTag[];
   statuses: ChatStatusOption[];
+  conflictingStatus?: string;
   onChange: (patch: Partial<RoutineCondition>) => void;
   onApplyOption: (value: string) => void;
 }) {
@@ -1568,9 +1883,7 @@ function ConditionValueField({
     return (
       <div className="space-y-1.5">
         <Label className="text-[11px] font-medium text-muted-foreground">Regra</Label>
-        <div className="flex h-9 items-center rounded-md border border-border/60 bg-background px-3 text-xs text-muted-foreground">
-          {condition.type === "manual" ? "Executada manualmente pelo usuário" : "Aniversário do contato é no dia atual"}
-        </div>
+        <div className="flex h-9 items-center rounded-md border border-border/60 bg-background px-2 text-xs text-muted-foreground">{condition.type === "manual" ? "Executada manualmente" : "Aniversário do contato é no dia atual"}</div>
       </div>
     );
   }
@@ -1579,7 +1892,7 @@ function ConditionValueField({
     return (
       <div className="space-y-1.5">
         <Label className="text-[11px] font-medium text-muted-foreground">Data específica</Label>
-        <Input type="date" className="h-9 bg-background" value={condition.value} onChange={(event) => onChange({ value: event.target.value, targetLabel: event.target.value })} />
+        <Input type="date" className="w-full h-9 bg-background" value={condition.value} onChange={(event) => onChange({ value: event.target.value, targetLabel: event.target.value })} />
       </div>
     );
   }
@@ -1598,14 +1911,19 @@ function ConditionValueField({
       <div className="space-y-1.5">
         <Label className="text-[11px] font-medium text-muted-foreground">{condition.type === "tag" ? "Selecione a Tag" : "Selecione o Status"}</Label>
         <Select value={condition.targetId || condition.targetLabel || condition.value} onValueChange={onApplyOption}>
-          <SelectTrigger className="h-9 bg-background">
+          <SelectTrigger className="w-full h-9 bg-background">
             <SelectValue placeholder={condition.type === "tag" ? "Escolher tag" : "Escolher status"} />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="max-h-72">
             {options.map((option) => (
-              <SelectItem key={`${option.id}-${option.label}`} value={option.id || option.label}>
+              <SelectItem
+                key={`${option.id}-${option.label}`}
+                value={option.id || option.label}
+                disabled={condition.type === "status" && Boolean(conflictingStatus) && option.label !== conflictingStatus}
+                title={condition.type === "status" && conflictingStatus && option.label !== conflictingStatus ? `Com E, o status deve permanecer ${conflictingStatus}. Use OU para aceitar outro status.` : undefined}
+              >
                 <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: option.color || triggerColors[condition.type] }} />
+                  <span className={cn("shrink-0 rounded-full", condition.type == "tag" ? "h-2 w-2 [corner-shape:squircle]" : "h-2.5 w-2.5")} style={{ backgroundColor: option.color || triggerColors[condition.type] }} />
                   <span>{option.label}</span>
                 </div>
               </SelectItem>
@@ -1620,7 +1938,7 @@ function ConditionValueField({
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center  gap-2 h-6">
         <Label className="text-[11px] font-medium text-muted-foreground">{usesAi ? "Intenção da mensagem" : "Mensagem"}</Label>
         {!usesAi && (
           <Select
@@ -1631,7 +1949,7 @@ function ConditionValueField({
               })
             }
           >
-            <SelectTrigger className="h-6 w-32 bg-background text-[11px]">
+            <SelectTrigger className="h-6! bg-background text-[11px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1647,7 +1965,7 @@ function ConditionValueField({
         value={condition.value}
         onChange={(event) => onChange({ value: event.target.value, targetLabel: event.target.value })}
         placeholder={usesAi ? "Ex: paciente demonstra interesse em agendar uma avaliação" : "Texto que deve disparar a automação..."}
-        className="min-h-[72px] bg-background text-xs resize-y"
+        className="h-18 custom-scrollbar bg-background text-xs resize-none "
       />
     </div>
   );
@@ -1659,6 +1977,12 @@ function ActionEditor({
   users,
   tags,
   messageTemplates,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
+  onDragStart,
+  onDragEnd,
   onChange,
   onRemove,
   canRemove,
@@ -1668,6 +1992,12 @@ function ActionEditor({
   users: UserOption[];
   tags: ChatTag[];
   messageTemplates: RoutineMessageTemplate[];
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
+  onDragEnd: () => void;
   onChange: (patch: Partial<RoutineAction>) => void;
   onRemove: () => void;
   canRemove?: boolean;
@@ -1691,15 +2021,36 @@ function ActionEditor({
 
   return (
     <div className="rounded-md border border-border bg-card overflow-clip">
-      <div className="flex items-center justify-between bg-theme-primary px-3 py-2 text-xs font-medium text-white">
-        <span className="flex items-center gap-1">
-          <Clock3 className="h-3.5 w-3.5" />
-          {formatInterval(action)}
-        </span>
-        <span>{index + 1}ª ação</span>
+      <div className="flex items-center justify-between gap-2 bg-theme-primary px-2 py-1.5 text-xs font-medium text-white">
+        <div className="flex min-w-0 items-center gap-1">
+          <button
+            type="button"
+            draggable
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            className="flex h-7 w-7 shrink-0 cursor-grab items-center justify-center rounded hover:bg-white/15 active:cursor-grabbing"
+            title="Arrastar para reordenar"
+            aria-label={`Arrastar a ação ${index + 1}`}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+          <span className="flex min-w-0 items-center gap-1 truncate">
+            <Clock3 className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{formatInterval(action)}</span>
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <Button type="button" variant="ghost" size="icon" disabled={!canMoveUp} onClick={onMoveUp} title="Mover ação para cima" className="h-7 w-7 text-white hover:bg-white/15 hover:text-white disabled:text-white/40">
+            <ArrowUp className="h-3.5 w-3.5" />
+          </Button>
+          <Button type="button" variant="ghost" size="icon" disabled={!canMoveDown} onClick={onMoveDown} title="Mover ação para baixo" className="h-7 w-7 text-white hover:bg-white/15 hover:text-white disabled:text-white/40">
+            <ArrowDown className="h-3.5 w-3.5" />
+          </Button>
+          <span className="ml-1 whitespace-nowrap">{index + 1}ª ação</span>
+        </div>
       </div>
 
-      <div className={cn("grid gap-2 p-2 md:grid-cols-[170px_180px_minmax(0,1fr)_160px_auto] md:items-center", !canRemove && " last:-mr-2 ")}>
+      <div className={cn("grid gap-2 p-2 md:grid-cols-[170px_180px_minmax(0,1fr)_160px_auto] md:items-center")}>
         <Select
           value={action.type}
           onValueChange={(type) => {
@@ -1710,6 +2061,7 @@ function ActionEditor({
               message: actionType === "send_message" ? "" : action.message,
               templateId: actionType === "send_message" ? action.templateId : "",
               templateLabel: actionType === "send_message" ? action.templateLabel : "",
+              blocksAiReply: actionType === "send_message" ? action.blocksAiReply !== false : action.blocksAiReply,
             });
           }}
         >
@@ -1785,7 +2137,12 @@ function ActionEditor({
                 </SelectContent>
               </Select>
             ) : (
-              <MessageDirectiveTextarea value={action.message ?? ""} onChange={(message) => onChange({ message, templateId: "", templateLabel: "" })} placeholder="Digite a mensagem que será enviada" className="min-h-24 resize-y" />
+              <MessageDirectiveTextarea
+                value={action.message ?? ""}
+                onChange={(message) => onChange({ message, templateId: "", templateLabel: "" })}
+                placeholder="Digite a mensagem que será enviada"
+                className=" min-h-24 resize-y max-h-60"
+              />
             )}
           </div>
         ) : (
@@ -1815,6 +2172,16 @@ function ActionEditor({
             <Trash2 className="h-4 w-4" />
           </Button>
         )}
+
+        {action.type === "send_message" ? (
+          <div className="flex items-center justify-between gap-4 rounded-md border border-border bg-muted/30 px-3 py-2 md:col-span-5">
+            <div>
+              <p className="text-sm font-medium text-foreground">Impedir resposta automática da IA</p>
+              <p className="text-xs text-muted-foreground">Quando esta rotina disparar, somente esta ação responderá ao contato.</p>
+            </div>
+            <Switch checked={action.blocksAiReply !== false} onCheckedChange={(blocksAiReply) => onChange({ blocksAiReply })} />
+          </div>
+        ) : null}
 
         {action.type === "send_message" ? (
           <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground md:col-span-5">
