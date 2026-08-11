@@ -4,12 +4,36 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toast } from "@/components/ui/sonner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { ChatTag } from "@/lib/chat-tags";
 import { getReadableTextColor } from "@/lib/chat-tags";
 import { cn, normalizeText } from "@/lib/utils";
-import { ArrowUpRight, CalendarDays, CalendarPlus, CalendarSearch, FileText, HelpCircle, Loader2, MessageSquareOff, Pencil, Plus, RefreshCw, Save, Search, Smile, Sparkles, Stethoscope, TagsIcon, Trash2, X } from "lucide-react";
+import {
+  ArrowUpRight,
+  Bot,
+  CalendarDays,
+  CalendarPlus,
+  CalendarSearch,
+  FileText,
+  HelpCircle,
+  History,
+  Loader2,
+  MessageSquareOff,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Save,
+  Search,
+  Send,
+  Smile,
+  Sparkles,
+  Stethoscope,
+  TagsIcon,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NumericFormat } from "react-number-format";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
@@ -28,6 +52,9 @@ type SupabaseAssistantInfo = {
   estilo_conversa: string;
   avisar_agendamento: boolean;
   avisar_encaminhamento: boolean;
+  active: boolean;
+  directResponseEnabled: boolean;
+  interactionHistoryEnabled: boolean;
 };
 
 export type SupabaseProcedure = {
@@ -82,6 +109,9 @@ const emptyAssistant: SupabaseAssistantInfo = {
   estilo_conversa: "formal",
   avisar_agendamento: false,
   avisar_encaminhamento: false,
+  active: true,
+  directResponseEnabled: true,
+  interactionHistoryEnabled: true,
 };
 
 const emptyProcedureDraft: ProcedureDraft = {
@@ -633,6 +663,8 @@ type ClinicInfoManagerProps = {
   onProceduresChanged?: (procedures: SupabaseProcedure[]) => void;
 };
 
+type AiControlConfirmation = "disable-ai" | "enable-direct-response" | "disable-history-enable-direct-response" | null;
+
 export function ClinicInfoManager({ onProceduresChanged }: ClinicInfoManagerProps) {
   const [assistant, setAssistant] = useState<SupabaseAssistantInfo>(emptyAssistant);
   const [assistantDraft, setAssistantDraft] = useState<SupabaseAssistantInfo>(emptyAssistant);
@@ -648,8 +680,9 @@ export function ClinicInfoManager({ onProceduresChanged }: ClinicInfoManagerProp
   const [editTarget, setEditTarget] = useState<SupabaseProcedure | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SupabaseProcedure | null>(null);
 
+  const [aiControlConfirmation, setAiControlConfirmation] = useState<AiControlConfirmation>(null);
+
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   const assistantChanged =
     assistantDraft.name !== assistant.name ||
@@ -659,12 +692,14 @@ export function ClinicInfoManager({ onProceduresChanged }: ClinicInfoManagerProp
     assistantDraft.msg_inicial !== assistant.msg_inicial ||
     assistantDraft.estilo_conversa !== assistant.estilo_conversa ||
     assistantDraft.avisar_agendamento !== assistant.avisar_agendamento ||
-    assistantDraft.avisar_encaminhamento !== assistant.avisar_encaminhamento;
+    assistantDraft.avisar_encaminhamento !== assistant.avisar_encaminhamento ||
+    assistantDraft.active !== assistant.active ||
+    assistantDraft.directResponseEnabled !== assistant.directResponseEnabled ||
+    assistantDraft.interactionHistoryEnabled !== assistant.interactionHistoryEnabled;
 
   async function loadInfo() {
     setIsLoading(true);
     setError(null);
-    setSuccess(null);
 
     try {
       const [clinicInfoRes, optionsRes] = await Promise.all([fetch("/api/clinic-info", { cache: "no-store" }), fetch("/api/chat-options", { cache: "no-store" })]);
@@ -683,6 +718,9 @@ export function ClinicInfoManager({ onProceduresChanged }: ClinicInfoManagerProp
             estilo_conversa: a.estilo_conversa || "formal",
             avisar_agendamento: !!a.avisar_agendamento,
             avisar_encaminhamento: !!a.avisar_encaminhamento,
+            active: a.active !== false,
+            directResponseEnabled: a.directResponseEnabled !== false,
+            interactionHistoryEnabled: a.interactionHistoryEnabled !== false,
           };
           setAssistant(loaded);
           setAssistantDraft(loaded);
@@ -713,7 +751,6 @@ export function ClinicInfoManager({ onProceduresChanged }: ClinicInfoManagerProp
   async function saveAssistant() {
     setIsSavingAssistant(true);
     setError(null);
-    setSuccess(null);
     try {
       const res = await fetch("/api/clinic-info", {
         method: "PATCH",
@@ -725,12 +762,76 @@ export function ClinicInfoManager({ onProceduresChanged }: ClinicInfoManagerProp
       const next = data.assistant ?? assistantDraft;
       setAssistant(next);
       setAssistantDraft(next);
-      setSuccess("Configurações da assistente salvas com sucesso.");
+      toast.success("Configurações da assistente salvas com sucesso.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível salvar as informações da assistente.");
     } finally {
       setIsSavingAssistant(false);
     }
+  }
+
+  function setAiEnabled(checked: boolean) {
+    setAssistantDraft((current) => {
+      if (!checked) {
+        return { ...current, active: false, directResponseEnabled: false, interactionHistoryEnabled: false };
+      }
+
+      if (!current.directResponseEnabled && !current.interactionHistoryEnabled) {
+        return { ...current, active: true, directResponseEnabled: true, interactionHistoryEnabled: true };
+      }
+
+      return { ...current, active: true };
+    });
+  }
+
+  function setDirectResponseEnabled(checked: boolean) {
+    setAssistantDraft((current) => {
+      if (checked) return { ...current, active: true, directResponseEnabled: true };
+      if (!current.interactionHistoryEnabled) return { ...current, active: true, directResponseEnabled: false, interactionHistoryEnabled: true };
+      return { ...current, directResponseEnabled: false };
+    });
+  }
+
+  function setInteractionHistoryEnabled(checked: boolean) {
+    setAssistantDraft((current) => {
+      if (checked) return { ...current, active: true, interactionHistoryEnabled: true };
+      if (!current.directResponseEnabled) return { ...current, active: true, directResponseEnabled: true, interactionHistoryEnabled: false };
+      return { ...current, interactionHistoryEnabled: false };
+    });
+  }
+
+  function requestAiEnabled(checked: boolean) {
+    if (!checked && assistantDraft.active) {
+      setAiControlConfirmation("disable-ai");
+      return;
+    }
+
+    setAiEnabled(checked);
+  }
+
+  function requestDirectResponseEnabled(checked: boolean) {
+    if (checked && !assistantDraft.directResponseEnabled) {
+      setAiControlConfirmation("enable-direct-response");
+      return;
+    }
+
+    setDirectResponseEnabled(checked);
+  }
+
+  function requestInteractionHistoryEnabled(checked: boolean) {
+    if (!checked && assistantDraft.interactionHistoryEnabled && !assistantDraft.directResponseEnabled) {
+      setAiControlConfirmation("disable-history-enable-direct-response");
+      return;
+    }
+
+    setInteractionHistoryEnabled(checked);
+  }
+
+  function confirmAiControlChange() {
+    if (aiControlConfirmation === "disable-ai") setAiEnabled(false);
+    if (aiControlConfirmation === "enable-direct-response") setDirectResponseEnabled(true);
+    if (aiControlConfirmation === "disable-history-enable-direct-response") setInteractionHistoryEnabled(false);
+    setAiControlConfirmation(null);
   }
 
   async function handleCreateProcedure(draft: ProcedureDraft) {
@@ -746,7 +847,7 @@ export function ClinicInfoManager({ onProceduresChanged }: ClinicInfoManagerProp
       const data = await res.json();
       if (data.procedure) setProcedures((curr) => [data.procedure, ...curr]);
       setIsCreateDialogOpen(false);
-      setSuccess("Procedimento criado com sucesso.");
+      toast.success("Procedimento criado com sucesso.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível criar o procedimento.");
       throw err;
@@ -777,7 +878,7 @@ export function ClinicInfoManager({ onProceduresChanged }: ClinicInfoManagerProp
         setProcedures((curr) => curr.map((p) => (p.id === editTarget.id ? data.procedure : p)));
       }
       setEditTarget(null);
-      setSuccess("Procedimento atualizado com sucesso.");
+      toast.success("Procedimento atualizado com sucesso.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível salvar o procedimento.");
       throw err;
@@ -795,7 +896,7 @@ export function ClinicInfoManager({ onProceduresChanged }: ClinicInfoManagerProp
       if (!res.ok) throw new Error(await readApiMessage(res, "Não foi possível excluir o procedimento."));
       setProcedures((curr) => curr.filter((p) => p.id !== deleteTarget.id));
       setDeleteTarget(null);
-      setSuccess("Procedimento excluído.");
+      toast.success("Procedimento excluído.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível excluir o procedimento.");
     } finally {
@@ -819,7 +920,6 @@ export function ClinicInfoManager({ onProceduresChanged }: ClinicInfoManagerProp
             </div>
           )}
           <div className="flex items-center gap-2 sm:justify-end flex-wrap">
-            {success ? <span className="text-sm font-medium text-emerald-600 animate-fade-in">{success}</span> : null}
             {error ? <span className="text-sm font-medium text-destructive animate-fade-in">{error}</span> : null}
             <Button type="button" variant="outline" size="sm" onClick={() => void loadInfo()} disabled={isLoading || isSavingAssistant} className="h-9">
               <RefreshCw className={cn("mr-2 w-3.5 h-3.5", isLoading && "animate-spin")} />
@@ -865,6 +965,27 @@ export function ClinicInfoManager({ onProceduresChanged }: ClinicInfoManagerProp
                       <SkeletonShimmer className="h-9 w-full rounded-md bg-muted/20 border border-border/40" />
                     </div>
                   </div>
+                </div>
+              </div>
+              <Separator className="my-2 bg-border/60" />
+              <div className="space-y-4 pt-2">
+                <div className="space-y-1.5">
+                  <SkeletonShimmer className="h-4 w-56 rounded bg-muted/40 font-bold" />
+                  <SkeletonShimmer className="h-3.5 w-96 rounded bg-muted/20" />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <div key={index} className="flex items-center justify-between rounded-lg border border-border/70 bg-background/20 p-3.5 min-h-15 gap-3">
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <SkeletonShimmer className="h-8 w-8 rounded-md bg-muted/30 shrink-0" />
+                        <div className="space-y-2 flex-1 min-w-0">
+                          <SkeletonShimmer className="h-3.5 w-10/12 rounded bg-muted/40" />
+                          <SkeletonShimmer className="h-3 w-full rounded bg-muted/20" />
+                        </div>
+                      </div>
+                      <SkeletonShimmer className="h-6 w-10 rounded-full bg-muted/30 shrink-0" />
+                    </div>
+                  ))}
                 </div>
               </div>
               <Separator className="my-2 bg-border/60" />
@@ -973,85 +1094,155 @@ export function ClinicInfoManager({ onProceduresChanged }: ClinicInfoManagerProp
                         </SelectContent>
                       </Select>
                     </div>
-                    <div
-                      className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
-                      onClick={() => setAssistantDraft((c) => ({ ...c, emoji: !c.emoji }))}
-                    >
-                      <div className="flex items-start gap-3 min-w-0">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
-                          <Smile className="h-4 w-4" />
-                        </div>
-                        <div className="space-y-0.5 min-w-0">
-                          <Label htmlFor="assistant-emojis" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
-                            Permitir o uso de emojis
-                          </Label>
-                          <p className="text-[11px] text-muted-foreground leading-tight">{assistantDraft.emoji ? "A IA usará reações visuais moderadas nas respostas." : "Respostas estritamente textuais e limpas."}</p>
-                        </div>
-                      </div>
-                      <Switch id="assistant-emojis" checked={!!assistantDraft.emoji} onClick={(e) => e.stopPropagation()} onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, emoji: v }))} disabled={isSavingAssistant} />
-                    </div>
                   </div>
                 </div>
               </div>
-              {false && (
-                <>
-                  <Separator className="my-2 bg-border/60" />
-                  <div className="space-y-4 pt-2">
-                    <div>
-                      <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Comportamento e Notificações</h3>
-                      <p className="text-xs text-muted-foreground">Ajuste como a assistente interage e quando ela deve enviar notificações.</p>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      <div
-                        className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
-                        onClick={() => setAssistantDraft((c) => ({ ...c, avisar_agendamento: !c.avisar_agendamento }))}
-                      >
-                        <div className="flex items-start gap-3 min-w-0">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
-                            <CalendarPlus className="h-4 w-4" />
-                          </div>
-                          <div className="space-y-0.5 min-w-0">
-                            <Label htmlFor="assistant-notify-booking" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
-                              Avisar sobre agendamentos
-                            </Label>
-                            <p className="text-[11px] text-muted-foreground leading-tight">Notificar quando um novo agendamento for solicitado ou realizado.</p>
-                          </div>
-                        </div>
-                        <Switch
-                          id="assistant-notify-booking"
-                          checked={!!assistantDraft.avisar_agendamento}
-                          onClick={(e) => e.stopPropagation()}
-                          onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, avisar_agendamento: v }))}
-                          disabled={isSavingAssistant}
-                        />
+              <Separator />
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Controles da IA</h3>
+                  <p className="text-xs text-muted-foreground">Controle a disponibilidade da assistente, o envio direto de respostas e o registro de interações.</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <div
+                    className="flex h-full cursor-pointer select-none items-center justify-between gap-4 rounded-lg border border-border/70 bg-background/40 p-4 shadow-2xs transition-colors hover:bg-background/60"
+                    onClick={() => requestAiEnabled(!assistantDraft.active)}
+                  >
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                        <Bot className="h-4.5 w-4.5" />
                       </div>
-                      <div
-                        className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-3.5 shadow-2xs min-h-15 cursor-pointer select-none gap-3 hover:bg-background/60 transition-colors"
-                        onClick={() => setAssistantDraft((c) => ({ ...c, avisar_encaminhamento: !c.avisar_encaminhamento }))}
-                      >
-                        <div className="flex items-start gap-3 min-w-0">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
-                            <ArrowUpRight className="h-4 w-4" />
-                          </div>
-                          <div className="space-y-0.5 min-w-0">
-                            <Label htmlFor="assistant-notify-forward" className="text-xs font-semibold text-foreground cursor-pointer block truncate">
-                              Avisar sobre encaminhamentos
-                            </Label>
-                            <p className="text-[11px] text-muted-foreground leading-tight">Notificar quando a conversa for encaminhada para atendimento humano.</p>
-                          </div>
-                        </div>
-                        <Switch
-                          id="assistant-notify-forward"
-                          checked={!!assistantDraft.avisar_encaminhamento}
-                          onClick={(e) => e.stopPropagation()}
-                          onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, avisar_encaminhamento: v }))}
-                          disabled={isSavingAssistant}
-                        />
+                      <div className="flex flex-col space-y-1 min-w-0">
+                        <Label htmlFor="assistant-enabled" className="block cursor-pointer text-sm font-medium leading-none text-foreground">
+                          Habilitar IA
+                        </Label>
+                        <p className="text-xs leading-snug text-muted-foreground line-clamp-2">{assistantDraft.active ? "A assistente pode processar novas mensagens." : "Todo o processamento da IA fica desabilitado."}</p>
                       </div>
                     </div>
+                    <Switch id="assistant-enabled" checked={assistantDraft.active} onClick={(event) => event.stopPropagation()} onCheckedChange={requestAiEnabled} disabled={isSavingAssistant} />
                   </div>
-                </>
-              )}
+
+                  <div
+                    className="flex h-full cursor-pointer select-none items-center justify-between gap-4 rounded-lg border border-border/70 bg-background/40 p-4 shadow-2xs transition-colors hover:bg-background/60"
+                    onClick={() => requestDirectResponseEnabled(!assistantDraft.directResponseEnabled)}
+                  >
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                        <Send className="h-4.5 w-4.5" />
+                      </div>
+                      <div className="flex flex-col space-y-1 min-w-0">
+                        <Label htmlFor="assistant-direct-response" className="block cursor-pointer text-sm font-medium leading-none text-foreground">
+                          Responder diretamente
+                        </Label>
+                        <p className="text-xs leading-snug text-muted-foreground line-clamp-2">{assistantDraft.directResponseEnabled ? "A IA pode enviar respostas ao contato." : "A IA processa, mas não envia respostas."}</p>
+                      </div>
+                    </div>
+                    <Switch id="assistant-direct-response" checked={assistantDraft.directResponseEnabled} onClick={(event) => event.stopPropagation()} onCheckedChange={requestDirectResponseEnabled} disabled={isSavingAssistant} />
+                  </div>
+
+                  <div
+                    className="flex h-full cursor-pointer select-none items-center justify-between gap-4 rounded-lg border border-border/70 bg-background/40 p-4 shadow-2xs transition-colors hover:bg-background/60"
+                    onClick={() => requestInteractionHistoryEnabled(!assistantDraft.interactionHistoryEnabled)}
+                  >
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                        <History className="h-4.5 w-4.5" />
+                      </div>
+                      <div className="flex flex-col space-y-1 min-w-0">
+                        <Label htmlFor="assistant-interaction-history" className="block cursor-pointer text-sm font-medium leading-none text-foreground">
+                          Registrar histórico
+                        </Label>
+                        <p className="text-xs leading-snug text-muted-foreground line-clamp-2">{assistantDraft.interactionHistoryEnabled ? "A IA pode inserir dados no histórico." : "Novas interações não serão registradas."}</p>
+                      </div>
+                    </div>
+                    <Switch
+                      id="assistant-interaction-history"
+                      checked={assistantDraft.interactionHistoryEnabled}
+                      onClick={(event) => event.stopPropagation()}
+                      onCheckedChange={requestInteractionHistoryEnabled}
+                      disabled={isSavingAssistant}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">Comportamento e Notificações</h3>
+                  <p className="text-xs text-muted-foreground">Ajuste como a assistente interage e quando ela deve enviar notificações.</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <div
+                    className="flex h-full cursor-pointer select-none items-center justify-between gap-4 rounded-lg border border-border/70 bg-background/40 p-4 shadow-2xs transition-colors hover:bg-background/60"
+                    onClick={() => setAssistantDraft((c) => ({ ...c, emoji: !c.emoji }))}
+                  >
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                        <Smile className="h-4.5 w-4.5" />
+                      </div>
+                      <div className="flex flex-col space-y-1 min-w-0">
+                        <Label htmlFor="assistant-emojis" className="block cursor-pointer text-sm font-medium leading-none text-foreground truncate">
+                          Permitir uso de emojis
+                        </Label>
+                        <p className="text-xs leading-snug text-muted-foreground line-clamp-2">{assistantDraft.emoji ? "A IA usará reações visuais nas respostas." : "Respostas estritamente textuais e limpas."}</p>
+                      </div>
+                    </div>
+                    <Switch id="assistant-emojis" checked={!!assistantDraft.emoji} onClick={(e) => e.stopPropagation()} onCheckedChange={(v) => setAssistantDraft((c) => ({ ...c, emoji: v }))} disabled={isSavingAssistant} />
+                  </div>
+
+                  <div
+                    className="flex h-full cursor-pointer select-none items-center justify-between gap-4 rounded-lg border border-border/70 bg-background/40 p-4 shadow-2xs transition-colors hover:bg-background/60"
+                    onClick={() => setAssistantDraft((current) => ({ ...current, avisar_agendamento: !current.avisar_agendamento, ...(!current.avisar_agendamento ? { avisar_encaminhamento: true } : {}) }))}
+                  >
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                        <CalendarPlus className="h-4.5 w-4.5" />
+                      </div>
+                      <div className="flex flex-col space-y-1 min-w-0">
+                        <Label htmlFor="assistant-notify-booking" className="block cursor-pointer text-sm font-medium leading-none text-foreground truncate">
+                          Avisar agendamentos
+                        </Label>
+                        <p className="text-xs leading-snug text-muted-foreground line-clamp-2">Notificar quando um novo agendamento for solicitado ou realizado.</p>
+                      </div>
+                    </div>
+                    <Switch
+                      id="assistant-notify-booking"
+                      checked={!!assistantDraft.avisar_agendamento}
+                      onClick={(e) => e.stopPropagation()}
+                      onCheckedChange={(checked) => setAssistantDraft((current) => ({ ...current, avisar_agendamento: checked, ...(checked ? { avisar_encaminhamento: true } : {}) }))}
+                      disabled={isSavingAssistant}
+                    />
+                  </div>
+
+                  <div
+                    className="flex h-full cursor-pointer select-none items-center justify-between gap-4 rounded-lg border border-border/70 bg-background/40 p-4 shadow-2xs transition-colors hover:bg-background/60"
+                    onClick={() => setAssistantDraft((current) => ({ ...current, avisar_encaminhamento: !current.avisar_encaminhamento, ...(current.avisar_encaminhamento ? { avisar_agendamento: false } : {}) }))}
+                  >
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/50 bg-muted/60 text-muted-foreground">
+                        <ArrowUpRight className="h-4.5 w-4.5" />
+                      </div>
+                      <div className="flex flex-col space-y-1 min-w-0">
+                        <Label htmlFor="assistant-notify-forward" className="block cursor-pointer text-sm font-medium leading-none text-foreground truncate">
+                          Avisar encaminhamentos
+                        </Label>
+                        <p className="text-xs leading-snug text-muted-foreground line-clamp-2">Notificar quando a conversa for encaminhada para um humano.</p>
+                      </div>
+                    </div>
+                    <Switch
+                      id="assistant-notify-forward"
+                      checked={!!assistantDraft.avisar_encaminhamento}
+                      onClick={(e) => e.stopPropagation()}
+                      onCheckedChange={(checked) => setAssistantDraft((current) => ({ ...current, avisar_encaminhamento: checked, ...(!checked ? { avisar_agendamento: false } : {}) }))}
+                      disabled={isSavingAssistant}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           </>
         )}
@@ -1253,6 +1444,34 @@ export function ClinicInfoManager({ onProceduresChanged }: ClinicInfoManagerProp
           </>
         )}
       </section>
+
+      <Dialog open={Boolean(aiControlConfirmation)} onOpenChange={(open) => !open && setAiControlConfirmation(null)}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>
+              {aiControlConfirmation === "disable-ai" ? "Desabilitar a IA por completo?" : aiControlConfirmation === "disable-history-enable-direct-response" ? "Desabilitar o registro de histórico?" : "Habilitar respostas diretas?"}
+            </DialogTitle>
+            <DialogDescription>
+              {aiControlConfirmation === "disable-ai"
+                ? "Ela deixará de responder todos os chats que foram habilitados para IA"
+                : aiControlConfirmation === "disable-history-enable-direct-response"
+                  ? "Como ao menos uma função deve permanecer ativa, a IA passará a responder diretamente os chats habilitados para ela."
+                  : "A IA assume o controle do atendimento de chats que foram habilitados para ela"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-border bg-muted/40 p-3.5 text-sm text-muted-foreground">
+            Esta ação é reversível e só passa a valer quando você clicar em <span className="font-semibold text-foreground">Salvar Alterações</span>.
+          </div>
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={() => setAiControlConfirmation(null)}>
+              Cancelar
+            </Button>
+            <Button type="button" variant={aiControlConfirmation === "disable-ai" ? "destructive" : "primary"} onClick={confirmAiControlChange}>
+              {aiControlConfirmation === "disable-ai" ? "Desabilitar IA" : aiControlConfirmation === "disable-history-enable-direct-response" ? "Desabilitar histórico e habilitar respostas" : "Habilitar respostas diretas"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ProcedureDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} tagOptions={tagOptions} isSaving={isSavingProcedure} onSubmit={handleCreateProcedure} />
 

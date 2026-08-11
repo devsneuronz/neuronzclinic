@@ -13,6 +13,8 @@ type AssistantRow = {
   speaking_style: string | null;
   schedule_alert: boolean | null;
   fowarding_alert: boolean | null;
+  direct_response_enabled: boolean | null;
+  interaction_history_enabled: boolean | null;
   client_name: string | null;
   client_whats: string | null;
 };
@@ -41,7 +43,24 @@ type TagRow = { id: string; label: string; color: string | null };
 type AssistantPayload = Partial<ClinicAssistantInfo> & Record<string, unknown>;
 type ProcedurePayload = Partial<ClinicProcedure> & Record<string, unknown>;
 
-const assistantSelect = ["id", "name", "general_info", "initial_message", "active", "gender", "emoji", "speaking_style", "schedule_alert", "fowarding_alert", "client_name", "client_whats", "prompt_procedures"].join(",");
+const ASSISTANT_INFO_TABLE = "clinic_assistant_settings";
+
+const assistantSelect = [
+  "id",
+  "name",
+  "general_info",
+  "initial_message",
+  "active",
+  "gender",
+  "emoji",
+  "speaking_style",
+  "schedule_alert",
+  "fowarding_alert",
+  "direct_response_enabled",
+  "interaction_history_enabled",
+  "client_name",
+  "client_whats",
+].join(",");
 const procedureSelect = [
   "id",
   "name",
@@ -65,6 +84,15 @@ const procedureSelect = [
 ].join(",");
 
 function mapAssistant(row: AssistantRow | null): ClinicAssistantInfo & Record<string, unknown> {
+  const aiEnabled = row?.active !== false;
+  let directResponseEnabled = aiEnabled && row?.direct_response_enabled !== false;
+  let interactionHistoryEnabled = aiEnabled && row?.interaction_history_enabled !== false;
+
+  if (aiEnabled && !directResponseEnabled && !interactionHistoryEnabled) {
+    directResponseEnabled = true;
+    interactionHistoryEnabled = true;
+  }
+
   return {
     id: row?.id ?? null,
     name: row?.name || "Ia",
@@ -75,6 +103,9 @@ function mapAssistant(row: AssistantRow | null): ClinicAssistantInfo & Record<st
     speakingStyle: row?.speaking_style || "formal",
     scheduleAlert: !!row?.schedule_alert,
     forwardingAlert: !!row?.fowarding_alert,
+    active: row?.active,
+    directResponseEnabled,
+    interactionHistoryEnabled,
     clientName: row?.client_name || "",
     clientWhats: row?.client_whats || "",
     dados_empresa: row?.general_info || "",
@@ -103,6 +134,17 @@ function pickNullableString(input: Record<string, unknown>, fields: string[]) {
 
 function normalizeAssistant(input: AssistantPayload) {
   const name = getString(input.name) || "Lia";
+  const scheduleAlert = getBool(input.scheduleAlert ?? input.avisar_agendamento, false);
+  const forwardingAlert = scheduleAlert || getBool(input.forwardingAlert ?? input.avisar_encaminhamento, false);
+  const aiEnabled = getBool(input.active, true);
+  let directResponseEnabled = aiEnabled && getBool(input.directResponseEnabled, true);
+  let interactionHistoryEnabled = aiEnabled && getBool(input.interactionHistoryEnabled, true);
+
+  if (aiEnabled && !directResponseEnabled && !interactionHistoryEnabled) {
+    directResponseEnabled = true;
+    interactionHistoryEnabled = true;
+  }
+
   return {
     name,
     general_info: pickString(input, ["dados_empresa", "generalInfo"]),
@@ -111,8 +153,10 @@ function normalizeAssistant(input: AssistantPayload) {
     gender: getNullableString(input.gender),
     emoji: getBool(input.emoji, true),
     speaking_style: pickNullableString(input, ["estilo_conversa", "speakingStyle"]) ?? "formal",
-    schedule_alert: getBool(input.scheduleAlert ?? input.avisar_agendamento, false),
-    fowarding_alert: getBool(input.forwardingAlert ?? input.avisar_encaminhamento, false),
+    schedule_alert: scheduleAlert,
+    fowarding_alert: forwardingAlert,
+    direct_response_enabled: directResponseEnabled,
+    interaction_history_enabled: interactionHistoryEnabled,
     client_name: pickNullableString(input, ["cliente_nome", "clientName"]),
     client_whats: pickNullableString(input, ["cliente_whats", "clientWhats"]),
   };
@@ -224,7 +268,7 @@ function procedurePayload(input: ReturnType<typeof normalizeProcedure>, interest
 export async function GET() {
   try {
     const [assistants, procedures] = await Promise.all([
-      supabaseJson<AssistantRow[]>(`clinic_assistant_settings?select=${assistantSelect}&active=is.true&order=created_at.desc&limit=1`),
+      supabaseJson<AssistantRow[]>(`${ASSISTANT_INFO_TABLE}?select=${assistantSelect}&active=is.true&order=created_at.desc&limit=1`),
       supabaseJson<ProcedureRow[]>(`clinic_procedures?select=${procedureSelect}&order=created_at.desc`),
     ]);
 
@@ -261,7 +305,7 @@ export async function PATCH(request: NextRequest) {
       const assistant = body.assistant ?? {};
       const id = getString(assistant.id);
       const payload = normalizeAssistant(assistant as AssistantPayload);
-      const path = isUuid(id) ? `clinic_assistant_settings?id=eq.${encodeURIComponent(id)}&select=${assistantSelect}` : `clinic_assistant_settings?select=${assistantSelect}`;
+      const path = isUuid(id) ? `${ASSISTANT_INFO_TABLE}?id=eq.${encodeURIComponent(id)}&select=${assistantSelect}` : `${ASSISTANT_INFO_TABLE}?select=${assistantSelect}`;
       const [row] = await supabaseJson<AssistantRow[]>(path, {
         method: isUuid(id) ? "PATCH" : "POST",
         headers: { Prefer: "return=representation" },
