@@ -73,7 +73,7 @@ export async function POST(request: Request) {
     }
 
     const actionFilter = actionRunIds.length ? `id=${idInFilter(actionRunIds)}` : `routine_run_id=${idInFilter(routineRunIds)}`;
-    const canceledActions = (await supabaseRequest(`routine_action_runs?status=eq.pending&${actionFilter}&select=id`, {
+    const canceledActions = (await supabaseRequest(`routine_action_runs?status=in.(pending,retrying)&${actionFilter}&select=id`, {
       method: "PATCH",
       headers: { Prefer: "return=representation" },
       body: JSON.stringify({ status: "canceled", last_error: "Cancelado manualmente pelo atendimento." }),

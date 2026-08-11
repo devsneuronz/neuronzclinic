@@ -154,11 +154,13 @@ export function useManualRoutines(chat: ChatRecord | undefined) {
           throw new Error(`${failedCount} acao(oes) falharam ao executar. Confira routine_action_runs no Supabase.`);
         }
 
-        const actionCount = processData.processed ?? 0;
+        const retryingCount = processData.results?.filter((result) => result.status === "retrying").length ?? 0;
+        const actionCount = Math.max((processData.processed ?? 0) - retryingCount, 0);
         const scheduledCount = Math.max((data.actionRuns ?? 0) - actionCount, 0);
         const executedText = actionCount === 1 ? "1 ação executada agora" : `${actionCount} ações executadas agora`;
         const scheduledText = scheduledCount === 1 ? "1 ação agendada" : `${scheduledCount} ações agendadas`;
-        const successMessage = scheduledCount > 0 ? `Automação iniciada: ${executedText} e ${scheduledText}.` : `Automação executada: ${executedText}.`;
+        const retryText = retryingCount > 0 ? ` ${retryingCount} ação(ões) entrou(aram) em nova tentativa.` : "";
+        const successMessage = scheduledCount > 0 ? `Automação iniciada: ${executedText} e ${scheduledText}.${retryText}` : `Automação executada: ${executedText}.${retryText}`;
         setRunSuccess(successMessage);
         setRunStatus({
           routineName: routine.name,

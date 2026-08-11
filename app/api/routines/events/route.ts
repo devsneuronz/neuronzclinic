@@ -35,6 +35,8 @@ type EventBody = {
   status?: unknown;
   previousStatus?: unknown;
   routineId?: unknown;
+  correlationId?: unknown;
+  causationId?: unknown;
   dryRun?: unknown;
 };
 
@@ -54,6 +56,8 @@ type NormalizedEvent = {
   status: string;
   previousStatus: string;
   routineId: string;
+  correlationId: string;
+  causationId: string;
   dryRun: boolean;
 };
 
@@ -213,7 +217,7 @@ async function supabaseRequest<T>(path: string, init?: RequestInit): Promise<T> 
 }
 
 function isAuthorized(request: Request) {
-  if (!ROUTINES_WEBHOOK_SECRET) return true;
+  if (!ROUTINES_WEBHOOK_SECRET) return false;
   const authorization = request.headers.get("authorization") || "";
   return authorization === `Bearer ${ROUTINES_WEBHOOK_SECRET}` || request.headers.get("x-routines-secret") === ROUTINES_WEBHOOK_SECRET;
 }
@@ -244,6 +248,8 @@ function normalizeEvent(body: EventBody): NormalizedEvent {
     status: getString(body.status),
     previousStatus: getString(body.previousStatus),
     routineId: getString(body.routineId),
+    correlationId: getString(body.correlationId) || eventId,
+    causationId: getString(body.causationId),
     dryRun: getBoolean(body.dryRun),
   };
 }
@@ -436,35 +442,32 @@ async function classifyAiConditions(message: string, routines: Routine[]) {
   } finally { clearTimeout(timeout); }
 }
 
-function isDuplicateRunError(error: unknown) {
-  const message = error instanceof Error ? error.message : "";
-  return message.includes("23505") && message.includes("routine_runs_event_once_idx");
-}
-
-async function createRun(routine: Routine, context: EvaluationContext) {
-  try {
-    const rows = await supabaseRequest<RawRecord[]>("routine_runs?select=*", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({
-      routine_airtable_id: routine.id, routine_name: routine.name, contact_id: context.contact.id || context.event.contactId,
-      contact_airtable_id: context.event.contactAirtableId || null, chat_id: context.contact.chatId || context.event.chatId || null,
-      contact_name: context.contact.name || null, contact_phone: context.contact.phone || null, trigger_type: context.event.eventType,
-      trigger_target: context.event.tagId || context.event.tagLabel || context.event.status || context.event.messageText || null,
-      event_id: context.event.eventId, status: "running", payload: context.event,
-    }) });
-    return rows[0] || null;
-  } catch (error) {
-    if (isDuplicateRunError(error)) return null;
-    throw error;
-  }
-}
-
-async function createActionRuns(runId: string, actions: RoutineAction[]) {
+async function startRoutineRun(routine: Routine, context: EvaluationContext) {
   let accumulatedDelayMinutes = 0;
-  const rows = actions.map((action, index) => {
+  const actions = routine.actions.map((action, index) => {
     accumulatedDelayMinutes += action.delayMinutes;
-    return { routine_run_id: runId, action_id: action.id, action_index: index, action_type: action.type, execute_at: new Date(Date.now() + accumulatedDelayMinutes * 60_000).toISOString(), status: "pending", payload: action };
+    return { action_id: action.id, action_index: index, action_type: action.type, execute_at: new Date(Date.now() + accumulatedDelayMinutes * 60_000).toISOString(), payload: action };
   });
-  if (!rows.length) return [];
-  return supabaseRequest<RawRecord[]>("routine_action_runs?select=*", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify(rows) });
+
+  const rows = await supabaseRequest<Array<{ run_id: string; created: boolean; action_count: number }>>("rpc/start_routine_run", {
+    method: "POST",
+    body: JSON.stringify({
+      p_routine_airtable_id: routine.id,
+      p_routine_name: routine.name,
+      p_contact_id: context.contact.id || context.event.contactId,
+      p_contact_airtable_id: context.event.contactAirtableId || "",
+      p_chat_id: context.contact.chatId || context.event.chatId || "",
+      p_contact_name: context.contact.name || "",
+      p_contact_phone: context.contact.phone || "",
+      p_trigger_type: context.event.eventType,
+      p_trigger_target: context.event.tagId || context.event.tagLabel || context.event.status || context.event.messageText || "",
+      p_event_id: context.event.eventId,
+      p_payload: context.event,
+      p_actions: actions,
+    }),
+  });
+
+  return rows[0] || null;
 }
 
 export async function POST(request: Request) {
@@ -484,10 +487,11 @@ export async function POST(request: Request) {
     let actionRuns = 0;
     let duplicates = 0;
     for (const evaluation of matched) {
-      const run = await createRun(evaluation.routine, context);
-      if (!run?.id) { duplicates += 1; continue; }
-      runs.push(run);
-      actionRuns += (await createActionRuns(getString(run.id), evaluation.routine.actions)).length;
+      const result = await startRoutineRun(evaluation.routine, context);
+      if (!result?.run_id) continue;
+      actionRuns += getNumber(result.action_count);
+      if (!result.created) { duplicates += 1; continue; }
+      runs.push({ id: result.run_id });
     }
 
     return NextResponse.json({ evaluated: routines.length, matched: matched.length, created: runs.length, duplicates, actionRuns, runIds: runs.map((run) => run.id).filter(Boolean), ai: { configured: ai.configured, requested: ai.requested, error: ai.error || undefined } });

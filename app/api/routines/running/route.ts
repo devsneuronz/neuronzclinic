@@ -80,13 +80,14 @@ export async function GET(request: Request) {
       .map((run) => {
         const routineRunId = getString(run.id);
         const actions = actionRuns.filter((actionRun) => getString(actionRun.routine_run_id) === routineRunId);
-        const pendingActions = actions.filter((actionRun) => getString(actionRun.status) === "pending");
+        const pendingActions = actions.filter((actionRun) => ["pending", "processing", "retrying"].includes(getString(actionRun.status)));
+        const cancelableActions = pendingActions.filter((actionRun) => getString(actionRun.status) !== "processing");
         const doneActions = actions.filter((actionRun) => getString(actionRun.status) === "done");
 
         return {
           routineName: getString(run.routine_name) || "Automacao manual",
           routineRunIds: [routineRunId],
-          actionRunIds: pendingActions.map((actionRun) => getString(actionRun.id)),
+          actionRunIds: cancelableActions.map((actionRun) => getString(actionRun.id)),
           executedCount: doneActions.length,
           scheduledCount: pendingActions.length,
         };

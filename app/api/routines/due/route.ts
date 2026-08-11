@@ -4,6 +4,7 @@ const SUPABASE_REST_URL = process.env.NEXT_PUBLIC_SUPABASE_REST_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SEND_MESSAGE_WEBHOOK_URL = process.env.SEND_MESSAGE_WEBHOOK_URL;
 const ROUTINES_WEBHOOK_SECRET = process.env.ROUTINES_WEBHOOK_SECRET;
+const ROUTINES_EVENT_WEBHOOK_URL = process.env.ROUTINES_EVENT_WEBHOOK_URL;
 
 type RawRecord = Record<string, unknown>;
 type SupabaseTemplateRecord = {
@@ -24,11 +25,6 @@ function requireWebhookUrl(value: string | undefined, envName: string) {
   return value;
 }
 
-function getNumber(value: unknown) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : 0;
-}
-
 function getNestedValue(record: RawRecord, path: string) {
   return path.split(".").reduce<unknown>((current, key) => {
     if (!current || typeof current !== "object" || Array.isArray(current)) return undefined;
@@ -45,8 +41,8 @@ function getMediaType(mimeType: string) {
 }
 
 function isAuthorized(request: Request) {
-  if (!ROUTINES_WEBHOOK_SECRET) return true;
   if (isSameOriginRequest(request)) return true;
+  if (!ROUTINES_WEBHOOK_SECRET) return false;
 
   const authorization = request.headers.get("authorization") || "";
   const secret = request.headers.get("x-routines-secret") || "";
@@ -428,7 +424,44 @@ async function fetchChatForRoutine(run: RawRecord) {
   return null;
 }
 
-async function addTag(run: RawRecord, action: RawRecord) {
+async function notifyRoutineTagAdded(actionRun: RawRecord, run: RawRecord, chat: RawRecord, tag: { id: string; label: string }) {
+  if (!ROUTINES_EVENT_WEBHOOK_URL) return { notified: false, reason: "webhook_not_configured" };
+
+  const actionRunId = getString(actionRun.id);
+  const runId = getString(run.id);
+  const chatRowId = getString(chat.id);
+  const chatId = getString(chat.chat_id) || getString(run.chat_id) || chatRowId;
+  const runPayload = run.payload && typeof run.payload === "object" && !Array.isArray(run.payload) ? (run.payload as RawRecord) : {};
+  const correlationId = getString(runPayload.correlationId) || getString(run.event_id) || runId;
+  const eventId = `routine:${correlationId}:tag:${tag.id}`;
+  const response = await fetch(ROUTINES_EVENT_WEBHOOK_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(ROUTINES_WEBHOOK_SECRET ? { Authorization: `Bearer ${ROUTINES_WEBHOOK_SECRET}` } : {}),
+    },
+    body: JSON.stringify({
+      event_id: eventId,
+      event_type: "tag_added",
+      contact_id: getString(run.contact_id) || chatRowId,
+      contact_airtable_id: getString(run.contact_airtable_id),
+      chat_id: chatId,
+      contact_name: getString(run.contact_name),
+      contact_phone: getString(run.contact_phone) || getString(chat.phone_contact),
+      tag,
+      occurred_at: new Date().toISOString(),
+      correlation_id: correlationId,
+      causation_id: actionRunId,
+      source: "routine_action",
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) throw new Error(`Webhook de evento recusou a tag adicionada (${response.status}).`);
+  return { notified: true, eventId };
+}
+
+async function addTag(actionRun: RawRecord, run: RawRecord, action: RawRecord) {
   const tagId = getString(action.tagId);
   if (!tagId) throw new Error("tagId e obrigatorio para vincular tag.");
 
@@ -437,14 +470,19 @@ async function addTag(run: RawRecord, action: RawRecord) {
   if (!tag) throw new Error("Tag do Supabase nao encontrada para vincular ao chat.");
 
   const tags = getTagsFromChat(chat);
-  if (!tags.some((current) => current.id === tag.id)) tags.push(tag);
+  const alreadyLinked = tags.some((current) => current.id === tag.id);
+  if (!alreadyLinked) tags.push(tag);
 
-  await supabaseRequest(`chats?id=eq.${encodeURIComponent(getString(chat.id))}`, {
-    method: "PATCH",
-    body: JSON.stringify({ json_tags_parsed: tags }),
-  });
+  if (!alreadyLinked) {
+    await supabaseRequest(`chats?id=eq.${encodeURIComponent(getString(chat.id))}`, {
+      method: "PATCH",
+      body: JSON.stringify({ json_tags_parsed: tags }),
+    });
+  }
 
-  return { type: "add_tag", chatId: getString(chat.id), tagId: tag.id, tagLabel: tag.label };
+  const shouldNotify = !alreadyLinked || Number(actionRun.attempt_count) > 1;
+  const event = shouldNotify ? await notifyRoutineTagAdded(actionRun, run, chat, tag) : { notified: false, reason: "tag_already_linked" };
+  return { type: "add_tag", chatId: getString(chat.id), tagId: tag.id, tagLabel: tag.label, alreadyLinked, event };
 
 
 }
@@ -460,70 +498,9 @@ async function executeAction(actionRun: RawRecord) {
   if (actionType === "create_notice") return createTask(run, action, "Aviso");
   if (actionType === "create_task") return createTask(run, action, "Tarefa");
   if (actionType === "send_message") return sendMessage(run, action);
-  if (actionType === "add_tag") return addTag(run, action);
+  if (actionType === "add_tag") return addTag(actionRun, run, action);
 
   return { skipped: true, actionType };
-}
-
-function getActionDelayMinutes(actionRun: RawRecord) {
-  const payload = actionRun.payload && typeof actionRun.payload === "object" && !Array.isArray(actionRun.payload) ? (actionRun.payload as RawRecord) : {};
-  return Math.max(0, getNumber(payload.delayMinutes));
-}
-
-function getOneDueActionPerRoutineRun(actionRuns: RawRecord[]) {
-  const seenRoutineRuns = new Set<string>();
-  const runnable: RawRecord[] = [];
-
-  for (const actionRun of actionRuns) {
-    const routineRunId = getString(actionRun.routine_run_id);
-    if (!routineRunId || seenRoutineRuns.has(routineRunId)) continue;
-
-    seenRoutineRuns.add(routineRunId);
-    runnable.push(actionRun);
-  }
-
-  return runnable;
-}
-
-async function reschedulePendingActionsAfter(actionRun: RawRecord, executedAt: Date) {
-  const routineRunId = getString(actionRun.routine_run_id);
-  const actionIndex = getNumber(actionRun.action_index);
-  if (!routineRunId) return 0;
-
-  const pendingActions = (await supabaseRequest(
-    `routine_action_runs?routine_run_id=eq.${encodeURIComponent(routineRunId)}&status=eq.pending&action_index=gt.${actionIndex}&order=action_index.asc&select=id,payload,action_index`,
-  )) as RawRecord[];
-
-  let nextExecuteAt = executedAt.getTime();
-
-  for (const pendingAction of pendingActions) {
-    nextExecuteAt += getActionDelayMinutes(pendingAction) * 60_000;
-
-    await supabaseRequest(`routine_action_runs?id=eq.${encodeURIComponent(getString(pendingAction.id))}`, {
-      method: "PATCH",
-      body: JSON.stringify({ execute_at: new Date(nextExecuteAt).toISOString() }),
-    });
-  }
-
-  return pendingActions.length;
-}
-
-async function finishRoutineRunIfComplete(actionRun: RawRecord) {
-  const routineRunId = getString(actionRun.routine_run_id);
-  if (!routineRunId) return false;
-
-  const unfinishedActions = (await supabaseRequest(
-    `routine_action_runs?routine_run_id=eq.${encodeURIComponent(routineRunId)}&status=in.(pending,processing)&limit=1&select=id`,
-  )) as RawRecord[];
-
-  if (unfinishedActions.length > 0) return false;
-
-  await supabaseRequest(`routine_runs?id=eq.${encodeURIComponent(routineRunId)}`, {
-    method: "PATCH",
-    body: JSON.stringify({ status: "done", finished_at: new Date().toISOString() }),
-  });
-
-  return true;
 }
 
 export async function POST(request: Request) {
@@ -535,38 +512,39 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => ({}))) as { actionRunIds?: unknown; limit?: number };
     const actionRunIds = getValidActionRunIds(body.actionRunIds);
     const limit = Math.min(Math.max(Number(body.limit) || 20, 1), 100);
-    const now = new Date().toISOString();
-    const dueRunsPath = actionRunIds.length
-      ? `routine_action_runs?status=eq.pending&execute_at=lte.${encodeURIComponent(now)}&id=in.(${actionRunIds.map(encodeURIComponent).join(",")})&order=execute_at.asc,action_index.asc&limit=${limit}&select=*`
-      : `routine_action_runs?status=eq.pending&execute_at=lte.${encodeURIComponent(now)}&order=execute_at.asc,action_index.asc&limit=${limit}&select=*`;
-    const dueRuns = (await supabaseRequest(dueRunsPath)) as RawRecord[];
-    const runnableDueRuns = getOneDueActionPerRoutineRun(dueRuns);
+    const workerId = crypto.randomUUID();
+    const runnableDueRuns = (await supabaseRequest("rpc/claim_due_routine_actions", {
+      method: "POST",
+      body: JSON.stringify({
+        p_limit: limit,
+        p_worker_id: workerId,
+        p_action_run_ids: actionRunIds.length ? actionRunIds : null,
+        p_lease_seconds: 900,
+      }),
+    })) as RawRecord[];
     const results: RawRecord[] = [];
 
     for (const [index, actionRun] of runnableDueRuns.entries()) {
       const id = getString(actionRun.id);
 
       try {
-        await supabaseRequest(`routine_action_runs?id=eq.${encodeURIComponent(id)}`, {
-          method: "PATCH",
-          body: JSON.stringify({ status: "processing" }),
-        });
         const result = await executeAction(actionRun);
         const executedAt = new Date();
-        await supabaseRequest(`routine_action_runs?id=eq.${encodeURIComponent(id)}`, {
-          method: "PATCH",
-          body: JSON.stringify({ status: "done", executed_at: executedAt.toISOString(), result }),
-        });
-        const rescheduledActions = await reschedulePendingActionsAfter(actionRun, executedAt);
-        const routineFinished = await finishRoutineRunIfComplete(actionRun);
-        results.push({ id, status: "done", result, rescheduledActions, routineFinished });
+        const completionRows = (await supabaseRequest("rpc/complete_routine_action", {
+          method: "POST",
+          body: JSON.stringify({ p_action_run_id: id, p_worker_id: workerId, p_result: result, p_executed_at: executedAt.toISOString() }),
+        })) as RawRecord[];
+        const completion = completionRows[0];
+        if (completion?.completed !== true) throw new Error("A reserva da ação expirou antes da conclusão.");
+        results.push({ id, status: "done", result, rescheduledActions: completion.rescheduled_actions, routineFinished: completion.routine_finished });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Falha ao executar ação.";
-        await supabaseRequest(`routine_action_runs?id=eq.${encodeURIComponent(id)}`, {
-          method: "PATCH",
-          body: JSON.stringify({ status: "failed", executed_at: new Date().toISOString(), last_error: message }),
-        });
-        results.push({ id, status: "failed", message });
+        const failureRows = (await supabaseRequest("rpc/fail_routine_action", {
+          method: "POST",
+          body: JSON.stringify({ p_action_run_id: id, p_worker_id: workerId, p_last_error: message, p_failed_at: new Date().toISOString() }),
+        })) as RawRecord[];
+        const failure = failureRows[0];
+        results.push({ id, status: getString(failure?.status) || "failed", nextRetryAt: failure?.next_retry_at || null, message });
       }
 
       if (index < runnableDueRuns.length - 1) {
@@ -574,7 +552,7 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({ processed: results.length, deferred: dueRuns.length - runnableDueRuns.length, results });
+    return NextResponse.json({ processed: results.length, claimed: runnableDueRuns.length, workerId, results });
   } catch (error) {
     return NextResponse.json({ message: error instanceof Error ? error.message : "Não foi possível processar ações." }, { status: 500 });
   }

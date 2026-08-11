@@ -8,6 +8,7 @@ const ROUTINES_WEBHOOK_SECRET = process.env.ROUTINES_WEBHOOK_SECRET;
 type RawRecord = Record<string, unknown>;
 
 type TriggerBody = {
+  eventId?: unknown;
   routineId?: unknown;
   routineAirtableId?: unknown;
   trigger?: unknown;
@@ -128,8 +129,8 @@ function isManualAppRequest(request: Request, body: TriggerBody) {
 }
 
 function isAuthorized(request: Request, body: TriggerBody) {
-  if (!ROUTINES_WEBHOOK_SECRET) return true;
   if (isManualAppRequest(request, body)) return true;
+  if (!ROUTINES_WEBHOOK_SECRET) return false;
 
   const authorization = request.headers.get("authorization") || "";
   const secret = request.headers.get("x-routines-secret") || "";
@@ -285,59 +286,53 @@ export async function POST(request: Request) {
 
     const routines = (await fetchRoutines()).filter((routine) => matchesRoutine(routine, body));
     const runs: RawRecord[] = [];
-    const actionRuns: RawRecord[] = [];
+    let actionRuns = 0;
+    let duplicates = 0;
+    const actionRunIds: string[] = [];
+    const eventId = getString(body.eventId) || crypto.randomUUID();
 
     for (const routine of routines) {
-      const runPayload = {
-        routine_airtable_id: routine.id,
-        routine_name: routine.name,
-        contact_id: contactId,
-        contact_airtable_id: getString(body.contactAirtableId) || null,
-        chat_id: getString(body.chatId) || null,
-        contact_name: getString(body.contactName) || null,
-        contact_phone: getString(body.contactPhone) || null,
-        trigger_type: routine.trigger,
-        trigger_target: getString(body.targetId) || getString(body.targetLabel) || null,
-        status: "running",
-        payload: body as RawRecord,
-      };
-      const createdRuns = (await supabaseRequest("routine_runs?select=*", {
-        method: "POST",
-        headers: { Prefer: "return=representation" },
-        body: JSON.stringify(runPayload),
-      })) as RawRecord[];
-      const run = createdRuns[0];
-      if (!run?.id) continue;
-      runs.push(run);
-
       let accumulatedDelayMinutes = 0;
-
-      for (const [index, action] of routine.actions.entries()) {
+      const actions = routine.actions.map((action, index) => {
         accumulatedDelayMinutes += action.delayMinutes;
-        const executeAt = new Date(Date.now() + accumulatedDelayMinutes * 60_000).toISOString();
-        actionRuns.push({
-          routine_run_id: run.id,
+        return {
           action_id: action.id,
           action_index: index,
           action_type: action.type,
-          execute_at: executeAt,
-          status: "pending",
+          execute_at: new Date(Date.now() + accumulatedDelayMinutes * 60_000).toISOString(),
           payload: action as unknown as RawRecord,
-        });
-      }
-    }
+        };
+      });
 
-    let createdActionRuns: RawRecord[] = [];
-
-    if (actionRuns.length > 0) {
-      createdActionRuns = (await supabaseRequest("routine_action_runs?select=*", {
+      const resultRows = (await supabaseRequest("rpc/start_routine_run", {
         method: "POST",
-        headers: { Prefer: "return=representation" },
-        body: JSON.stringify(actionRuns),
-      })) as RawRecord[];
+        body: JSON.stringify({
+          p_routine_airtable_id: routine.id,
+          p_routine_name: routine.name,
+          p_contact_id: contactId,
+          p_contact_airtable_id: getString(body.contactAirtableId),
+          p_chat_id: getString(body.chatId),
+          p_contact_name: getString(body.contactName),
+          p_contact_phone: getString(body.contactPhone),
+          p_trigger_type: routine.trigger,
+          p_trigger_target: getString(body.targetId) || getString(body.targetLabel),
+          p_event_id: eventId,
+          p_payload: body as RawRecord,
+          p_actions: actions,
+        }),
+      })) as Array<{ run_id?: string; created?: boolean; action_count?: number }>;
+      const result = resultRows[0];
+      if (!result?.run_id) continue;
+      actionRuns += getNumber(result.action_count);
+      if (result.created !== true) { duplicates += 1; continue; }
+      runs.push({ id: result.run_id });
+      const pendingActions = (await supabaseRequest(
+        `routine_action_runs?routine_run_id=eq.${encodeURIComponent(result.run_id)}&status=in.(pending,retrying)&select=id&order=action_index.asc`,
+      )) as Array<{ id?: string }>;
+      actionRunIds.push(...pendingActions.map((actionRun) => getString(actionRun.id)).filter(Boolean));
     }
 
-    return NextResponse.json({ matched: routines.length, runs, actionRuns: createdActionRuns.length, actionRunIds: createdActionRuns.map((actionRun) => actionRun.id).filter(Boolean) });
+    return NextResponse.json({ matched: routines.length, runs, duplicates, actionRuns, actionRunIds });
   } catch (error) {
     return NextResponse.json({ message: error instanceof Error ? error.message : "Nao foi possivel disparar rotinas." }, { status: 500 });
   }
