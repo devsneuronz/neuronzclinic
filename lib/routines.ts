@@ -1,6 +1,7 @@
 import { Cake, Calendar, Circle, Hand, LucideIcon, MessageSquareText, Sparkles, Tag } from "lucide-react";
 
 export type RoutineTrigger = "manual" | "specific_date" | "tag" | "status" | "birthday" | "specific_message" | "ai_message";
+export type RoutineExecutionMode = "scheduled" | "immediate";
 
 export type RoutineConditionOperator = "all" | "any";
 
@@ -74,6 +75,7 @@ export interface Routine {
   targetColor?: string;
   specificDate?: string;
   executionTime?: string;
+  executionMode: RoutineExecutionMode;
   maxExecutionsPerContact: number;
   birthdayEnabled: boolean;
   conditionOperator: RoutineConditionOperator;

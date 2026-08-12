@@ -66,6 +66,7 @@ type RoutineRow = {
   specific_date: string | null;
   birthday_enabled: boolean | null;
   execution_time: string | null;
+  execution_mode: "scheduled" | "immediate" | null;
   max_executions_per_contact: number | null;
   condition_operator: string | null;
   is_active: boolean | null;
@@ -236,6 +237,7 @@ function mapRoutine(row: RoutineRow): Routine {
     targetColor: primaryCondition?.targetColor || (trigger === "tag" ? targetTag?.color || "" : ""),
     specificDate: effectiveTrigger === "specific_date" ? primaryCondition?.value || row.specific_date || "" : row.specific_date || "",
     executionTime: row.execution_time || "09:00",
+    executionMode: row.execution_mode || (effectiveTrigger === "manual" ? "immediate" : "scheduled"),
     maxExecutionsPerContact: row.max_executions_per_contact || 1,
     birthdayEnabled: effectiveTrigger === "birthday" || row.birthday_enabled === true,
     conditionOperator: normalizeConditionOperator(row.condition_operator),
@@ -249,7 +251,7 @@ function mapRoutine(row: RoutineRow): Routine {
 }
 
 const ROUTINE_SELECT = [
-  "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,execution_time,max_executions_per_contact,condition_operator,is_active,created_at,updated_at",
+  "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,execution_time,execution_mode,max_executions_per_contact,condition_operator,is_active,created_at,updated_at",
   "target_tag:target_tag_id(id,airtable_record_id,label,color)",
   "routine_condition_groups(id,operator,position,routine_conditions(id,condition_type,comparison_operator,value_text,value_json,position,is_active,target_tag:target_tag_id(id,airtable_record_id,label,color)))",
   "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,blocks_ai_reply,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,label,content),tags:tag_id(id,airtable_record_id,label,color))",
@@ -346,9 +348,11 @@ function normalizePayload(body: unknown) {
   const actions = Array.isArray(payload.actions) ? payload.actions : [];
   const hasSpecificMessage = conditionGroups.some((group) => group.conditions.some((condition) => condition.active !== false && condition.type === "specific_message"));
   const executionTime = getString(payload.executionTime);
+  const requestedExecutionMode = getString(payload.executionMode);
+  const executionMode = hasSpecificMessage ? "immediate" : requestedExecutionMode === "immediate" ? "immediate" : "scheduled";
   const maxExecutionsPerContact = Math.trunc(getNumber(payload.maxExecutionsPerContact));
 
-  if (!hasSpecificMessage && !/^([01]\d|2[0-3]):[0-5]\d$/.test(executionTime)) throw new Error("Informe o horário de início da rotina.");
+  if (executionMode === "scheduled" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(executionTime)) throw new Error("Informe o horário de início da rotina.");
   if (maxExecutionsPerContact < 1 || maxExecutionsPerContact > 1000) throw new Error("Informe entre 1 e 1000 execuções por contato.");
 
   if (actions.some((action) => action.type === "add_tag" && !getString(action.tagId))) throw new Error("Escolha a tag da acao Vincular tag.");
@@ -362,6 +366,7 @@ function normalizePayload(body: unknown) {
     targetLabel,
     specificDate,
     executionTime: executionTime || "09:00",
+    executionMode,
     maxExecutionsPerContact,
     conditionOperator: normalizeConditionOperator(payload.conditionOperator),
     conditionGroups,
@@ -383,6 +388,7 @@ async function getRoutineWritePayload(payload: ReturnType<typeof normalizePayloa
     specific_date: payload.trigger === "specific_date" ? payload.specificDate : null,
     birthday_enabled: payload.trigger === "birthday",
     execution_time: payload.executionTime,
+    execution_mode: payload.executionMode,
     max_executions_per_contact: payload.maxExecutionsPerContact,
     condition_operator: payload.conditionOperator,
     is_active: payload.active,

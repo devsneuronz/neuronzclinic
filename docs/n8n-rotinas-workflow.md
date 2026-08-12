@@ -4,7 +4,7 @@ O n8n recebe e normaliza eventos; o backend avalia grupos `E/OU`, classifica int
 
 ## Ordem de implantação
 
-1. Execute `docs/supabase-routines-runtime-hardening.sql`, `docs/supabase-routines-ai-reply-control.sql` e `docs/supabase-routines-execution-controls.sql` no Supabase.
+1. Execute `docs/supabase-routines-runtime-hardening.sql`, `docs/supabase-routines-ai-reply-control.sql`, `docs/supabase-routines-execution-controls.sql` e `docs/supabase-routines-immediate-execution.sql` no Supabase.
 2. Publique o backend com os endpoints atualizados.
 3. Importe `docs/n8n-rotinas-event-workflow.json`, `docs/n8n-rotinas-due-workflow.json` e, para gatilhos com IA, `docs/n8n-rotinas-ai-classifier-workflow.json`.
 4. Configure no n8n `APP_BASE_URL`, `ROUTINES_WEBHOOK_SECRET`, `OPENAI_API_KEY` e opcionalmente `OPENAI_ROUTINES_MODEL`.
@@ -65,7 +65,7 @@ Authorization: Bearer $ROUTINES_WEBHOOK_SECRET
 
 O endpoint agora reserva ações atomicamente. Execuções simultâneas do workflow não recebem a mesma ação. Falhas temporárias são reagendadas após 1, 5 e 15 minutos; ao esgotar as tentativas, a execução é marcada como falha e as ações seguintes são canceladas.
 
-Para rotinas sem o gatilho `Mensagem específica`, o horário configurado é o início da sequência de ações. Eventos recebidos depois desse horário ficam para o próximo dia. O máximo de execuções vale por contato e é aplicado de forma atômica no banco, evitando novos disparos quando o limite for alcançado.
+Rotinas podem iniciar imediatamente ou no horário configurado. Rotinas exclusivamente manuais usam início imediato por padrão; `Mensagem específica` também inicia imediatamente. Eventos recebidos depois de um horário configurado ficam para o próximo dia. O máximo de execuções vale por contato e é aplicado de forma atômica no banco, evitando novos disparos quando o limite for alcançado.
 
 ## Segurança
 

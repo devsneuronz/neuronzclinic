@@ -108,6 +108,7 @@ type RoutineRow = {
   specific_date: string | null;
   birthday_enabled: boolean | null;
   execution_time: string | null;
+  execution_mode: "scheduled" | "immediate" | null;
   max_executions_per_contact: number | null;
   condition_operator: string | null;
   is_active: boolean | null;
@@ -292,14 +293,14 @@ function mapRoutine(row: RoutineRow): Routine {
   return {
     id: externalId(row), name: row.name, description: row.description || "", trigger,
     targetId: primary?.targetId || "", targetLabel: primary?.targetLabel || "", targetColor: primary?.targetColor || "",
-    specificDate: trigger === "specific_date" ? primary?.value || row.specific_date || "" : "", executionTime: row.execution_time || "09:00", maxExecutionsPerContact: row.max_executions_per_contact || 1, birthdayEnabled: trigger === "birthday" || row.birthday_enabled === true,
+    specificDate: trigger === "specific_date" ? primary?.value || row.specific_date || "" : "", executionTime: row.execution_time || "09:00", executionMode: row.execution_mode || (trigger === "manual" ? "immediate" : "scheduled"), maxExecutionsPerContact: row.max_executions_per_contact || 1, birthdayEnabled: trigger === "birthday" || row.birthday_enabled === true,
     conditionOperator: normalizeConditionOperator(row.condition_operator), conditionGroups: groups, active: row.is_active !== false, actions,
   };
 }
 
 async function fetchRoutines(event: NormalizedEvent) {
   const select = [
-    "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,execution_time,max_executions_per_contact,condition_operator,is_active",
+    "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,execution_time,execution_mode,max_executions_per_contact,condition_operator,is_active",
     "routine_condition_groups(id,operator,position,routine_conditions(id,condition_type,comparison_operator,value_text,position,is_active,target_tag:target_tag_id(id,airtable_record_id,label,color)))",
     "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,blocks_ai_reply,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,label,content),tags:tag_id(id,airtable_record_id,label,color))",
   ].join(",");
@@ -448,7 +449,7 @@ async function classifyAiConditions(message: string, routines: Routine[]) {
 }
 
 async function startRoutineRun(routine: Routine, context: EvaluationContext) {
-  const startsImmediately = routine.conditionGroups.some((group) => group.conditions.some((condition) => condition.active !== false && condition.type === "specific_message"));
+  const startsImmediately = routine.executionMode === "immediate" || routine.conditionGroups.some((group) => group.conditions.some((condition) => condition.active !== false && condition.type === "specific_message"));
   const baseExecutionAt = startsImmediately ? new Date() : getNextExecutionAt(routine.executionTime || "09:00");
   let accumulatedDelayMinutes = 0;
   const actions = routine.actions.map((action, index) => {

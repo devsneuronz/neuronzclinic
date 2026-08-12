@@ -89,6 +89,7 @@ const emptyRoutine: RoutineForm = {
   targetColor: "",
   specificDate: "",
   executionTime: "09:00",
+  executionMode: "immediate",
   maxExecutionsPerContact: 1,
   birthdayEnabled: true,
   conditionOperator: "all",
@@ -107,6 +108,7 @@ const fallbackRoutines: Routine[] = [
     targetLabel: "Indicação",
     targetColor: "#db351f",
     executionTime: "09:00",
+    executionMode: "scheduled",
     maxExecutionsPerContact: 1,
     birthdayEnabled: false,
     conditionOperator: "all",
@@ -126,6 +128,7 @@ const fallbackRoutines: Routine[] = [
     targetLabel: "Aniversário",
     targetColor: "#d97706",
     executionTime: "09:00",
+    executionMode: "scheduled",
     maxExecutionsPerContact: 1,
     birthdayEnabled: true,
     conditionOperator: "all",
@@ -197,6 +200,7 @@ function cloneRoutine(routine: Routine): RoutineForm {
     targetColor: routine.targetColor,
     specificDate: routine.specificDate,
     executionTime: routine.executionTime || "09:00",
+    executionMode: routine.executionMode || (routine.trigger === "manual" ? "immediate" : "scheduled"),
     maxExecutionsPerContact: routine.maxExecutionsPerContact || 1,
     birthdayEnabled: routine.birthdayEnabled,
     conditionOperator: routine.conditionOperator || "all",
@@ -458,7 +462,8 @@ export function RoutinesPage() {
   const triggerIssues = useMemo(() => validateRoutineTriggerLogic(form.conditionGroups, form.conditionOperator), [form.conditionGroups, form.conditionOperator]);
   const hasManualTrigger = form.conditionGroups.some((group) => group.conditions.some((condition) => condition.active !== false && condition.type === "manual"));
   const hasSpecificMessageTrigger = form.conditionGroups.some((group) => group.conditions.some((condition) => condition.active !== false && condition.type === "specific_message"));
-  const hasExecutionControlError = form.maxExecutionsPerContact < 1 || !Number.isInteger(form.maxExecutionsPerContact) || (!hasSpecificMessageTrigger && !/^([01]\d|2[0-3]):[0-5]\d$/.test(form.executionTime || ""));
+  const hasExecutionControlError =
+    form.maxExecutionsPerContact < 1 || !Number.isInteger(form.maxExecutionsPerContact) || (form.executionMode === "scheduled" && !hasSpecificMessageTrigger && !/^([01]\d|2[0-3]):[0-5]\d$/.test(form.executionTime || ""));
   const allGroupsConflict = form.conditionGroups.length > 1 ? validateRoutineTriggerLogic(form.conditionGroups, "all")[0]?.message || "" : "";
   const filteredRunContacts = useMemo(() => {
     const search = runContactSearch.trim().toLowerCase();
@@ -939,61 +944,107 @@ export function RoutinesPage() {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent className="max-h-[92dvh] max-w-4xl p-0 overflow-hidden gap-0 flex flex-col">
             <DialogHeader className="border-b border-border px-6 py-4 bg-background shrink-0">
-              <DialogTitle className="text-lg font-bold flex items-center gap-2">{form.id ? "Editar rotina" : "Nova rotina"}</DialogTitle>
+              <DialogTitle className="text-lg font-bold flex items-center gap-2">
+                <GitFork className="text-theme-primary" />
+                {form.id ? "Editar rotina" : "Nova rotina"}
+              </DialogTitle>
               <DialogDescription>Configure o gatilho e a sequência de ações que será executada para cada contato elegível.</DialogDescription>
             </DialogHeader>
 
             <div className="space-y-6 px-6 py-5 overflow-y-auto flex-1 min-h-0 custom-scrollbar">
-              <div className="space-y-3">
-                <div className="grid gap-3 md:grid-cols-[1fr_160px]">
-                  <div className="space-y-1">
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="rounded-xl border bg-muted/30 p-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+                  <div className="space-y-1.5">
                     <Label className="text-xs font-semibold text-muted-foreground">Nome da Rotina</Label>
-                    <Input value={form.name} onChange={(event) => updateForm({ name: event.target.value })} placeholder="Ex: Pós-Consulta de Tratamento Capilar" className="h-9" />
+                    <Input value={form.name} onChange={(event) => updateForm({ name: event.target.value })} placeholder="Ex: Pós-Consulta" className="h-9" />
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <Label className="text-xs font-semibold text-muted-foreground">Status</Label>
-                    <label className="flex h-9 items-center justify-between rounded-md border border-input bg-background px-3 text-sm cursor-pointer hover:bg-muted/20 transition-all">
-                      <span className="text-xs font-medium text-muted-foreground">Ativa</span>
-                      <Switch checked={form.active} onCheckedChange={(active) => updateForm({ active })} />
-                    </label>
+                    <Tabs value={String(form.active)} onValueChange={(value) => updateForm({ active: value === "true" })}>
+                      <TabsList className="h-9! w-full gap-1 bg-secondary/50 border border-border/40 rounded-full">
+                        <TabsTrigger value="false" className="text-xs font-medium px-3 data-[state=active]:bg-red-500/20 data-[state=active]:text-red-200!">
+                          Inativo
+                        </TabsTrigger>
+                        <TabsTrigger value="true" className="text-xs font-medium px-3 data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-200">
+                          Ativo
+                        </TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                  </div>
+                  <div className="space-y-1.5 col-span-2">
+                    <Label className="text-xs font-semibold text-muted-foreground">Descrição</Label>
+                    <Textarea
+                      value={form.description}
+                      onChange={(event) => updateForm({ description: event.target.value })}
+                      placeholder="Descreva brevemente o objetivo desta automação..."
+                      className="h-[52px] resize-none text-xs custom-scrollbar"
+                    />
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold text-muted-foreground">Descrição</Label>
-                  <Textarea value={form.description} onChange={(event) => updateForm({ description: event.target.value })} placeholder="Descreva brevemente o objetivo desta automação..." className="min-h-16 resize-none" />
+                <div className="rounded-xl border bg-muted/30 p-4 flex flex-col gap-4">
+                  <div>
+                    <h3 className="font-bold tracking-tight text-foreground">Configurações</h3>
+                    <p className="text-xs text-muted-foreground">Quando e quantas vezes executar</p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-3 items-start">
+                    {hasSpecificMessageTrigger ? (
+                      <div className="flex h-9 items-center rounded-md border border-border bg-muted/30 px-3 text-xs text-muted-foreground">Dispara imediatamente ao receber mensagem específica.</div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground">Início da execução</Label>
+                        <div className="flex flex-col min-[890px]:flex-row gap-2">
+                          <Select value={form.executionMode} onValueChange={(value) => updateForm({ executionMode: value as "scheduled" | "immediate" })}>
+                            <SelectTrigger className="h-9 bg-background w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="immediate">Imediatamente</SelectItem>
+                              <SelectItem value="scheduled">Horário</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <div className={cn("transition-all", form.executionMode === "immediate" && "hidden")}>
+                            <Input
+                              type="time"
+                              required
+                              value={form.executionTime || ""}
+                              onChange={(event) => updateForm({ executionTime: event.target.value })}
+                              className={cn("h-9 text-xs w-full", !form.executionTime && "border-destructive")}
+                            />
+                          </div>
+                        </div>
+
+                        <p className="text-[11px] text-muted-foreground leading-tight">
+                          {form.executionMode !== "scheduled" ? "Inicia assim que as condições da rotina forem atendidas." : "Inicia no próximo dia se o evento ocorrer após este horário."}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Execuções por contato</Label>
+                      <Input
+                        type="number"
+                        required
+                        min={1}
+                        max={1000}
+                        step={1}
+                        value={form.maxExecutionsPerContact}
+                        onChange={(event) =>
+                          updateForm({
+                            maxExecutionsPerContact: event.target.valueAsNumber || 0,
+                          })
+                        }
+                        className={cn("h-9", form.maxExecutionsPerContact < 1 && "border-destructive")}
+                      />
+                    </div>
+                  </div>
+
+                  {hasExecutionControlError && <p className="text-xs font-medium text-destructive">Preencha os controles de execução obrigatórios.</p>}
                 </div>
               </div>
 
-              <hr className="border-border/60" />
-
-              <section className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
-                <div>
-                  <h2 className="text-sm font-bold text-foreground">Quando e quantas vezes executar</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">O limite vale para cada contato e impede que a mesma rotina seja disparada sem parar.</p>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {hasSpecificMessageTrigger ? (
-                    <div className="rounded-md border border-border bg-background px-3 py-2 text-sm text-muted-foreground">
-                      Mensagem específica dispara imediatamente ao ser recebida.
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      <Label className="text-xs font-semibold text-muted-foreground">Horário de início</Label>
-                      <Input type="time" required value={form.executionTime || ""} onChange={(event) => updateForm({ executionTime: event.target.value })} className={cn("h-9", !form.executionTime && "border-destructive")} />
-                      <p className="text-[11px] text-muted-foreground">Se o evento ocorrer depois deste horário, inicia no próximo dia.</p>
-                    </div>
-                  )}
-                  <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-muted-foreground">Máximo de execuções por contato</Label>
-                    <Input type="number" required min={1} max={1000} step={1} value={form.maxExecutionsPerContact} onChange={(event) => updateForm({ maxExecutionsPerContact: event.target.valueAsNumber || 0 })} className={cn("h-9", form.maxExecutionsPerContact < 1 && "border-destructive")} />
-                    <p className="text-[11px] text-muted-foreground">Depois desse limite, novos eventos para o contato não criam outra execução.</p>
-                  </div>
-                </div>
-                {hasExecutionControlError ? <p className="text-xs font-medium text-destructive">Preencha os controles de execução obrigatórios.</p> : null}
-              </section>
-
-              <div className={cn("rounded-xl border bg-muted/30 p-4 space-y-4", triggerIssues.length > 0 ? "border-destructive bg-destructive/5" : "border-border")}>
+              <div className={cn("rounded-xl border bg-muted/30 p-4 space-y-4 border-border transition-all", triggerIssues.length > 0 && " ring-2 ring-destructive/50 bg-destructive/5")}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center text-sm font-medium text-foreground gap-2 h-5">
                     <Zap className="h-4 w-4 text-amber-500 fill-amber-500/20" />
