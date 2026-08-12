@@ -65,6 +65,8 @@ type RoutineRow = {
   target_status: string | null;
   specific_date: string | null;
   birthday_enabled: boolean | null;
+  execution_time: string | null;
+  max_executions_per_contact: number | null;
   condition_operator: string | null;
   is_active: boolean | null;
   created_at: string | null;
@@ -233,6 +235,8 @@ function mapRoutine(row: RoutineRow): Routine {
     targetLabel: primaryCondition?.targetLabel || (trigger === "tag" ? targetTag?.label || "" : trigger === "status" || trigger === "specific_message" || trigger === "ai_message" ? row.target_status || "" : trigger === "specific_date" ? row.specific_date || "" : ""),
     targetColor: primaryCondition?.targetColor || (trigger === "tag" ? targetTag?.color || "" : ""),
     specificDate: effectiveTrigger === "specific_date" ? primaryCondition?.value || row.specific_date || "" : row.specific_date || "",
+    executionTime: row.execution_time || "09:00",
+    maxExecutionsPerContact: row.max_executions_per_contact || 1,
     birthdayEnabled: effectiveTrigger === "birthday" || row.birthday_enabled === true,
     conditionOperator: normalizeConditionOperator(row.condition_operator),
     conditionGroups,
@@ -245,7 +249,7 @@ function mapRoutine(row: RoutineRow): Routine {
 }
 
 const ROUTINE_SELECT = [
-  "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,condition_operator,is_active,created_at,updated_at",
+  "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,execution_time,max_executions_per_contact,condition_operator,is_active,created_at,updated_at",
   "target_tag:target_tag_id(id,airtable_record_id,label,color)",
   "routine_condition_groups(id,operator,position,routine_conditions(id,condition_type,comparison_operator,value_text,value_json,position,is_active,target_tag:target_tag_id(id,airtable_record_id,label,color)))",
   "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,blocks_ai_reply,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,label,content),tags:tag_id(id,airtable_record_id,label,color))",
@@ -340,6 +344,12 @@ function normalizePayload(body: unknown) {
   const targetLabel = primaryCondition.targetLabel || primaryCondition.value;
   const specificDate = trigger === "specific_date" ? primaryCondition.value : "";
   const actions = Array.isArray(payload.actions) ? payload.actions : [];
+  const hasSpecificMessage = conditionGroups.some((group) => group.conditions.some((condition) => condition.active !== false && condition.type === "specific_message"));
+  const executionTime = getString(payload.executionTime);
+  const maxExecutionsPerContact = Math.trunc(getNumber(payload.maxExecutionsPerContact));
+
+  if (!hasSpecificMessage && !/^([01]\d|2[0-3]):[0-5]\d$/.test(executionTime)) throw new Error("Informe o horário de início da rotina.");
+  if (maxExecutionsPerContact < 1 || maxExecutionsPerContact > 1000) throw new Error("Informe entre 1 e 1000 execuções por contato.");
 
   if (actions.some((action) => action.type === "add_tag" && !getString(action.tagId))) throw new Error("Escolha a tag da acao Vincular tag.");
   if (actions.some((action) => action.type === "send_message" && !getString(action.templateId) && !getString(action.message))) throw new Error("Digite uma mensagem ou escolha um template para a acao Enviar mensagem.");
@@ -351,6 +361,8 @@ function normalizePayload(body: unknown) {
     targetId,
     targetLabel,
     specificDate,
+    executionTime: executionTime || "09:00",
+    maxExecutionsPerContact,
     conditionOperator: normalizeConditionOperator(payload.conditionOperator),
     conditionGroups,
     active: payload.active !== false,
@@ -370,6 +382,8 @@ async function getRoutineWritePayload(payload: ReturnType<typeof normalizePayloa
     target_status: payload.trigger === "status" || payload.trigger === "specific_message" || payload.trigger === "ai_message" ? payload.targetLabel : null,
     specific_date: payload.trigger === "specific_date" ? payload.specificDate : null,
     birthday_enabled: payload.trigger === "birthday",
+    execution_time: payload.executionTime,
+    max_executions_per_contact: payload.maxExecutionsPerContact,
     condition_operator: payload.conditionOperator,
     is_active: payload.active,
     source: "supabase",

@@ -56,6 +56,8 @@ type RoutineRow = {
   target_status: string | null;
   specific_date: string | null;
   birthday_enabled: boolean | null;
+  execution_time: string | null;
+  max_executions_per_contact: number | null;
   is_active: boolean | null;
   target_tag?: TagRow | null;
   routine_actions?: RoutineActionRow[];
@@ -236,6 +238,8 @@ function mapRoutine(row: RoutineRow): Routine {
     targetLabel,
     targetColor: trigger === "tag" ? targetTag?.color || "" : "",
     specificDate: row.specific_date || "",
+    executionTime: row.execution_time || "09:00",
+    maxExecutionsPerContact: row.max_executions_per_contact || 1,
     birthdayEnabled: row.birthday_enabled === true,
     conditionOperator: "all",
     conditionGroups: [{ id: `legacy-${row.id}`, operator: "all", conditions: [{ id: `legacy-condition-${row.id}`, type: trigger, comparisonOperator: trigger === "manual" ? "exists" : trigger === "birthday" ? "is_today" : trigger === "ai_message" ? "ai_matches" : "equals", value: targetLabel, targetId, targetLabel, targetColor: targetTag?.color || "", active: true }] }],
@@ -246,7 +250,7 @@ function mapRoutine(row: RoutineRow): Routine {
 
 async function fetchRoutines(): Promise<Routine[]> {
   const select = [
-    "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,is_active",
+    "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,execution_time,max_executions_per_contact,is_active",
     "target_tag:target_tag_id(id,airtable_record_id,label,color)",
     "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,blocks_ai_reply,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,label),tags:tag_id(id,airtable_record_id,label,color))",
   ].join(",");
@@ -276,6 +280,17 @@ function matchesRoutine(routine: Routine, body: TriggerBody) {
   return false;
 }
 
+function getNextExecutionAt(executionTime: string) {
+  const [hour, minute] = executionTime.split(":").map(Number);
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value || "";
+  const localDate = `${part("year")}-${part("month")}-${part("day")}`;
+  const scheduled = new Date(`${localDate}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00-03:00`);
+  if (scheduled.getTime() <= now.getTime()) scheduled.setUTCDate(scheduled.getUTCDate() + 1);
+  return scheduled;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await parseTriggerBody(request);
@@ -302,6 +317,8 @@ export async function POST(request: Request) {
     const manualOverride = getString(body.executionMode) === "manual_override";
 
     for (const routine of routines) {
+      const startsImmediately = manualOverride || routine.conditionGroups.some((group) => group.conditions.some((condition) => condition.active !== false && condition.type === "specific_message"));
+      const baseExecutionAt = startsImmediately ? new Date() : getNextExecutionAt(routine.executionTime || "09:00");
       let accumulatedDelayMinutes = 0;
       const actions = routine.actions.map((action, index) => {
         accumulatedDelayMinutes += action.delayMinutes;
@@ -309,12 +326,12 @@ export async function POST(request: Request) {
           action_id: action.id,
           action_index: index,
           action_type: action.type,
-          execute_at: new Date(Date.now() + accumulatedDelayMinutes * 60_000).toISOString(),
+          execute_at: new Date(baseExecutionAt.getTime() + accumulatedDelayMinutes * 60_000).toISOString(),
           payload: action as unknown as RawRecord,
         };
       });
 
-      const resultRows = (await supabaseRequest("rpc/start_routine_run", {
+      const resultRows = (await supabaseRequest("rpc/start_limited_routine_run", {
         method: "POST",
         body: JSON.stringify({
           p_routine_airtable_id: routine.id,
@@ -329,6 +346,7 @@ export async function POST(request: Request) {
           p_event_id: eventId,
           p_payload: body as RawRecord,
           p_actions: actions,
+          p_max_executions_per_contact: routine.maxExecutionsPerContact,
         }),
       })) as Array<{ run_id?: string; created?: boolean; action_count?: number }>;
       const result = resultRows[0];

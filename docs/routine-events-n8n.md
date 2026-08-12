@@ -4,6 +4,10 @@ Envie os eventos para `POST /api/routines/events` com o header `x-routines-secre
 
 ## Mensagem recebida
 
+Para gatilhos de texto/IA, envie o evento depois que o buffer de mensagens for fechado. Assim, frases divididas em várias mensagens são avaliadas como uma única intenção.
+
+O retorno inclui `suppressAiReply`. Antes de chamar a IA de atendimento, verifique se esse campo é `false`. Ele será `true` quando uma rotina correspondente tiver uma ação `send_message` configurada para impedir a resposta automática da IA. O bloqueio é mantido em retries duplicados do mesmo `eventId`.
+
 ```json
 {
   "eventId": "message:{{ $json.message_id }}",
@@ -31,6 +35,8 @@ O evento deve ser emitido depois que o chat for atualizado no Supabase. Assim, c
 ## Classificador de IA
 
 Configure `ROUTINES_AI_CLASSIFIER_WEBHOOK_URL` com um webhook separado do n8n. O backend envia uma única requisição por mensagem:
+
+O workflow importável está em `docs/n8n-rotinas-ai-classifier-workflow.json`. Ele requer `OPENAI_API_KEY`, `ROUTINES_WEBHOOK_SECRET` e aceita `OPENAI_ROUTINES_MODEL` opcional, usando `gpt-5.6-luna` por padrão.
 
 ```json
 {
@@ -72,3 +78,9 @@ Se o classificador falhar, as condições de IA são consideradas falsas e as de
 ## Idempotência
 
 `eventId` deve ser estável e único na origem. Para mensagens, use o ID da mensagem; para eventos diários, use chaves como `birthday:<contactId>:2026` ou `date:<contactId>:2026-12-25`.
+
+Para mensagens concatenadas, prefira `message-batch:<chatId>:<processingToken>`. Não use o ID da execução do n8n, pois ele muda a cada retry.
+
+## Encadeamento
+
+A ação `add_tag` publica um novo `tag_added` no `ROUTINES_EVENT_WEBHOOK_URL`. O evento derivado preserva a correlação original e combina essa correlação com a tag na chave de idempotência. Assim, uma rotina pode iniciar outra, mas um ciclo que tente adicionar novamente a mesma tag na mesma cadeia é interrompido.

@@ -1,279 +1,61 @@
 # Workflow n8n para Rotinas
 
-Este desenho usa n8n como orquestrador e deixa o app como backend seguro para criar a fila no Supabase.
+O n8n recebe e normaliza eventos; o backend avalia grupos `E/OU`, classifica intenções de mensagem e cria a fila no Supabase.
 
-## Caminho rápido
+## Ordem de implantação
 
-1. No Supabase, rode o SQL da seção "SQL no Supabase".
-2. No n8n, importe estes dois arquivos:
-   - `docs/n8n-rotinas-event-workflow.json`
-   - `docs/n8n-rotinas-due-workflow.json`
-3. No n8n, configure as variáveis:
-   - `APP_BASE_URL`
-   - `ROUTINES_WEBHOOK_SECRET`
-   - `OPENAI_API_KEY`
-   - `OPENAI_MODEL` opcional, pode deixar vazio para usar `gpt-4o-mini`.
-4. Ative o workflow `Neuronz - Rotinas - Evento de contato`.
-5. Copie a Production URL do Webhook `contact-routine-event`.
-6. No `.env.local` do app, confirme:
+1. Execute `docs/supabase-routines-runtime-hardening.sql`, `docs/supabase-routines-ai-reply-control.sql` e `docs/supabase-routines-execution-controls.sql` no Supabase.
+2. Publique o backend com os endpoints atualizados.
+3. Importe `docs/n8n-rotinas-event-workflow.json`, `docs/n8n-rotinas-due-workflow.json` e, para gatilhos com IA, `docs/n8n-rotinas-ai-classifier-workflow.json`.
+4. Configure no n8n `APP_BASE_URL`, `ROUTINES_WEBHOOK_SECRET`, `OPENAI_API_KEY` e opcionalmente `OPENAI_ROUTINES_MODEL`.
+5. Configure no app `ROUTINES_WEBHOOK_SECRET` e `ROUTINES_EVENT_WEBHOOK_URL`.
+6. Teste eventos com `dryRun: true` antes de liberar ações reais.
 
-```env
-ROUTINES_EVENT_WEBHOOK_URL=https://n8n.srv1150529.hstgr.cloud/webhook/contact-routine-event
-ROUTINES_WEBHOOK_SECRET=mesmo_segredo_do_n8n
-```
+## Posição no fluxo de recebimento
 
-7. Reinicie o app.
-8. Adicione uma tag em um contato pela tela do app.
-9. Veja a execução no n8n e depois confira `routine_runs` e `routine_action_runs` no Supabase.
-
-## Variáveis necessárias
-
-No app:
-
-```env
-ROUTINES_WEBHOOK_SECRET=gere_um_segredo_longo
-ROUTINES_EVENT_WEBHOOK_URL=https://seu-n8n.com/webhook/contact-routine-event
-AIRTABLE_ROUTINES_TABLE=tblTOHnzJW7tOBTHc
-AIRTABLE_ROUTINE_PROCESSES_TABLE=tblnjiV1h19XRU89j
-```
-
-No n8n:
-
-```env
-APP_BASE_URL=https://seu-app.com
-ROUTINES_WEBHOOK_SECRET=o_mesmo_segredo_do_app
-```
-
-## SQL no Supabase
-
-```sql
-create table if not exists routine_runs (
-  id uuid primary key default gen_random_uuid(),
-  routine_airtable_id text not null,
-  routine_name text,
-  contact_id text not null,
-  contact_airtable_id text,
-  chat_id text,
-  contact_name text,
-  contact_phone text,
-  trigger_type text not null,
-  trigger_target text,
-  status text not null default 'running',
-  payload jsonb not null default '{}'::jsonb,
-  started_at timestamptz not null default now(),
-  finished_at timestamptz
-);
-
-create table if not exists routine_action_runs (
-  id uuid primary key default gen_random_uuid(),
-  routine_run_id uuid not null references routine_runs(id) on delete cascade,
-  action_id text not null,
-  action_index int not null,
-  action_type text not null,
-  execute_at timestamptz not null,
-  status text not null default 'pending',
-  payload jsonb not null default '{}'::jsonb,
-  result jsonb,
-  last_error text,
-  executed_at timestamptz,
-  created_at timestamptz not null default now()
-);
-
-create index if not exists routine_action_runs_due_idx
-on routine_action_runs (status, execute_at);
-```
-
-## Workflow 1: Entrada de eventos de contato
-
-### 1. Webhook
-
-Node: `Webhook`
-
-- Method: `POST`
-- Path: `contact-routine-event`
-- Response mode: `Using Respond to Webhook Node`
-
-Payload esperado:
-
-```json
-{
-  "event_type": "tag_added",
-  "contact_airtable_id": "recContato",
-  "chat_id": "5511999999999",
-  "contact_name": "Nome do contato",
-  "contact_phone": "5511999999999",
-  "tag": {
-    "id": "recTag",
-    "label": "Indicação"
-  },
-  "status": null,
-  "previous": {},
-  "current": {}
-}
-```
-
-### 2. Code: normalizar evento
-
-Node: `Code`
-
-```js
-const body = $json.body ?? $json;
-
-const eventType = String(body.event_type || body.eventType || '').toLowerCase();
-const tag = body.tag || {};
-const status = body.status || {};
-
-let trigger = 'manual';
-let targetId = '';
-let targetLabel = '';
-
-if (eventType.includes('tag')) {
-  trigger = 'tag';
-  targetId = String(tag.id || body.tag_id || body.target_id || '');
-  targetLabel = String(tag.label || body.tag_label || body.target_label || '');
-}
-
-if (eventType.includes('status')) {
-  trigger = 'status';
-  targetLabel = String(status.label || body.status_label || body.target_label || body.status || '');
-}
-
-if (eventType.includes('birthday') || eventType.includes('anivers')) {
-  trigger = 'birthday';
-  targetLabel = 'Aniversário';
-}
-
-return [{
-  json: {
-    raw: body,
-    trigger,
-    targetId,
-    targetLabel,
-    contactId: String(body.contact_id || body.chat_id || body.contact_airtable_id || ''),
-    contactAirtableId: String(body.contact_airtable_id || body.airtable_contact_id || ''),
-    chatId: String(body.chat_id || body.phone || ''),
-    contactName: String(body.contact_name || body.nome_contato || body.name || ''),
-    contactPhone: String(body.contact_phone || body.phone || body.chat_id || ''),
-    occurredAt: body.occurred_at || new Date().toISOString()
-  }
-}];
-```
-
-### 3. OpenAI/IA: validar e enriquecer
-
-Node: `OpenAI` ou `AI Agent`
-
-Objetivo: transformar evento cru em JSON canônico. Use o retorno estruturado abaixo.
-
-System prompt:
+Depois de persistir a mensagem e criar/atualizar o chat, o fluxo de mensagens segue para o buffer de concatenação. Quando o buffer fechar, avalie as rotinas antes de chamar a IA de atendimento:
 
 ```text
-Você normaliza eventos de contato para disparo de rotinas. Responda somente JSON válido.
-Não invente IDs. Se não houver id, deixe string vazia.
-Gatilhos permitidos: manual, tag, status, birthday, specific_date.
-Retorne:
-{
-  "shouldTrigger": boolean,
-  "trigger": "tag|status|birthday|manual|specific_date",
-  "targetId": string,
-  "targetLabel": string,
-  "reason": string
-}
-
-Regras:
-- tag_added dispara trigger tag apenas para tag nova.
-- status_changed dispara trigger status apenas quando o status mudou.
-- birthday dispara trigger birthday.
-- contato que já tinha a tag antes não deve disparar.
+texto concatenado -> webhook contact-routine-event -> suppressAiReply?
+                                                    -> false: IA de atendimento
+                                                    -> true: encerrar sem chamar a IA
 ```
 
-User message:
+No n8n que chamou o webhook, adicione um `IF` com `={{ $json.suppressAiReply === true }}`. A saída `true` encerra o fluxo; a saída `false` segue para a IA. Não execute esses dois caminhos em paralelo, pois isso permitiria respostas duplicadas.
+
+Não use um Merge configurado para aguardar todas as ramificações de mídia, porque apenas uma delas executa para cada mensagem. Todas as pontas de texto, imagem, áudio e documento devem chamar o mesmo subworkflow de concatenação.
+
+## Evento de mensagem concatenada
+
+```json
+{
+  "event_id": "message-batch:<chat_id>:<processing_token>",
+  "event_type": "message_received",
+  "occurred_at": "<ISO da última mensagem>",
+  "contact_id": "<contact_id>",
+  "chat_id": "<chat_id>",
+  "message_id": "<id da última mensagem>",
+  "message_text": "<texto concatenado>",
+  "source": "message-debounce"
+}
+```
+
+O `processing_token` do buffer é apropriado para o `event_id`: permanece estável durante retries e muda no próximo lote de mensagens.
+
+## Eventos de tag e status
+
+Envie `tag_added` ou `status_changed` imediatamente depois de persistir a mudança. A ação de rotina `add_tag` também publica `tag_added`, permitindo encadeamento entre rotinas.
+
+Cada evento precisa de um `event_id` estável. O workflow importável preserva `event_id`/`eventId` quando informado e cria um fallback a partir do evento, alvo e horário.
+
+## Processamento das ações
+
+O workflow `Neuronz - Rotinas - Processar Pendências` continua chamando, a cada minuto:
 
 ```text
-Evento normalizado:
-{{ JSON.stringify($json) }}
+POST $APP_BASE_URL/api/routines/due
+Authorization: Bearer $ROUTINES_WEBHOOK_SECRET
 ```
-
-### 4. Code: unir IA + evento
-
-Node: `Code`
-
-```js
-const event = $('normalizar evento').first().json;
-const aiRaw = $json.output || $json.text || $json.message?.content || $json;
-const ai = typeof aiRaw === 'string' ? JSON.parse(aiRaw) : aiRaw;
-
-if (ai.shouldTrigger === false) {
-  return [];
-}
-
-return [{
-  json: {
-    ...event,
-    trigger: ai.trigger || event.trigger,
-    targetId: ai.targetId || event.targetId,
-    targetLabel: ai.targetLabel || event.targetLabel,
-    aiReason: ai.reason || ''
-  }
-}];
-```
-
-### 5. HTTP Request: chamar backend
-
-Node: `HTTP Request`
-
-- Method: `POST`
-- URL: `={{ $env.APP_BASE_URL }}/api/routines/trigger`
-- Send Headers: true
-- Header:
-  - `Authorization`: `={{ "Bearer " + $env.ROUTINES_WEBHOOK_SECRET }}`
-- Body Content Type: JSON
-- Body:
-
-```json
-{
-  "trigger": "={{ $json.trigger }}",
-  "targetId": "={{ $json.targetId }}",
-  "targetLabel": "={{ $json.targetLabel }}",
-  "contactId": "={{ $json.contactId }}",
-  "contactAirtableId": "={{ $json.contactAirtableId }}",
-  "chatId": "={{ $json.chatId }}",
-  "contactName": "={{ $json.contactName }}",
-  "contactPhone": "={{ $json.contactPhone }}",
-  "occurredAt": "={{ $json.occurredAt }}",
-  "aiReason": "={{ $json.aiReason }}"
-}
-```
-
-### 6. Respond to Webhook
-
-Node: `Respond to Webhook`
-
-- Response Code: `200`
-- Body:
-
-```json
-{
-  "ok": true,
-  "result": "={{ $json }}"
-}
-```
-
-## Workflow 2: Processar ações pendentes
-
-### 1. Schedule Trigger
-
-Node: `Schedule Trigger`
-
-- Interval: every minute
-
-### 2. HTTP Request
-
-- Method: `POST`
-- URL: `={{ $env.APP_BASE_URL }}/api/routines/due`
-- Header:
-  - `Authorization`: `={{ "Bearer " + $env.ROUTINES_WEBHOOK_SECRET }}`
-- Body:
 
 ```json
 {
@@ -281,22 +63,32 @@ Node: `Schedule Trigger`
 }
 ```
 
-## Como disparar quando tag/status mudar
+O endpoint agora reserva ações atomicamente. Execuções simultâneas do workflow não recebem a mesma ação. Falhas temporárias são reagendadas após 1, 5 e 15 minutos; ao esgotar as tentativas, a execução é marcada como falha e as ações seguintes são canceladas.
 
-O ideal é o n8n receber do lugar onde a alteração acontece.
+Para rotinas sem o gatilho `Mensagem específica`, o horário configurado é o início da sequência de ações. Eventos recebidos depois desse horário ficam para o próximo dia. O máximo de execuções vale por contato e é aplicado de forma atômica no banco, evitando novos disparos quando o limite for alcançado.
 
-Opção preferida:
+## Segurança
 
-1. Quando o app salvar uma tag/status, chamar o webhook `contact-routine-event`.
-2. Se tag foi adicionada, enviar `event_type = tag_added`.
-3. Se status mudou, enviar `event_type = status_changed`.
-4. Enviar sempre `previous` e `current` para a IA confirmar que é evento novo.
+- Use somente a Production URL do webhook publicado.
+- Não coloque o segredo na query string.
+- `ROUTINES_WEBHOOK_SECRET` é obrigatório para chamadas externas.
+- O n8n não escolhe tabela, função SQL ou URL arbitrária a partir da saída da IA.
+- O classificador de intenção fica em `ROUTINES_AI_CLASSIFIER_WEBHOOK_URL`; o workflow de eventos não precisa de uma segunda IA de normalização.
 
-Opção alternativa:
+## Classificador `ai_message`
 
-1. n8n roda a cada minuto.
-2. Busca contatos atualizados recentemente.
-3. Compara com uma tabela/estado anterior.
-4. Gera `tag_added` ou `status_changed`.
+O workflow `Neuronz - Rotinas - Classificador de intenção` publica o webhook `classify-routine-intents`. Configure no app:
 
-Essa alternativa é mais trabalhosa e mais sujeita a duplicidade.
+```env
+ROUTINES_AI_CLASSIFIER_WEBHOOK_URL=https://seu-n8n/webhook/classify-routine-intents
+```
+
+No n8n:
+
+```env
+OPENAI_API_KEY=chave_gerenciada_no_n8n
+OPENAI_ROUTINES_MODEL=gpt-5.6-luna
+ROUTINES_WEBHOOK_SECRET=o_mesmo_segredo_do_app
+```
+
+O modelo recebe todas as condições `ai_message` elegíveis em uma única chamada. O workflow valida IDs, limites e autenticação antes da OpenAI, usa saída JSON estruturada e inicializa como `false` qualquer condição ausente ou desconhecida.

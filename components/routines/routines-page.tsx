@@ -88,6 +88,8 @@ const emptyRoutine: RoutineForm = {
   targetLabel: "",
   targetColor: "",
   specificDate: "",
+  executionTime: "09:00",
+  maxExecutionsPerContact: 1,
   birthdayEnabled: true,
   conditionOperator: "all",
   conditionGroups: [createEmptyConditionGroup()],
@@ -104,6 +106,8 @@ const fallbackRoutines: Routine[] = [
     targetId: "sample-indicacao",
     targetLabel: "Indicação",
     targetColor: "#db351f",
+    executionTime: "09:00",
+    maxExecutionsPerContact: 1,
     birthdayEnabled: false,
     conditionOperator: "all",
     conditionGroups: [],
@@ -121,6 +125,8 @@ const fallbackRoutines: Routine[] = [
     targetId: "",
     targetLabel: "Aniversário",
     targetColor: "#d97706",
+    executionTime: "09:00",
+    maxExecutionsPerContact: 1,
     birthdayEnabled: true,
     conditionOperator: "all",
     conditionGroups: [],
@@ -190,6 +196,8 @@ function cloneRoutine(routine: Routine): RoutineForm {
     targetLabel: routine.targetLabel,
     targetColor: routine.targetColor,
     specificDate: routine.specificDate,
+    executionTime: routine.executionTime || "09:00",
+    maxExecutionsPerContact: routine.maxExecutionsPerContact || 1,
     birthdayEnabled: routine.birthdayEnabled,
     conditionOperator: routine.conditionOperator || "all",
     conditionGroups,
@@ -449,6 +457,8 @@ export function RoutinesPage() {
   });
   const triggerIssues = useMemo(() => validateRoutineTriggerLogic(form.conditionGroups, form.conditionOperator), [form.conditionGroups, form.conditionOperator]);
   const hasManualTrigger = form.conditionGroups.some((group) => group.conditions.some((condition) => condition.active !== false && condition.type === "manual"));
+  const hasSpecificMessageTrigger = form.conditionGroups.some((group) => group.conditions.some((condition) => condition.active !== false && condition.type === "specific_message"));
+  const hasExecutionControlError = form.maxExecutionsPerContact < 1 || !Number.isInteger(form.maxExecutionsPerContact) || (!hasSpecificMessageTrigger && !/^([01]\d|2[0-3]):[0-5]\d$/.test(form.executionTime || ""));
   const allGroupsConflict = form.conditionGroups.length > 1 ? validateRoutineTriggerLogic(form.conditionGroups, "all")[0]?.message || "" : "";
   const filteredRunContacts = useMemo(() => {
     const search = runContactSearch.trim().toLowerCase();
@@ -559,6 +569,7 @@ export function RoutinesPage() {
 
     try {
       if (triggerIssues.length > 0) throw new Error(triggerIssues[0].message);
+      if (hasExecutionControlError) throw new Error("Informe um horário válido e um máximo de execuções por contato.");
       if (form.actions.some((action) => action.type === "send_message" && !action.templateId && !action.message?.trim())) {
         throw new Error("Digite uma mensagem ou escolha um template para cada ação Enviar mensagem.");
       }
@@ -956,6 +967,32 @@ export function RoutinesPage() {
 
               <hr className="border-border/60" />
 
+              <section className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+                <div>
+                  <h2 className="text-sm font-bold text-foreground">Quando e quantas vezes executar</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">O limite vale para cada contato e impede que a mesma rotina seja disparada sem parar.</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {hasSpecificMessageTrigger ? (
+                    <div className="rounded-md border border-border bg-background px-3 py-2 text-sm text-muted-foreground">
+                      Mensagem específica dispara imediatamente ao ser recebida.
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-muted-foreground">Horário de início</Label>
+                      <Input type="time" required value={form.executionTime || ""} onChange={(event) => updateForm({ executionTime: event.target.value })} className={cn("h-9", !form.executionTime && "border-destructive")} />
+                      <p className="text-[11px] text-muted-foreground">Se o evento ocorrer depois deste horário, inicia no próximo dia.</p>
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-muted-foreground">Máximo de execuções por contato</Label>
+                    <Input type="number" required min={1} max={1000} step={1} value={form.maxExecutionsPerContact} onChange={(event) => updateForm({ maxExecutionsPerContact: event.target.valueAsNumber || 0 })} className={cn("h-9", form.maxExecutionsPerContact < 1 && "border-destructive")} />
+                    <p className="text-[11px] text-muted-foreground">Depois desse limite, novos eventos para o contato não criam outra execução.</p>
+                  </div>
+                </div>
+                {hasExecutionControlError ? <p className="text-xs font-medium text-destructive">Preencha os controles de execução obrigatórios.</p> : null}
+              </section>
+
               <div className={cn("rounded-xl border bg-muted/30 p-4 space-y-4", triggerIssues.length > 0 ? "border-destructive bg-destructive/5" : "border-border")}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center text-sm font-medium text-foreground gap-2 h-5">
@@ -1173,7 +1210,7 @@ export function RoutinesPage() {
               <Button
                 variant="primary"
                 onClick={() => void saveRoutine()}
-                disabled={isSaving || !form.name.trim() || hasInvalidMessageAction || triggerIssues.length > 0}
+                disabled={isSaving || !form.name.trim() || hasInvalidMessageAction || triggerIssues.length > 0 || hasExecutionControlError}
                 title={triggerIssues[0]?.message}
                 className="gap-2 h-9 text-xs font-bold bg-theme-primary text-white hover:bg-theme-primary/90"
               >

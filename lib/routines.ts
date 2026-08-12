@@ -73,6 +73,8 @@ export interface Routine {
   targetLabel: string;
   targetColor?: string;
   specificDate?: string;
+  executionTime?: string;
+  maxExecutionsPerContact: number;
   birthdayEnabled: boolean;
   conditionOperator: RoutineConditionOperator;
   conditionGroups: RoutineConditionGroup[];

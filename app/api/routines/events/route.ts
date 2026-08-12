@@ -107,6 +107,8 @@ type RoutineRow = {
   target_status: string | null;
   specific_date: string | null;
   birthday_enabled: boolean | null;
+  execution_time: string | null;
+  max_executions_per_contact: number | null;
   condition_operator: string | null;
   is_active: boolean | null;
   target_tag?: TagRow | null;
@@ -290,14 +292,14 @@ function mapRoutine(row: RoutineRow): Routine {
   return {
     id: externalId(row), name: row.name, description: row.description || "", trigger,
     targetId: primary?.targetId || "", targetLabel: primary?.targetLabel || "", targetColor: primary?.targetColor || "",
-    specificDate: trigger === "specific_date" ? primary?.value || row.specific_date || "" : "", birthdayEnabled: trigger === "birthday" || row.birthday_enabled === true,
+    specificDate: trigger === "specific_date" ? primary?.value || row.specific_date || "" : "", executionTime: row.execution_time || "09:00", maxExecutionsPerContact: row.max_executions_per_contact || 1, birthdayEnabled: trigger === "birthday" || row.birthday_enabled === true,
     conditionOperator: normalizeConditionOperator(row.condition_operator), conditionGroups: groups, active: row.is_active !== false, actions,
   };
 }
 
 async function fetchRoutines(event: NormalizedEvent) {
   const select = [
-    "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,condition_operator,is_active",
+    "id,airtable_record_id,name,description,trigger,target_status,specific_date,birthday_enabled,execution_time,max_executions_per_contact,condition_operator,is_active",
     "routine_condition_groups(id,operator,position,routine_conditions(id,condition_type,comparison_operator,value_text,position,is_active,target_tag:target_tag_id(id,airtable_record_id,label,color)))",
     "routine_actions(id,airtable_record_id,action_type,label,delay_minutes,interval_amount,interval_label,subject,message,notes,webhook_url,blocks_ai_reply,position,responsible_user_profiles:responsible_user_profile_id(id,airtable_record_id,name,email),message_templates:template_id(id,label,content),tags:tag_id(id,airtable_record_id,label,color))",
   ].join(",");
@@ -446,13 +448,15 @@ async function classifyAiConditions(message: string, routines: Routine[]) {
 }
 
 async function startRoutineRun(routine: Routine, context: EvaluationContext) {
+  const startsImmediately = routine.conditionGroups.some((group) => group.conditions.some((condition) => condition.active !== false && condition.type === "specific_message"));
+  const baseExecutionAt = startsImmediately ? new Date() : getNextExecutionAt(routine.executionTime || "09:00");
   let accumulatedDelayMinutes = 0;
   const actions = routine.actions.map((action, index) => {
     accumulatedDelayMinutes += action.delayMinutes;
-    return { action_id: action.id, action_index: index, action_type: action.type, execute_at: new Date(Date.now() + accumulatedDelayMinutes * 60_000).toISOString(), payload: action };
+    return { action_id: action.id, action_index: index, action_type: action.type, execute_at: new Date(baseExecutionAt.getTime() + accumulatedDelayMinutes * 60_000).toISOString(), payload: action };
   });
 
-  const rows = await supabaseRequest<Array<{ run_id: string; created: boolean; action_count: number }>>("rpc/start_routine_run", {
+  const rows = await supabaseRequest<Array<{ run_id: string; created: boolean; action_count: number }>>("rpc/start_limited_routine_run", {
     method: "POST",
     body: JSON.stringify({
       p_routine_airtable_id: routine.id,
@@ -467,10 +471,22 @@ async function startRoutineRun(routine: Routine, context: EvaluationContext) {
       p_event_id: context.event.eventId,
       p_payload: context.event,
       p_actions: actions,
+      p_max_executions_per_contact: routine.maxExecutionsPerContact,
     }),
   });
 
   return rows[0] || null;
+}
+
+function getNextExecutionAt(executionTime: string) {
+  const [hour, minute] = executionTime.split(":").map(Number);
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value || "";
+  const localDate = `${part("year")}-${part("month")}-${part("day")}`;
+  const scheduled = new Date(`${localDate}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00-03:00`);
+  if (scheduled.getTime() <= now.getTime()) scheduled.setUTCDate(scheduled.getUTCDate() + 1);
+  return scheduled;
 }
 
 export async function POST(request: Request) {
