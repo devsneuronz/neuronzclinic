@@ -32,6 +32,8 @@ type TaskOptions = {
   users: Array<{ id: string; label: string }>;
 };
 
+const noResponsibleUserId = "__no_responsible__";
+
 type LatestAppointment = {
   id: string;
   status: string;
@@ -249,7 +251,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
   const [taskStatus, setTaskStatus] = useState("");
   const [taskCreatedAt, setTaskCreatedAt] = useState(getLocalDateTimeValue);
   const [taskDueDate, setTaskDueDate] = useState("");
-  const [taskResponsibleUserId, setTaskResponsibleUserId] = useState("");
+  const [taskResponsibleUserId, setTaskResponsibleUserId] = useState(noResponsibleUserId);
   const [taskPatientName, setTaskPatientName] = useState("");
   const [taskSubject, setTaskSubject] = useState("");
   const [taskObservations, setTaskObservations] = useState("");
@@ -608,7 +610,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
           status: taskStatus,
           createdAt: taskCreatedAt,
           dueDate: taskDueDate,
-          responsibleUserId: taskResponsibleUserId,
+          responsibleUserId: taskResponsibleUserId === noResponsibleUserId ? "" : taskResponsibleUserId,
           patientName: taskPatientName,
           contactPhone: contactPhone || chat?.phone_contact || "",
           chatId: chat?.chat_id || "",
@@ -628,7 +630,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
       toast.success(data.message || "Aviso/tarefa criado com sucesso.");
       setTaskType("");
       setTaskDueDate("");
-      setTaskResponsibleUserId("");
+      setTaskResponsibleUserId(noResponsibleUserId);
       setTaskSubject("");
       setTaskObservations("");
       if (data.id) {
@@ -698,6 +700,7 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
       setTaskPatientName(patientName);
       setTaskCreatedAt(getLocalDateTimeValue());
       setTaskDueDate("");
+      setTaskResponsibleUserId(noResponsibleUserId);
       setTaskStatus((current) => current || taskOptions.statuses.find((status) => status.toLowerCase() === "aguardando") || taskOptions.statuses[0] || "");
     }
   }
@@ -914,11 +917,12 @@ export function ProfileView({ chat, contactPhone, statusOptions = [], tagOptions
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-foreground">Usuário responsável</label>
-                    <Select value={taskResponsibleUserId} onValueChange={setTaskResponsibleUserId} required>
+                    <Select value={taskResponsibleUserId} onValueChange={setTaskResponsibleUserId}>
                       <SelectTrigger className="h-10 w-full">
                         <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
                       </SelectTrigger>
                       <SelectContent className="z-[120]">
+                        <SelectItem value={noResponsibleUserId}>Nenhum</SelectItem>
                         {taskOptions.users.length > 0 ? (
                           taskOptions.users.map((user) => (
                             <SelectItem key={user.id} value={user.id}>

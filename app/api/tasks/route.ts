@@ -306,7 +306,7 @@ function getTaskWritePayload({
   dueDate: string
   subject: string
   observations: string
-  responsible: UserProfileRow
+  responsible?: UserProfileRow | null
   creator?: UserProfileRow | null
   creatorName?: string
   patientName?: string
@@ -323,9 +323,9 @@ function getTaskWritePayload({
     due_date: dueDate || null,
     subject,
     description: observations || null,
-    responsible_user_profile_id: responsible.id,
-    responsible_airtable_record_id: responsible.airtable_record_id,
-    responsible_name: responsible.name,
+    responsible_user_profile_id: responsible?.id ?? null,
+    responsible_airtable_record_id: responsible?.airtable_record_id ?? null,
+    responsible_name: responsible?.name ?? null,
     creator_user_profile_id: creator?.id ?? null,
     creator_airtable_record_id: creator?.airtable_record_id ?? null,
     creator_name: creator?.name || creatorName || "Sistema",
@@ -452,8 +452,8 @@ export async function POST(request: Request) {
   const creatorUserId = getString(body.creatorUserId)
   const creatorEmail = getString(body.creatorEmail)
 
-  if (!type || !status || !createdAt || !responsibleUserId || !subject || !creatorName) {
-    return NextResponse.json({ message: "Preencha tipo, status, responsavel, criador e assunto." }, { status: 400 })
+  if (!type || !status || !createdAt || !subject || !creatorName) {
+    return NextResponse.json({ message: "Preencha tipo, status, criador e assunto." }, { status: 400 })
   }
 
   const createdAtDate = new Date(createdAt)
@@ -463,8 +463,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    const [responsible, creator, relation] = await Promise.all([resolveUserProfile(responsibleUserId), resolveUserProfile(creatorUserId, creatorEmail), resolveContactAndChat(chatId, contactPhone)])
-    if (!responsible) return NextResponse.json({ message: "Usuario responsavel nao encontrado no Supabase." }, { status: 400 })
+    const [responsible, creator, relation] = await Promise.all([
+      responsibleUserId ? resolveUserProfile(responsibleUserId) : Promise.resolve(null),
+      resolveUserProfile(creatorUserId, creatorEmail),
+      resolveContactAndChat(chatId, contactPhone),
+    ])
+    if (responsibleUserId && !responsible) return NextResponse.json({ message: "Usuario responsavel nao encontrado no Supabase." }, { status: 400 })
 
     taskListCache = null
     const rows = await supabaseRequest<TaskRow[]>("tasks?select=id,airtable_record_id", {

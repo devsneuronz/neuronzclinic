@@ -34,6 +34,7 @@ type CreatedAtFilter = " " | "today" | "last7" | "last30" | "oldestFirst" | "ove
 
 const statusOrder: TaskStatus[] = ["aguardando", "resolvendo", "finalizado"];
 const IA_REQUESTS_ADMIN_ONLY = true;
+const noResponsibleUserId = "__no_responsible__";
 const taskViewOptions: Array<{ value: TaskView; label: string }> = [
   { value: "todas", label: "Todas" },
   { value: "aguardando", label: "Aguardando" },
@@ -582,7 +583,7 @@ export function KanbanBoard() {
   const [taskContactPhone, setTaskContactPhone] = useState("");
   const [taskContactChatId, setTaskContactChatId] = useState("");
   const [isContactSearchOpen, setIsContactSearchOpen] = useState(false);
-  const [taskResponsibleUserId, setTaskResponsibleUserId] = useState("");
+  const [taskResponsibleUserId, setTaskResponsibleUserId] = useState(noResponsibleUserId);
   const [taskSubject, setTaskSubject] = useState("");
   const [taskObservations, setTaskObservations] = useState("");
   const [confirmActionDialog, setConfirmActionDialog] = useState<ConfirmActionDialogState>(closedConfirmActionDialog);
@@ -927,7 +928,7 @@ export function KanbanBoard() {
     setTaskContactPhone("");
     setTaskContactChatId("");
     setIsContactSearchOpen(false);
-    setTaskResponsibleUserId(taskOptions.users[0]?.id || "");
+    setTaskResponsibleUserId(noResponsibleUserId);
     setTaskSubject("");
     setTaskObservations("");
     setCreateTaskError("");
@@ -943,7 +944,6 @@ export function KanbanBoard() {
         setTaskOptions(options);
         setTaskType((current) => current || options.types[0] || fallbackTaskOptions.types[0]);
         setTaskStatus((current) => current || options.statuses.find((status) => status.toLowerCase() === "aguardando") || options.statuses[0] || fallbackTaskOptions.statuses[0]);
-        setTaskResponsibleUserId((current) => current || options.users[0]?.id || "");
       })
       .catch((error) => {
         setCreateTaskError(error instanceof Error ? error.message : "Não foi possível carregar as opções de tarefas.");
@@ -969,7 +969,7 @@ export function KanbanBoard() {
           status: taskStatus,
           createdAt: new Date().toISOString(),
           dueDate: taskDueDate,
-          responsibleUserId: taskResponsibleUserId,
+          responsibleUserId: taskResponsibleUserId === noResponsibleUserId ? "" : taskResponsibleUserId,
           patientName: taskPatientName,
           contactPhone: taskContactPhone,
           chatId: taskContactChatId,
@@ -1373,11 +1373,12 @@ export function KanbanBoard() {
 
                 <div className="space-y-2">
                   <label className="text-xs font-semibold text-foreground">Responsável</label>
-                  <Select value={taskResponsibleUserId} onValueChange={setTaskResponsibleUserId} required>
+                  <Select value={taskResponsibleUserId} onValueChange={setTaskResponsibleUserId}>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder={isLoadingTaskOptions ? "Carregando..." : "Selecione"} />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value={noResponsibleUserId}>Nenhum</SelectItem>
                       {taskOptions.users.length > 0 ? (
                         taskOptions.users.map((user) => (
                           <SelectItem key={user.id} value={user.id}>
@@ -1468,7 +1469,7 @@ export function KanbanBoard() {
               <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isCreatingTask} className="gap-2 h-9 text-xs">
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isCreatingTask || isLoadingTaskOptions || isCurrentUserLoading || !user || !taskResponsibleUserId} className="gap-2 h-9 text-xs bg-theme-primary text-white hover:bg-theme-primary/90">
+              <Button type="submit" disabled={isCreatingTask || isLoadingTaskOptions || isCurrentUserLoading || !user} className="gap-2 h-9 text-xs bg-theme-primary text-white hover:bg-theme-primary/90">
                 {isCreatingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 {isCreatingTask ? "Criando..." : "Criar tarefa"}
               </Button>
